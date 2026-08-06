@@ -85,6 +85,66 @@ clinics ──┬── memberships ──── profiles ──── auth.user
 | `0006_platform_and_consents.sql` | Planos, assinatura, settings, LGPD, RPCs |
 | `0007_guardrails.sql` | Cobertura de RLS + teste de isolamento |
 
+### Onda 2 — Núcleo clínico
+
+```
+patients ──┬── patient_contacts
+           ├── patient_documents
+           ├── appointments ──── appointment_status_history
+           │        │
+           │        └── encounters ──┬── medical_records (imutável, versionada)
+           │                         ├── vitals
+           │                         ├── prescriptions ── prescription_items
+           │                         └── clinical_attachments
+           ├── allergies
+           └── waiting_queue
+
+professionals ──┬── availability_rules
+                └── availability_exceptions
+```
+
+| Migration | Conteúdo |
+|---|---|
+| `0008_patients.sql` | `patients`, `patient_contacts`, `patient_documents` |
+| `0009_scheduling.sql` | Disponibilidade, `appointments` com trava de sobreposição, fila |
+| `0010_clinical_records.sql` | `encounters`, `medical_records` imutável, sinais vitais, alergias, prescrição, anexos |
+| `0011_rls_clinical.sql` | RLS das duas camadas, auditoria, log de leitura de prontuário |
+
+**A trava de agenda mora no banco.** `appointments` tem um
+`EXCLUDE USING gist` que recusa dois agendamentos sobrepostos do mesmo
+profissional. Validar isso em JavaScript é uma corrida: dois atendentes
+clicando ao mesmo tempo passam ambos pela checagem e você tem overbooking.
+O Postgres recusa o segundo INSERT com o erro `23P01` — trate na aplicação
+como "esse horário acabou de ser ocupado". Cancelados e faltas liberam o
+horário; qualquer outro status ocupa.
+
+**O prontuário é imutável de verdade.** `medical_records` tem gatilho que
+levanta exceção em `UPDATE` e `DELETE` — inclusive para quem usar a chave de
+serviço. Corrigir um registro é inserir nova linha com `supersedes_id`
+apontando para a anterior. A versão vigente sai da view
+`v_medical_records_current`, que é "a linha que ninguém substituiu" — assim
+nem para marcar algo como superado é preciso um UPDATE.
+
+**Duas fronteiras de acesso na Onda 2:**
+
+| Camada | Tabelas | Quem lê |
+|---|---|---|
+| Operacional | paciente, agenda, fila, atendimento | todo membro da clínica |
+| Clínica | prontuário, sinais vitais, alergia, prescrição, anexo | somente `can_access_clinical()` |
+
+Recepção e financeiro não alcançam a camada clínica. Por isso
+`encounters.chief_complaint` guarda a queixa **declarada pelo paciente** (a
+mesma de `appointments.reason`); avaliação clínica vai em `medical_records`.
+
+**Autoria não pode ser forjada.** A policy de inserção de prontuário e
+prescrição exige `author_id = current_professional_id()`. Um profissional não
+consegue gravar registro em nome de outro, mesmo com prontuário aberto a todos.
+
+**Leitura de prontuário é registrada** via `public.log_clinical_access()`,
+chamada pelo use case de abrir prontuário. O Postgres não tem gatilho de
+SELECT, então esse é o único caminho — e é o principal controle compensatório
+da decisão de deixar o prontuário aberto a toda a equipe clínica.
+
 ### Por que `profiles` não tem `clinic_id`
 
 É a única tabela de pessoa que é **global**. Um médico atende em três clínicas
@@ -150,18 +210,6 @@ select private.assert_rls_coverage();   -- deve não retornar nada
 
 ## 6. Roadmap das ondas seguintes
 
-### Onda 2 — Núcleo clínico
-`patients`, `patient_contacts`, `patient_documents`, `availability_rules`,
-`availability_exceptions`, `appointments`, `appointment_status_history`,
-`waiting_queue`, `encounters`, `medical_records`, `medical_record_versions`,
-`prescriptions`, `prescription_items`, `attachments`, `vitals`, `allergies`
-
-Pontos difíceis já mapeados:
-- Sobreposição de agenda via `EXCLUDE USING gist` (o banco recusa dois
-  agendamentos no mesmo horário do mesmo profissional — regra no lugar certo)
-- `medical_records` append-only com `medical_record_versions` e `supersedes_id`
-- Busca de paciente com `pg_trgm` (nome, telefone, CPF parcial)
-
 ### Onda 3 — Financeiro e convênios
 `services`, `price_lists`, `price_list_items`, `insurance_providers`,
 `insurance_plans`, `insurance_contracts`, `invoices`, `invoice_items`,
@@ -190,3 +238,5 @@ busca `SECURITY INVOKER`.
 | `profiles` legível por colegas | Policy libera a linha inteira — por isso `profiles` não pode receber CPF/endereço. Documentado no `0004` |
 | Partições de auditoria acabando | Criadas 12 meses à frente; agendar o cron da seção 5 do `0005` |
 | Prontuário aberto a todos os profissionais | Decisão consciente do cliente. Compensado por auditoria de leitura |
+| `log_clinical_access()` depende da aplicação chamar | Não há gatilho de SELECT no Postgres. Se o use case esquecer, a leitura não é registrada — precisa de teste cobrindo isso |
+| Erro `23P01` na agenda chega cru na UI | A aplicação precisa traduzir para "horário acabou de ser ocupado", senão o usuário vê erro de banco |
