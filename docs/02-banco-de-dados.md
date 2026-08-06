@@ -1,7 +1,9 @@
 # Focuss Care — Modelagem do Banco de Dados
 
-> Fase 1 de 4. Este documento cobre a **Onda 1 (Fundação)**, já implementada em
-> `supabase/migrations/`. As ondas 2–4 estão inventariadas ao final.
+> **Estado: Ondas 1 e 2 aplicadas e validadas** no projeto
+> `pvyfeeobywpwwyrpphfs` em 2026-08-06.
+> 25 tabelas · 57 policies · 13/13 testes funcionais passando.
+> Ondas 3 e 4 inventariadas na seção 6.
 
 ---
 
@@ -77,13 +79,13 @@ clinics ──┬── memberships ──── profiles ──── auth.user
 
 | Migration | Conteúdo |
 |---|---|
-| `0001_extensions_and_enums.sql` | Extensões, schema `private`, tipos enumerados |
-| `0002_core_tenancy.sql` | `clinics`, `profiles`, `memberships`, `invitations`, `professionals` |
-| `0003_auth_hook_and_helpers.sql` | Auth Hook do JWT + funções de RLS |
-| `0004_rls_core.sql` | Policies do núcleo |
-| `0005_audit_log.sql` | Trilha particionada + gatilho genérico |
-| `0006_platform_and_consents.sql` | Planos, assinatura, settings, LGPD, RPCs |
-| `0007_guardrails.sql` | Cobertura de RLS + teste de isolamento |
+| `20260806090001_extensions_and_enums.sql` | Extensões, schema `private`, tipos enumerados |
+| `20260806090002_core_tenancy.sql` | `clinics`, `profiles`, `memberships`, `invitations`, `professionals` |
+| `20260806090003_auth_hook_and_helpers.sql` | Auth Hook do JWT + funções de RLS |
+| `20260806090004_rls_core.sql` | Policies do núcleo |
+| `20260806090005_audit_log.sql` | Trilha particionada + gatilho genérico |
+| `20260806090006_platform_and_consents.sql` | Planos, assinatura, settings, LGPD, RPCs |
+| `20260806090007_guardrails.sql` | Cobertura de RLS + teste de isolamento |
 
 ### Onda 2 — Núcleo clínico
 
@@ -105,10 +107,10 @@ professionals ──┬── availability_rules
 
 | Migration | Conteúdo |
 |---|---|
-| `0008_patients.sql` | `patients`, `patient_contacts`, `patient_documents` |
-| `0009_scheduling.sql` | Disponibilidade, `appointments` com trava de sobreposição, fila |
-| `0010_clinical_records.sql` | `encounters`, `medical_records` imutável, sinais vitais, alergias, prescrição, anexos |
-| `0011_rls_clinical.sql` | RLS das duas camadas, auditoria, log de leitura de prontuário |
+| `20260806090008_patients.sql` | `patients`, `patient_contacts`, `patient_documents` |
+| `20260806090009_scheduling.sql` | Disponibilidade, `appointments` com trava de sobreposição, fila |
+| `20260806090010_clinical_records.sql` | `encounters`, `medical_records` imutável, sinais vitais, alergias, prescrição, anexos |
+| `20260806090011_rls_clinical.sql` | RLS das duas camadas, auditoria, log de leitura de prontuário |
 
 **A trava de agenda mora no banco.** `appointments` tem um
 `EXCLUDE USING gist` que recusa dois agendamentos sobrepostos do mesmo
@@ -165,46 +167,73 @@ a escolha certa.
 
 ---
 
-## 4. Passos manuais no Dashboard (não dá para fazer por SQL)
+## 4. Configuração do projeto
 
-Depois de aplicar as migrations:
+### Já configurado
 
-1. **Authentication → Hooks → Customize Access Token (JWT)**
-   Selecionar `Postgres` e a função `public.custom_access_token_hook`.
-   **Sem isso, `current_clinic_id()` retorna NULL e o usuário não vê nada.**
+- ✅ **Auth Hook ativado** — `pg-functions://postgres/public/custom_access_token_hook`.
+  Era o item bloqueante: sem ele o claim não é emitido, `current_clinic_id()`
+  retorna NULL e o usuário logado não enxerga absolutamente nada. Parece bug de
+  RLS e não é.
+- ✅ **Confirmação de e-mail obrigatória** (`mailer_autoconfirm = false`).
 
-2. **Project Settings → API → Exposed schemas**
-   Deve conter apenas `public` (e `graphql_public`). `private` **jamais**.
+### Pendente de verificação sua
 
-3. **Authentication → Providers → Email**
-   Confirmação de e-mail obrigatória. Cadastro aberto sem confirmação é como
-   convite não solicitado vira conta ativa.
+1. **Project Settings → API → Exposed schemas**
+   Deve conter apenas `public` (e `graphql_public`). `private` **jamais** —
+   é onde vivem os helpers de auditoria e o teste de isolamento.
 
-4. **Database → Backups**
+2. **Database → Backups**
    Confirmar PITR ativo. Prontuário tem retenção legal de 20 anos.
+
+3. **Senha mínima está em 6 caracteres** — fraco para um sistema com prontuário.
+   Recomendo 10 + proteção contra senha vazada (HaveIBeenPwned), que o Supabase
+   oferece nativamente. Afeta apenas senhas novas.
 
 ---
 
-## 5. Como aplicar
+## 5. Aplicação
+
+As 11 migrations já foram aplicadas e estão registradas em
+`supabase_migrations.schema_migrations`, então o CLI as considera concluídas e
+não vai reaplicá-las.
+
+Daqui em diante, o fluxo normal:
 
 ```bash
-# 1. Preencher .env.local com as chaves ROTACIONADAS
-# 2. Vincular o projeto (usa SUPABASE_ACCESS_TOKEN)
 npx supabase link --project-ref pvyfeeobywpwwyrpphfs
+npx supabase db push          # aplica só o que ainda não rodou
 
-# 3. Aplicar
-npx supabase db push
-
-# 4. Gerar os tipos TypeScript (nunca escrever esses tipos à mão)
+# Tipos TypeScript — sempre gerados, nunca escritos à mão
 npx supabase gen types typescript --linked > src/types/database.ts
 ```
 
-Verificação pós-aplicação:
+Verificação a qualquer momento:
 
 ```sql
 select * from private.v_rls_coverage order by table_name;
-select private.assert_rls_coverage();   -- deve não retornar nada
+select private.assert_rls_coverage();   -- silêncio = tudo coberto
 ```
+
+### Testes funcionais executados
+
+Rodados dentro de uma transação com `rollback` — nenhum dado ficou no banco.
+
+| Teste | Resultado |
+|---|---|
+| Agenda recusa sobreposição do mesmo profissional | recusou com `23P01` |
+| Agenda aceita horário adjacente (10:30 após 10:00–10:30) | aceitou |
+| Agendamento cancelado libera o horário | aceitou |
+| Histórico de status gravado por gatilho | 2 registros |
+| Prontuário recusa `UPDATE` | recusou |
+| Prontuário recusa `DELETE` | recusou |
+| `content_hash` SHA-256 gerado automaticamente | 64 caracteres |
+| Nova versão por `supersedes_id` | aceitou |
+| View `v_medical_records_current` mostra só a vigente | 1 de 2 |
+| CPF único dentro da clínica | recusou duplicata |
+| Mesmo CPF em outra clínica | aceitou — isolamento correto |
+| Um atendimento aberto por profissional | recusou o segundo |
+| Auditoria gravou automaticamente | 10 eventos |
 
 ---
 
