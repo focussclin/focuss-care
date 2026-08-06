@@ -1,9 +1,8 @@
 # Focuss Care — Modelagem do Banco de Dados
 
-> **Estado: Ondas 1, 2 e 3 aplicadas e validadas** no projeto
+> **Banco completo — 4 ondas aplicadas e validadas** no projeto
 > `pvyfeeobywpwwyrpphfs` em 2026-08-06.
-> 41 tabelas · 89 policies · 27/27 testes funcionais passando.
-> Onda 4 inventariada na seção 6.
+> **55 tabelas · 116 policies · 21 migrations · 36/36 testes funcionais passando.**
 
 ---
 
@@ -207,6 +206,53 @@ não editar o lançamento original.
 O profissional enxerga as notas dos próprios atendimentos e o próprio repasse,
 sem alcançar o financeiro da clínica.
 
+### Onda 4 — Operação e IA
+
+| Migration | Conteúdo |
+|---|---|
+| `20260806090017_workforce.sql` | `employees`, `work_schedules`, `time_off` |
+| `20260806090018_communication.sql` | WhatsApp, conversas, mensagens, modelos, notificações |
+| `20260806090019_automation.sql` | `workflows`, `workflow_runs` |
+| `20260806090020_ai.sql` | pgvector, embeddings, conversas de IA, medição de custo |
+| `20260806090021_rls_operations.sql` | RLS de operação e IA |
+
+**A busca vetorial é o ponto mais perigoso do sistema.** Um
+`ORDER BY embedding <=> query LIMIT 5` sem filtro de tenant devolve trecho de
+prontuário de outra clínica — e falha em silêncio: nenhum erro, resposta
+plausível, dado errado.
+
+Duas defesas independentes:
+
+- `search_clinic_knowledge()` é **`SECURITY INVOKER`**. Marcá-la `DEFINER`
+  "para funcionar" desliga a RLS e abre o vazamento. Está comentado na função.
+- A policy de `document_embeddings` exige `can_access_clinical()` para trechos
+  com `source_type = 'medical_record'`. Sem isso, a recepção faria uma pergunta
+  ao assistente e receberia evolução médica de volta — pela porta dos fundos do
+  RAG.
+
+Testado com as duas clínicas indexadas ao mesmo tempo e o mesmo vetor de busca:
+o profissional recebeu 2 resultados da própria clínica, a recepcionista da
+mesma clínica recebeu 1 (só o não-clínico), e nenhum papel viu a outra clínica.
+
+**`employees` ≠ `professionals`.** Um é vínculo trabalhista, o outro é vínculo
+assistencial. A recepcionista é employee e não é professional; o médico PJ por
+repasse pode ser o contrário. Fundir as duas obriga a inventar coluna nula para
+metade dos casos. Salário fica restrito a owner/admin — nem o financeiro vê.
+
+**Idempotência onde o mundo externo bate.** `provider_message_id` é único por
+clínica: provedor de WhatsApp reenviando o mesmo webhook não duplica a mensagem
+na tela. `workflow_runs.dedupe_key` garante que o lembrete da consulta X dispare
+uma vez só — paciente recebendo o mesmo lembrete três vezes é o jeito mais
+rápido de virar bloqueio no WhatsApp.
+
+**Custo de IA é medido por clínica.** `ai_usage_log` (particionada) grava
+tokens de entrada, saída e de cache por chamada, inclusive as que falharam.
+`ai_usage_current_period()` compara com a quota do plano e é consultada **antes**
+da chamada ao modelo — quota verificada só na UI é quota decorativa.
+O campo `cache_read_tokens` é o alarme de custo: se vier sempre zero em prompts
+repetidos, há invalidador silencioso no prefixo (data, UUID ou nome de usuário
+no prompt de sistema).
+
 ### Por que `profiles` não tem `clinic_id`
 
 É a única tabela de pessoa que é **global**. Um médico atende em três clínicas
@@ -308,21 +354,30 @@ Rodados dentro de uma transação com `rollback` — nenhum dado ficou no banco.
 | Repasse: 60% de 20000 | 12000 centavos |
 | Repasse ignora nota emitida e não paga | só o item pago |
 | Numeração sequencial por clínica | clínica B também começou em 1 |
+| **Onda 4** — RAG nunca devolve conteúdo de outra clínica | 2 resultados, 0 vazados |
+| RAG: profissional alcança trecho de prontuário | 2 visíveis |
+| RAG: recepção **não** recebe trecho de prontuário | 1 resultado, 0 clínicos |
+| RAG: recepção ainda vê o FAQ da própria clínica | 1 resultado |
+| `SELECT` direto em embeddings também isola | 0 linhas de outra clínica |
+| Mensagem atualiza a conversa (não lidas, último envio) | 1 não lida |
+| Webhook duplicado não duplica mensagem | recusou |
+| Automação não dispara o mesmo lembrete 2× | recusou |
+| Quota de IA calculada contra o plano | 1500 de 500000, restam 498500 |
 
 ---
 
-## 6. Roadmap da onda seguinte
+## 6. O que vem depois do banco
 
-### Onda 4 — Operação e IA
-`employees`, `work_schedules`, `time_off`, `whatsapp_channels`,
-`conversations`, `messages`, `message_templates`, `workflows`,
-`workflow_runs`, `ai_conversations`, `ai_messages`, `ai_usage_log`,
-`document_embeddings` (pgvector), `notifications`
+O schema está completo. Os próximos passos são de aplicação:
 
-O ponto crítico da Onda 4: a busca vetorial precisa respeitar RLS. Um
-`ORDER BY embedding <=> query LIMIT 5` sem filtro de tenant retorna trecho de
-prontuário de outra clínica. Índice HNSW particionado por tenant e função de
-busca `SECURITY INVOKER`.
+1. Gerar os tipos TypeScript (`supabase gen types`) — nunca escrever à mão
+2. Estrutura de pastas e regra de dependência com enforcement no CI
+3. Camada de acesso: cliente server-side, resolução de tenant no `proxy.ts`
+4. Primeiro módulo vertical ponta a ponta
+
+Fora de escopo consciente: TISS completo, telemedicina com vídeo, app nativo,
+marketplace de integrações. Nenhum deles é bloqueado pelo modelo — Insurance e
+Communication já são contextos isolados.
 
 ---
 
