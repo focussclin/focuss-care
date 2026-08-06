@@ -1,9 +1,9 @@
 # Focuss Care — Modelagem do Banco de Dados
 
-> **Estado: Ondas 1 e 2 aplicadas e validadas** no projeto
+> **Estado: Ondas 1, 2 e 3 aplicadas e validadas** no projeto
 > `pvyfeeobywpwwyrpphfs` em 2026-08-06.
-> 25 tabelas · 57 policies · 13/13 testes funcionais passando.
-> Ondas 3 e 4 inventariadas na seção 6.
+> 41 tabelas · 89 policies · 27/27 testes funcionais passando.
+> Onda 4 inventariada na seção 6.
 
 ---
 
@@ -147,6 +147,66 @@ chamada pelo use case de abrir prontuário. O Postgres não tem gatilho de
 SELECT, então esse é o único caminho — e é o principal controle compensatório
 da decisão de deixar o prontuário aberto a toda a equipe clínica.
 
+### Onda 3 — Financeiro e convênios
+
+```
+services ──── price_list_items ──── price_lists
+                                         │
+insurance_providers ── insurance_plans ──┘
+                            │
+                            ├── patient_insurances ──── insurance_authorizations
+                            │
+invoices ──┬── invoice_items ──── professional_payout_items ──── professional_payouts
+           └── payments ──── cash_entries ──── cash_sessions
+
+payables (contas a pagar)      document_sequences (numeração por clínica)
+```
+
+| Migration | Conteúdo |
+|---|---|
+| `20260806090012_catalog_and_pricing.sql` | Serviços, tabelas de preço, regra de repasse, numeração por clínica |
+| `20260806090013_insurance.sql` | Operadoras, planos, carteirinhas, guias de autorização |
+| `20260806090014_billing.sql` | Notas com congelamento, itens com snapshot, pagamentos |
+| `20260806090015_cash_and_payouts.sql` | Caixa, contas a pagar, repasse ao profissional |
+| `20260806090016_rls_financial.sql` | RLS em três níveis de acesso |
+
+**Preço é histórico, não é junção.** `invoice_items` guarda cópia do preço e da
+regra de repasse no momento do lançamento. Ler o preço atual para exibir uma
+nota de janeiro faria a tabela de março reescrever o passado — e o mesmo vale
+para o repasse: mudar o percentual hoje recalcularia meses já fechados.
+
+**Nota emitida congela.** Enquanto é `draft`, edita à vontade. Depois de
+`issue_invoice()`, um gatilho recusa qualquer mudança em valor, pagador ou
+número; outro recusa incluir ou remover itens. Só status, pagamento e
+cancelamento passam. Corrigir uma nota emitida é cancelar e emitir outra.
+
+**Numeração é sequencial por clínica.** Uma `SEQUENCE` do Postgres é global e
+deixaria a Clínica A com notas 1, 7, 12. `document_sequences` usa
+`ON CONFLICT DO UPDATE`, que trava a linha: duas requisições simultâneas
+recebem números diferentes, sem buraco.
+
+**Repasse só sobre o que entrou.** `preview_professional_payout()` considera
+apenas notas com status `paid` e itens ainda não repassados. Repassar sobre
+nota emitida e não recebida é como clínica descapitaliza sem perceber.
+
+**Caixa não se "ajusta".** `difference_cents` é coluna calculada
+(`contado − esperado`). O esperado sai da soma real das movimentações no
+fechamento. Ninguém digita a diferença.
+
+**Pagamento e movimento de caixa são imutáveis.** Corrigir é lançar o estorno,
+não editar o lançamento original.
+
+**Três níveis de acesso:**
+
+| Nível | O quê | Quem |
+|---|---|---|
+| Catálogo | serviços, preços, convênios | todo membro lê |
+| Operação | notas, pagamentos, caixa | `can_handle_billing()` — inclui recepção |
+| Gestão | contas a pagar, repasse | `can_access_financial()` — sem recepção |
+
+O profissional enxerga as notas dos próprios atendimentos e o próprio repasse,
+sem alcançar o financeiro da clínica.
+
 ### Por que `profiles` não tem `clinic_id`
 
 É a única tabela de pessoa que é **global**. Um médico atende em três clínicas
@@ -234,16 +294,24 @@ Rodados dentro de uma transação com `rollback` — nenhum dado ficou no banco.
 | Mesmo CPF em outra clínica | aceitou — isolamento correto |
 | Um atendimento aberto por profissional | recusou o segundo |
 | Auditoria gravou automaticamente | 10 eventos |
+| **Onda 3** — total do item calculado pelo banco | 20000 centavos |
+| Total da nota recalculado pelos itens | 20000 centavos |
+| Emissão atribui número sequencial | número 1 |
+| Nota emitida congela valores | recusou alteração |
+| Nota emitida recusa novo item | recusou |
+| Snapshot de preço resiste a mudança de tabela | tabela virou 50000, nota seguiu 20000 |
+| Um caixa aberto por clínica | recusou o segundo |
+| Pagamento quita e muda status | `paid` |
+| Pagamento imutável | recusou edição |
+| Fechamento calcula esperado (10000+20000−5000) | 25000 centavos |
+| Diferença zero quando o contado confere | 0 |
+| Repasse: 60% de 20000 | 12000 centavos |
+| Repasse ignora nota emitida e não paga | só o item pago |
+| Numeração sequencial por clínica | clínica B também começou em 1 |
 
 ---
 
-## 6. Roadmap das ondas seguintes
-
-### Onda 3 — Financeiro e convênios
-`services`, `price_lists`, `price_list_items`, `insurance_providers`,
-`insurance_plans`, `insurance_contracts`, `invoices`, `invoice_items`,
-`payments`, `cash_sessions`, `cash_entries`, `receivables`, `payables`,
-`professional_payouts`
+## 6. Roadmap da onda seguinte
 
 ### Onda 4 — Operação e IA
 `employees`, `work_schedules`, `time_off`, `whatsapp_channels`,
