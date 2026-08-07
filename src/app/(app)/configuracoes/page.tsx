@@ -1,18 +1,12 @@
 import type { Metadata } from 'next'
 
-import { PendingSection } from '@/components/layout/PendingSection'
+import { ConfiguracoesScreen } from '@/modules/workspace/ui/OperationsScreens'
 
 export const metadata: Metadata = {
   title: 'Configurações',
-  description: 'Ajuste as preferências da sua clínica.',
+  description: 'Ajuste as preferências e os dados da sua clínica.',
 }
 
 export default function ConfiguracoesPage() {
-  return (
-    <PendingSection
-      eyebrow="Gestão da clínica"
-      title="Configurações"
-      description="Ajuste as preferências e os dados da sua clínica."
-    />
-  )
+  return <ConfiguracoesScreen />
 }

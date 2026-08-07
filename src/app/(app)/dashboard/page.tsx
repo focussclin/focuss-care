@@ -6,6 +6,7 @@ import { CalendarCheck, Clock3, Plus, TrendingUp, UserPlus } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { getSessionState } from '@/lib/auth/session'
 import {
   currentUser,
   dashboardMetrics,
@@ -43,19 +44,28 @@ export default async function DashboardPage() {
 
   const activity = getRecentActivity(now)
 
+  /*
+   * A saudacao e o avatar sao identidade, nao metrica: saem da sessao. O nome do
+   * mock so aparece quando o Supabase nao esta configurado — ai a aplicacao
+   * inteira e demonstracao local. As metricas abaixo continuam mockadas ate T-01.
+   */
+  const session = await getSessionState()
+  const displayName =
+    session.status === 'active' ? session.user.displayName : currentUser.name
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow={formatEyebrowDate(now)}
-        title={`${getGreeting(now)}, ${currentUser.name.split(' ')[0]}`}
+        title={`${getGreeting(now)}, ${displayName.split(' ')[0]}`}
         description="Aqui está o resumo da sua clínica hoje."
         actions={
           <>
             <NotificationBell count={dashboardMetrics.waitingPatients} />
 
             <span className="inline-flex size-11 items-center justify-center">
-              <Avatar name={currentUser.name} size="md" />
-              <span className="sr-only">{currentUser.name}</span>
+              <Avatar name={displayName} size="md" />
+              <span className="sr-only">{displayName}</span>
             </span>
 
             <Button asChild className="max-md:flex-1">

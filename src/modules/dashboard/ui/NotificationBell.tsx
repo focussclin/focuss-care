@@ -6,10 +6,6 @@ export interface NotificationBellProps {
   count: number
 }
 
-/**
- * DASHBOARD_DESIGN.md: "Sem notificacoes: nao exibir um badge vazio."
- * O indicador so aparece quando ha algo, e a contagem entra no nome acessivel.
- */
 export function NotificationBell({ count }: NotificationBellProps) {
   const hasNotifications = count > 0
 
@@ -18,13 +14,14 @@ export function NotificationBell({ count }: NotificationBellProps) {
       type="button"
       aria-label={
         hasNotifications
-          ? `Notificações: ${count} não lidas`
-          : 'Notificações: nenhuma nova'
+          ? `Notificações: ${count} não lidas — em breve`
+          : 'Notificações: nenhuma nova — em breve'
       }
+      title="Notificações — em breve"
+      disabled
       className={cn(
-        'relative inline-flex size-11 items-center justify-center rounded-field',
+        'relative inline-flex size-11 cursor-not-allowed items-center justify-center rounded-field opacity-75',
         'border border-border-card bg-surface text-muted',
-        'transition-colors hover:border-border-hover hover:text-foreground',
       )}
     >
       <Bell aria-hidden className="size-[18px]" strokeWidth={1.75} />

@@ -25,6 +25,7 @@ export function LoginFormView({
   formError,
   socialAuthEnabled,
   onGoogleSignIn,
+  isGoogleSubmitting = false,
   buildForgotPasswordHref,
   signUpHref,
 }: LoginFormViewProps) {
@@ -150,9 +151,11 @@ export function LoginFormView({
             size="lg"
             fullWidth
             onClick={onGoogleSignIn}
+            isLoading={isGoogleSubmitting}
+            disabled={isSubmitting || isGoogleSubmitting}
           >
             <GoogleMark />
-            Continuar com Google
+            {isGoogleSubmitting ? 'Conectando...' : 'Continuar com Google'}
           </Button>
         </>
       ) : null}

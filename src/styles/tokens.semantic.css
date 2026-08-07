@@ -10,11 +10,11 @@
   --color-background: var(--fc-neutral-50);
   --color-surface: var(--fc-white);
 
-  --color-brand: var(--fc-green-800);
-  --color-brand-hover: var(--fc-green-900);
-  --color-brand-soft: var(--fc-green-200);
-  --color-brand-subtle: var(--fc-green-100);
-  --color-brand-accent: var(--fc-green-300);
+  --color-brand: var(--fc-primary-800);
+  --color-brand-hover: var(--fc-primary-900);
+  --color-brand-soft: var(--fc-primary-200);
+  --color-brand-subtle: var(--fc-primary-100);
+  --color-brand-accent: var(--fc-primary-300);
   --color-brand-foreground: var(--fc-white);
 
   --color-foreground: var(--fc-neutral-900);
@@ -26,7 +26,7 @@
   --color-border-hover: var(--fc-neutral-400);
   --color-border-card: var(--fc-neutral-200);
 
-  --color-focus: var(--fc-green-600);
+  --color-focus: var(--fc-primary-600);
   --color-danger: var(--fc-danger-600);
   --color-danger-surface: var(--fc-danger-50);
   --color-attention: var(--fc-attention-600);
@@ -78,6 +78,15 @@
 
   --shadow-card: var(--fc-shadow-card);
   --shadow-raised: var(--fc-shadow-raised);
+
+  /*
+   * Anel de foco. Existia so como primitivo e nenhum componente o consumia: cada
+   * campo repetia o valor da paleta antiga em classe arbitraria, entao o foco
+   * continuou verde depois de a marca virar azul. Expor como utility (shadow-focus)
+   * faz a proxima troca de paleta chegar sozinha aos formularios.
+   */
+  --shadow-focus: var(--fc-shadow-focus);
+  --shadow-focus-danger: var(--fc-shadow-focus-danger);
 }
 
 /*

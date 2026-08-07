@@ -56,7 +56,7 @@ export function SearchField({
             'h-11 w-full rounded-field border border-border-default bg-surface',
             'pr-10 pl-10 text-aux text-foreground placeholder:text-muted',
             'transition-colors hover:border-border-hover',
-            'focus:border-focus focus:shadow-[0_0_0_3px_rgba(60,140,112,0.24)] focus:outline-none',
+            'focus:border-focus focus:shadow-focus focus:outline-none',
             '[&::-webkit-search-cancel-button]:hidden',
             className,
           )}

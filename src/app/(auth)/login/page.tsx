@@ -8,6 +8,15 @@ export const metadata: Metadata = {
     'Acesse sua conta do Focuss Care e continue de onde parou.',
 }
 
-export default function LoginPage() {
-  return <LoginFormContainer />
+export default async function LoginPage({
+  searchParams,
+}: PageProps<'/login'>) {
+  const { error, next } = await searchParams
+
+  return (
+    <LoginFormContainer
+      oauthError={typeof error === 'string' ? error : undefined}
+      nextPath={typeof next === 'string' ? next : undefined}
+    />
+  )
 }

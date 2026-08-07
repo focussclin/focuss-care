@@ -20,6 +20,29 @@ function isPublicPath(pathname: string) {
   return publicPaths.has(pathname) || pathname.startsWith('/auth/callback/')
 }
 
+function redirectPreservingCookies(response: NextResponse, destination: URL) {
+  const redirectResponse = NextResponse.redirect(destination)
+  for (const cookie of response.cookies.getAll()) {
+    redirectResponse.cookies.set(cookie)
+  }
+  return redirectResponse
+}
+
+/**
+ * Divisao de responsabilidade (doc do Next 16, "Optimistic checks with Proxy"):
+ *
+ *  - AQUI: apenas a checagem otimista de SESSAO, lendo o cookie. O proxy roda em
+ *    toda rota, inclusive prefetch — consulta a banco aqui custa em toda
+ *    navegacao e nao pode ser a unica defesa.
+ *  - Na renderizacao no servidor: a checagem de VINCULO de clinica
+ *    (src/app/(app)/layout.tsx e src/app/(auth)/onboarding/page.tsx), via
+ *    src/lib/auth/session.ts.
+ *  - Nos repositorios (src/lib/data-source.ts): a guarda final de dados.
+ *
+ * Por isso `/onboarding` nao esta em publicPaths: precisa de sessao, e quem ja
+ * tem clinica e devolvido ao dashboard pela propria pagina.
+ */
+
 export async function proxy(request: NextRequest) {
   if (!isSupabaseConfigured()) return NextResponse.next()
 
@@ -52,11 +75,14 @@ export async function proxy(request: NextRequest) {
   if (!authenticated && !isPublicPath(pathname)) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
-    return NextResponse.redirect(loginUrl)
+    return redirectPreservingCookies(response, loginUrl)
   }
 
   if (authenticated && (pathname === '/login' || pathname === '/cadastro')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return redirectPreservingCookies(
+      response,
+      new URL('/dashboard', request.url),
+    )
   }
 
   return response

@@ -20,7 +20,8 @@ export interface LoginFormViewProps {
 
   /** Item 9 do handoff: o botao social so aparece se a autenticacao estiver disponivel. */
   socialAuthEnabled: boolean
-  onGoogleSignIn?: () => void
+  onGoogleSignIn?: () => void | Promise<void>
+  isGoogleSubmitting?: boolean
 
   /** Preserva o e-mail digitado ao navegar para a recuperacao de senha. */
   buildForgotPasswordHref: (email: string) => string

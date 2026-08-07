@@ -1,18 +1,12 @@
 import type { Metadata } from 'next'
 
-import { PendingSection } from '@/components/layout/PendingSection'
+import { RelatoriosScreen } from '@/modules/workspace/ui/OperationsScreens'
 
 export const metadata: Metadata = {
   title: 'Relatórios',
-  description: 'Acompanhe os indicadores da sua clínica.',
+  description: 'Acompanhe os indicadores de atendimento e financeiro.',
 }
 
 export default function RelatoriosPage() {
-  return (
-    <PendingSection
-      eyebrow="Gestão da clínica"
-      title="Relatórios"
-      description="Acompanhe os indicadores de atendimento e financeiro."
-    />
-  )
+  return <RelatoriosScreen />
 }

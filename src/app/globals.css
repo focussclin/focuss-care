@@ -14,15 +14,37 @@
   }
 
   body {
+    position: relative;
+    isolation: isolate;
+    overflow-x: hidden;
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  body::before {
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+    content: '';
+    background:
+      radial-gradient(circle at 92% -10%, rgba(120, 188, 235, 0.14), transparent 30%),
+      radial-gradient(circle at -10% 55%, rgba(190, 224, 248, 0.16), transparent 28%);
   }
 
   /* Foco visivel e consistente em toda a aplicacao (requisito de acessibilidade) */
   :focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    :where(input, button, select, textarea, a):focus-visible {
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px !important;
+      box-shadow: none !important;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

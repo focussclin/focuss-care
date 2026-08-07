@@ -5,22 +5,27 @@
  */
 
 :root {
-  /* Verdes da marca */
-  --fc-green-900: #0f3028; /* hover da acao principal */
-  --fc-green-800: #173f35; /* verde profundo / acao principal / sidebar */
-  --fc-green-600: #3c8c70; /* foco */
-  --fc-green-300: #a9d7bd; /* barra do item ativo na sidebar */
-  --fc-green-200: #dcebe3; /* verde suave de apoio */
-  --fc-green-100: #e5f1e9; /* fundo dos icones circulares */
+  /*
+   * Azul clínico da marca.
+   * Nomeados por FUNCAO (primary), nao por cor: a paleta ja migrou de verde para
+   * azul uma vez, e um nome preso ao matiz volta a mentir na proxima troca.
+   * Os valores abaixo sao exatamente os definidos pelo Codex.
+   */
+  --fc-primary-900: #071f3b;
+  --fc-primary-800: #0b315f;
+  --fc-primary-600: #2563a6;
+  --fc-primary-300: #9ed7ff;
+  --fc-primary-200: #d9ecfb;
+  --fc-primary-100: #eaf5ff;
 
-  /* Neutros esverdeados */
-  --fc-neutral-900: #1c2b25; /* texto principal */
-  --fc-neutral-800: #263b34; /* labels */
-  --fc-neutral-500: #61706a; /* texto secundario */
-  --fc-neutral-400: #9db8aa; /* borda em hover */
-  --fc-neutral-300: #d6e0db; /* borda padrao */
-  --fc-neutral-200: #e1e9e4; /* borda dos cards */
-  --fc-neutral-50: #f5f7f5; /* fundo geral */
+  /* Neutros frios */
+  --fc-neutral-900: #0e1c2e;
+  --fc-neutral-800: #1a2d43;
+  --fc-neutral-500: #60748b;
+  --fc-neutral-400: #a7b9cc;
+  --fc-neutral-300: #d8e2ec;
+  --fc-neutral-200: #e5edf4;
+  --fc-neutral-50: #f6f9fc;
   --fc-white: #ffffff; /* superficie */
 
   /* Feedback */
@@ -46,14 +51,14 @@
   --fc-status-negative-fg: #9b3d3d;
 
   /* Superficies de interacao */
-  --fc-row-hover: #f7faf8; /* hover de linha da tabela */
-  --fc-grid-line: #e7eeea; /* linhas da grade da agenda */
-  --fc-link: #245c48; /* links e acoes secundarias */
+  --fc-row-hover: #f2f7fc;
+  --fc-grid-line: #e5edf5;
+  --fc-link: #17528f;
 
   /* Sombras — quase impercepiveis, conforme handoff */
-  --fc-shadow-card: 0 1px 2px rgba(28, 43, 37, 0.04);
-  --fc-shadow-raised: 0 4px 16px rgba(28, 43, 37, 0.06);
-  --fc-shadow-focus: 0 0 0 3px rgba(60, 140, 112, 0.24);
+  --fc-shadow-card: 0 1px 2px rgba(14, 28, 46, 0.04), 0 8px 24px rgba(14, 54, 95, 0.03);
+  --fc-shadow-raised: 0 12px 32px rgba(14, 54, 95, 0.1);
+  --fc-shadow-focus: 0 0 0 3px rgba(37, 99, 166, 0.22);
   --fc-shadow-focus-danger: 0 0 0 3px rgba(184, 74, 74, 0.2);
 
   /* Overlays da sidebar */

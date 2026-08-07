@@ -36,7 +36,8 @@ export function Modal({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#1c2b25]/35 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+        {/* bg-foreground em vez de hex fixo: o overlay acompanha a paleta sozinho. */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-foreground/35 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
 
         <DialogPrimitive.Content
           className={cn(

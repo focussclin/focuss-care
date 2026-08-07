@@ -60,7 +60,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
               'h-11 w-full appearance-none rounded-field border bg-surface',
               'pr-10 pl-3.5 text-aux text-foreground',
               'transition-colors',
-              'focus:shadow-[0_0_0_3px_rgba(60,140,112,0.24)] focus:outline-none',
+              'focus:shadow-focus focus:outline-none',
               hasError
                 ? 'border-danger focus:border-danger'
                 : 'border-border-default hover:border-border-hover focus:border-focus',

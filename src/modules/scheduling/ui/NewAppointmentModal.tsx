@@ -226,7 +226,7 @@ export function NewAppointmentModal({
             id="appointment-notes"
             rows={3}
             placeholder="Algo importante para este atendimento?"
-            className="w-full rounded-field border border-border-default bg-surface px-4 py-3 text-control text-foreground placeholder:text-muted transition-colors hover:border-border-hover focus:border-focus focus:shadow-[0_0_0_3px_rgba(60,140,112,0.24)] focus:outline-none"
+            className="w-full rounded-field border border-border-default bg-surface px-4 py-3 text-control text-foreground placeholder:text-muted transition-colors hover:border-border-hover focus:border-focus focus:shadow-focus focus:outline-none"
             {...register('notes')}
           />
         </div>

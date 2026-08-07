@@ -55,8 +55,8 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
               'transition-[border-color,box-shadow] duration-150',
               'focus:outline-none',
               hasError
-                ? 'border-danger focus:border-danger focus:shadow-[0_0_0_3px_rgba(184,74,74,0.2)]'
-                : 'border-border-default hover:border-border-hover focus:border-focus focus:shadow-[0_0_0_3px_rgba(60,140,112,0.24)]',
+                ? 'border-danger focus:border-danger focus:shadow-focus-danger'
+                : 'border-border-default hover:border-border-hover focus:border-focus focus:shadow-focus',
               trailing && 'pr-12',
               className,
             )}
