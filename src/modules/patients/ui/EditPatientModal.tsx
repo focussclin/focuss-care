@@ -8,8 +8,9 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { TextField } from '@/components/ui/text-field'
+import { TextareaField } from '@/components/ui/textarea-field'
 
-import { newPatientSchema } from '../schemas/patient.schema'
+import { editPatientFormSchema } from '../schemas/patient.schema'
 
 /** Estado atual do cadastro, na forma que o formulario consome. */
 export interface EditablePatient {
@@ -23,16 +24,6 @@ export interface EditablePatient {
   adminNotes: string
   isActive: boolean
 }
-
-/**
- * O formulario de edicao NAO tem preferencia de contato.
- *
- * O cadastro coleta o campo e o servidor o descarta (nao existe coluna). Repetir
- * isso aqui seria pior: o campo apareceria sempre com o mesmo valor padrao,
- * independentemente do que foi escolhido no cadastro, e mostraria como "dado do
- * paciente" algo que nunca foi gravado.
- */
-const editPatientFormSchema = newPatientSchema.omit({ contactPreference: true })
 
 type EditPatientFormValues = {
   name: string
@@ -223,24 +214,15 @@ export function EditPatientModal({
           {...register('birthDate')}
         />
 
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="edit-patient-notes"
-            className="text-label font-semibold text-label"
-          >
-            Observação administrativa (opcional)
-          </label>
-          <textarea
-            id="edit-patient-notes"
-            rows={3}
-            disabled={busy}
-            className="w-full rounded-field border border-border-default bg-surface px-4 py-3 text-control text-foreground placeholder:text-muted transition-colors hover:border-border-hover focus:border-focus focus:shadow-focus focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            {...register('notes')}
-          />
-          <p className="text-label text-muted">
-            Nota interna da recepção. Não é prontuário.
-          </p>
-        </div>
+        <TextareaField
+          label="Observação administrativa (opcional)"
+          rows={3}
+          disabled={busy}
+          maxLength={2000}
+          hint="Nota interna da recepção. Não é prontuário."
+          error={errors.notes?.message}
+          {...register('notes')}
+        />
       </form>
 
       {/*

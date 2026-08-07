@@ -3,14 +3,15 @@ import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { ArrowLeft, CalendarPlus, CalendarX2, StickyNote } from 'lucide-react'
 import Link from 'next/link'
+import { z } from 'zod'
 
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
-import { getPatientNotes } from '@/lib/mocks/clinic-data'
 import { toIsoDate } from '@/modules/patients/application/toPatientDto'
+import { getMockPatientNotes } from '@/modules/patients/infrastructure/MockPatientRepository'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
@@ -40,6 +41,7 @@ export default async function PatientProfilePage({
   const today = startOfDay(new Date())
 
   const { patientId } = await params
+  if (!z.uuid().safeParse(patientId).success) notFound()
   // O menu da listagem e o botao deste cabecalho linkam `?editar=1`.
   const { editar } = await searchParams
 
@@ -70,7 +72,7 @@ export default async function PatientProfilePage({
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
     .slice(0, MAX_HISTORY)
 
-  const notes = patientSource.isLive ? [] : getPatientNotes(today)
+  const notes = patientSource.isLive ? [] : getMockPatientNotes(today)
 
   return (
     <div className="flex flex-col gap-6">

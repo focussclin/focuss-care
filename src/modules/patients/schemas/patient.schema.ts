@@ -43,6 +43,37 @@ export const newPatientSchema = z.object({
 
 export type NewPatientInput = z.infer<typeof newPatientSchema>
 
+/**
+ * Contrato do formulario de EDICAO.
+ *
+ * Duas diferencas em relacao ao cadastro, e as duas espelham `updatePatientSchema`:
+ *
+ *  1. **Sem preferencia de contato.** Nao ha coluna: o cadastro coleta e o servidor
+ *     descarta. Repetir o campo aqui seria pior — ele apareceria sempre com o mesmo
+ *     valor padrao e passaria por "dado do paciente".
+ *  2. **Telefone pode ficar vazio.** Apagar um telefone e uma edicao legitima, e
+ *     `patients.phone` e nullable: existe cadastro sem telefone nenhum. Enquanto o
+ *     formulario exigia o campo, essas linhas simplesmente nao podiam ser salvas —
+ *     o servidor ja aceitava, e a tela e que barrava.
+ *
+ * Continua sem `transform`, como todo contrato de formulario deste arquivo:
+ * normalizar e trabalho do servidor, e o campo tem de continuar exibindo o que o
+ * usuario digitou.
+ */
+export const editPatientFormSchema = newPatientSchema
+  .omit({ contactPreference: true })
+  .extend({
+    phone: z
+      .string()
+      .trim()
+      .refine(
+        (value) => value === '' || normalizePhone(value) !== null,
+        patientMessages.phoneInvalid,
+      ),
+  })
+
+export type EditPatientFormInput = z.infer<typeof editPatientFormSchema>
+
 // ---------------------------------------------------------------------------
 // Contrato do servidor
 // ---------------------------------------------------------------------------
@@ -174,7 +205,17 @@ export type CreatePatientInput = z.infer<typeof createPatientSchema>
  * clinica nao acha linha nenhuma e volta como 'not-found', sem revelar que o id
  * existe em algum lugar.
  */
+const editablePhoneSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) => value === '' || normalizePhone(value) !== null,
+    createPatientMessages.phoneInvalid,
+  )
+  .transform((value) => (value === '' ? null : normalizePhone(value)))
+
 export const updatePatientSchema = createPatientSchema.extend({
+  phone: editablePhoneSchema,
   patientId: z.uuid(createPatientMessages.unexpected),
 })
 

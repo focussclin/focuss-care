@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarX2 } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
+import { z } from 'zod'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/card'
@@ -24,6 +25,7 @@ export default async function PatientHistoryPage({
   const today = startOfDay(new Date())
 
   const { patientId } = await params
+  if (!z.uuid().safeParse(patientId).success) notFound()
 
   const [patientSource, appointmentSource] = await Promise.all([
     getPatientRepository(today),
