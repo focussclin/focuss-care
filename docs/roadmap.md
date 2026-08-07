@@ -53,7 +53,7 @@ rejeição em revisão):
 
 | Item | Falta |
 |---|---|
-| **Leitura real** de pacientes e agenda | Só há `listByClinic`, `findById`, `listByRange`, `listByPatient`, `listProfessionals`. **Nenhum `save`/`update`.** |
+| **Leitura real** de pacientes e agenda | Pacientes já possuem `listPage`, `countMetrics` e `findById`; agenda possui `listByRange`, `listByPatient` e `listProfessionals`. A escrita de pacientes existe na fatia P-01, mas as demais mutações ainda estão pendentes. |
 | **Escrita** em qualquer módulo | `NewPatientModal` e `NewAppointmentModal` chamam `onSubmit`, e `PatientsScreen`/`AgendaScreen` apenas fazem `setState` local. **Nada é persistido; recarregar a página descarta.** |
 | Casca da aplicação | `src/app/(app)/layout.tsx` monta o `AppShell` com `currentUser` **mockado** — nome, papel e clínica na UI não vêm da sessão. |
 | Cadastro de conta | `src/app/(auth)/cadastro/page.tsx` é um `<form>` sem action. O botão não faz nada. |
@@ -90,7 +90,7 @@ esse é o critério de saída dele.
 | D9 | `OperationsScreens.tsx` — 11 telas em um arquivo `'use client'`, com estilos inline longos. Ponto de conflito garantido entre agentes. | Média | Diluída por fase |
 | D10 | Sem `unauthorized.tsx` / `forbidden.tsx`; `authInterrupts` e `cacheComponents` não habilitados em `next.config.ts`. | Média | Fase 1 |
 | D11 | Sem TanStack Query instalado, embora a arquitetura o preveja para interação. | Baixa | Quando a agenda ganhar drag/filtros server-side |
-| D12 | Nenhum `Money`/centavos, `Result`, `Paginated` em `_shared/domain` — só `types.ts`. | Média | Antes do Financeiro |
+| D12 | ~~Nenhum `Result`/`Paginated` em `_shared/domain`~~ — **parcialmente paga**: `Result` (F-01) e `Paginated<T>` (P-02a) existem. Falta `Money`/centavos. | Média | `Money` antes do Financeiro |
 | D13 | Documentos `*_DESIGN.md` soltos na raiz (5 arquivos). Deveriam viver em `docs/design/`. | Baixa | Oportunístico |
 | D14 | **Registro do `custom_access_token_hook` no projeto remoto não verificado.** Sem ele, o JWT não recebe as claims de clínica e `current_clinic_id()` devolve vazio. I-01 assume a checagem defensiva de `memberships` — ver [`05-onboarding-e-sessao.md`](./05-onboarding-e-sessao.md) §6, P1. | Alta | Antes de F2 |
 
@@ -417,7 +417,8 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | ID | Feature | Dono | Status |
 |---|---|---|---|
 | **P-01** | **Pacientes — cadastro real persistindo** | Claude | **Review** |
-| P-02 | Pacientes — busca paginada por cursor | Claude | Backlog |
+| **P-02a** | **Pacientes — busca server-side e paginação por cursor** | Claude | **Review** |
+| P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
 | P-03 | Pacientes — consentimento LGPD | Claude | Backlog |
 | A-01 | Agenda — criar/remarcar/cancelar persistindo | Claude | Backlog |
 | A-02 | Agenda — conflito e disponibilidade reais | Claude | Backlog |
@@ -450,6 +451,20 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Convênios | V-01 | Backlog |
 | Relatórios | T-01 | Backlog |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
+
+### O que trava P-02b
+
+P-02a entregou listagem paginada, busca e filtro de status no servidor **sem tocar
+no banco**. O resto depende de coisas que não são código de aplicação:
+
+| # | Bloqueio | O que fica de fora |
+|---|---|---|
+| B1 | Sem acesso SQL ao banco remoto (não há `DATABASE_URL` nem access token; `supabase/migrations/` está vazio — D7) | Índices, extensões e **colação de `patients.full_name`** não são verificáveis. Se a colação for não determinística, o keyset precisa mudar para `(created_at, id)` |
+| B2 | Migration exige aprovação do Codex e PR isolado (§7.4) | `pg_trgm` + `unaccent` e o índice `(clinic_id, full_name, id) where deleted_at is null`. Sem eles a busca infixa é **correta e O(n) por clínica** |
+| B3 | Filtro "Última visita (30/90 dias)" deriva de `appointments` | Não é expressável em keyset sobre `patients` via PostgREST — "mais de 90 dias" é anti-join. Exige `last_visit_at` denormalizado ou RPC. **O controle está desabilitado na tela, não fingindo funcionar** |
+| B4 | F-02 (cache tags com `clinic_id`) não existe — D3 | A listagem não pode ser cacheada: `use cache` sem tag por clínica é o R2 |
+
+**P-02 não está Done.** P-02a está em Review; P-02b continua Blocked.
 
 ---
 

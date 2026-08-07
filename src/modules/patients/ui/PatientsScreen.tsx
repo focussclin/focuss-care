@@ -1,26 +1,32 @@
 'use client'
 
-import { CheckCircle2, ChevronLeft, ChevronRight, Plus, SearchX, UserPlus, Users } from 'lucide-react'
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Plus,
+  SearchX,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { IconButton } from '@/components/ui/icon-button'
 import { StatCard } from '@/components/ui/stat-card'
-import { addDays } from '@/lib/utils/date'
-import type { Patient } from '@/modules/_shared/domain/types'
-
 import { createPatientAction } from '../actions/createPatient.action'
+import type { PatientListItem } from '../application/toPatientDto'
 import {
   createPatientMessages,
-  type LastVisitFilter,
   type NewPatientInput,
   type StatusFilter,
 } from '../schemas/patient.schema'
+import { patientListHref } from '../schemas/patientQuery.schema'
 import {
   NewPatientModal,
   type NewPatientSubmitFailure,
@@ -30,95 +36,84 @@ import { PatientFilters } from './PatientFilters'
 import { PatientsTable } from './PatientsTable'
 
 export interface PatientsScreenProps {
-  today: Date
-  initialPatients: readonly Patient[]
+  /** Itens DESTA pagina, ja filtrados e ordenados pelo servidor. */
+  patients: readonly PatientListItem[]
+  /**
+   * Contagens da clinica inteira, vindas de consultas proprias.
+   *
+   * Nao derivam de `patients`: com paginacao, o tamanho da pagina nao e o total.
+   */
   metrics: {
     total: number
     newThisMonth: number
     pendingAppointments: number
   }
+  /** Recorte em vigor, para reconstruir os links sem reler a URL. */
+  filters: {
+    search: string | null
+    status: StatusFilter
+  }
+  hasMore: boolean
+  /** Ponteiro opaco da proxima pagina, ou null quando esta e a ultima. */
+  nextCursor: string | null
+  /** Havia cursor na URL e ele nao valia mais: a tela avisa em vez de fingir. */
+  cursorReset?: boolean
+  /** Esta pagina foi alcancada por um cursor — habilita o "Anterior". */
+  isPaginated?: boolean
   openNewOnMount?: boolean
   /**
    * Ha banco por tras desta tela.
    *
    * Falso significa demonstracao local (Supabase ausente do ambiente): o cadastro
-   * fica na memoria do navegador e a Server Action NAO e chamada. Verdadeiro
-   * significa clinica real com sessao real — todo cadastro persiste.
+   * NAO persiste e a Server Action nao e chamada. Verdadeiro significa clinica
+   * real com sessao real — todo cadastro persiste.
    */
   isLive?: boolean
 }
 
-const PAGE_SIZE = 8
-
+/**
+ * Listagem de pacientes.
+ *
+ * Depois de P-02a esta tela **nao filtra e nao pagina**: ela renderiza o que o
+ * servidor mandou. Busca, status e cursor vivem na URL, e o `useMemo` que
+ * filtrava o array inteiro em memoria — junto com o `slice` que fingia
+ * paginacao — deixou de existir. O que sobra de estado local e o que e
+ * genuinamente local: o modal aberto e o aviso do ultimo cadastro.
+ */
 export function PatientsScreen({
-  today,
-  initialPatients,
+  patients,
   metrics,
+  filters,
+  hasMore,
+  nextCursor,
+  cursorReset = false,
+  isPaginated = false,
   openNewOnMount = false,
   isLive = false,
 }: PatientsScreenProps) {
   const router = useRouter()
-  const [patients, setPatients] = useState<Patient[]>(() => [
-    ...initialPatients,
-  ])
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<StatusFilter>('all')
-  const [lastVisit, setLastVisit] = useState<LastVisitFilter>('any')
-  const [page, setPage] = useState(1)
   const [isCreating, setCreating] = useState(openNewOnMount)
-  const [justCreated, setJustCreated] = useState<Patient | null>(null)
+  const [justCreated, setJustCreated] = useState<{
+    id: string | null
+    name: string
+  } | null>(null)
 
   const hasFilters =
-    search.trim().length > 0 || status !== 'all' || lastVisit !== 'any'
+    (filters.search !== null && filters.search.length > 0) ||
+    filters.status !== 'all'
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    const thirtyDaysAgo = addDays(today, -30)
-    const ninetyDaysAgo = addDays(today, -90)
-
-    return patients.filter((patient) => {
-      const matchesSearch =
-        term.length === 0 ||
-        patient.name.toLowerCase().includes(term) ||
-        patient.email.toLowerCase().includes(term) ||
-        patient.phone.replace(/\D/g, '').includes(term.replace(/\D/g, ''))
-
-      const matchesStatus =
-        status === 'all' ||
-        (status === 'active' && patient.status !== 'inactive') ||
-        (status === 'inactive' && patient.status === 'inactive')
-
-      const matchesLastVisit =
-        lastVisit === 'any' ||
-        (lastVisit === 'last-30' &&
-          patient.lastVisitAt !== null &&
-          patient.lastVisitAt >= thirtyDaysAgo) ||
-        (lastVisit === 'over-90' &&
-          (patient.lastVisitAt === null ||
-            patient.lastVisitAt < ninetyDaysAgo))
-
-      return matchesSearch && matchesStatus && matchesLastVisit
-    })
-  }, [lastVisit, patients, search, status, today])
-
-  const totalPages = Math.max(Math.ceil(filtered.length / PAGE_SIZE), 1)
-  const currentPage = Math.min(page, totalPages)
-  const pageItems = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  )
-
-  function clearFilters() {
-    setSearch('')
-    setStatus('all')
-    setLastVisit('any')
-    setPage(1)
-  }
-
-  function announceCreated(patient: Patient) {
-    setPatients((current) => [patient, ...current])
-    setJustCreated(patient)
-    setPage(1)
+  /**
+   * Cadastro concluido.
+   *
+   * **Nao insere o paciente na lista.** Ate P-02a a tela o colocava no indice 0;
+   * numa lista alfabetica paginada isso e um item fantasma — aparece fora de
+   * ordem, some no proximo carregamento, e some tambem se a pagina atual nao for
+   * a dele. O banner com "Ver perfil" leva a ele; o `refresh` atualiza as
+   * metricas e a pagina servida pelo servidor.
+   */
+  function announceCreated(created: { id: string | null; name: string }) {
+    setJustCreated(created)
+    router.refresh()
   }
 
   /**
@@ -127,31 +122,18 @@ export function PatientsScreen({
    * Dois caminhos, e a diferenca entre eles e a regra D8/R7 do roadmap:
    *
    *  - **Sem banco (`isLive` falso)** — demonstracao local. A Server Action nao e
-   *    chamada; o paciente vive na memoria desta aba e o aviso de sucesso diz
-   *    isso, para ninguem confundir vitrine com produto.
+   *    chamada, nada persiste, e o aviso de sucesso diz isso. Como nada foi
+   *    gravado, o paciente tambem nao aparece na lista: seria a vitrine
+   *    parecendo produto (R11).
    *  - **Com banco** — `createPatientAction`. O modal so fecha depois que o
-   *    servidor confirma, e a linha que entra na lista usa o `id` devolvido por
-   *    ele. Falha nao vira sucesso otimista: o modal continua aberto.
+   *    servidor confirma. Falha nao vira sucesso otimista: o modal continua
+   *    aberto.
    */
   async function handleCreate(
     values: NewPatientInput,
   ): Promise<NewPatientSubmitFailure | null> {
     if (!isLive) {
-      announceCreated({
-        id: `pat-local-${Date.now()}`,
-        name: values.name,
-        email: values.email ?? '',
-        phone: values.phone,
-        birthDate: values.birthDate
-          ? new Date(`${values.birthDate}T00:00:00`)
-          : null,
-        contactPreference: values.contactPreference,
-        status: 'active',
-        createdAt: today,
-        lastVisitAt: null,
-        nextVisitAt: null,
-      })
-
+      announceCreated({ id: null, name: values.name })
       return null
     }
 
@@ -175,28 +157,7 @@ export function PatientsScreen({
         }
       }
 
-      announceCreated({
-        id: result.data.id,
-        name: result.data.name,
-        email: result.data.email,
-        phone: result.data.phone,
-        // 'YYYY-MM-DD' sem hora seria lido como UTC e voltaria um dia no fuso do
-        // Brasil. Com a hora local explicita, a data exibida e a que foi digitada.
-        birthDate: result.data.birthDate
-          ? new Date(`${result.data.birthDate}T00:00:00`)
-          : null,
-        // Preferencia de contato ainda nao tem coluna: mostra-la aqui seria exibir
-        // um dado que o proximo carregamento nao traz de volta.
-        contactPreference: undefined,
-        status: 'active',
-        createdAt: new Date(result.data.createdAt),
-        lastVisitAt: null,
-        nextVisitAt: null,
-      })
-
-      // A lista ja tem o paciente novo (estado local). O refresh existe para o
-      // resto do servidor: metricas do topo e qualquer tela em cache.
-      router.refresh()
+      announceCreated({ id: result.data.id, name: result.data.name })
 
       return null
     } catch {
@@ -235,12 +196,17 @@ export function PatientsScreen({
           <p className="flex-1 text-aux text-status-positive">
             <span className="font-semibold">{justCreated.name}</span> foi
             cadastrado com sucesso.
-            {isLive ? null : ' Modo demonstração: nada foi salvo no banco.'}
+            {isLive
+              ? ' Ele pode estar em outra página da lista.'
+              : ' Modo demonstração: nada foi salvo no banco.'}
           </p>
           <div className="flex items-center gap-2">
-            <Button asChild variant="secondary">
-              <Link href={`/pacientes/${justCreated.id}`}>Ver perfil</Link>
-            </Button>
+            {/* Sem banco nao ha perfil para abrir — o id local nao resolve rota. */}
+            {justCreated.id ? (
+              <Button asChild variant="secondary">
+                <Link href={`/pacientes/${justCreated.id}`}>Ver perfil</Link>
+              </Button>
+            ) : null}
             <Button asChild>
               <Link href="/agenda?novo=1">Agendar atendimento</Link>
             </Button>
@@ -269,34 +235,31 @@ export function PatientsScreen({
         </div>
       </section>
 
-      <PatientFilters
-        search={search}
-        onSearchChange={(value) => {
-          setSearch(value)
-          setPage(1)
-        }}
-        status={status}
-        onStatusChange={(value) => {
-          setStatus(value)
-          setPage(1)
-        }}
-        lastVisit={lastVisit}
-        onLastVisitChange={(value) => {
-          setLastVisit(value)
-          setPage(1)
-        }}
-        onClear={clearFilters}
-      />
+      <PatientFilters search={filters.search} status={filters.status} />
+
+      {/*
+       * Cursor invalido nao e erro de tela: o servidor serviu a primeira pagina.
+       * Dizer isso e o que separa "voltamos ao inicio" de "a paginacao pulou".
+       */}
+      {cursorReset ? (
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-card border border-border-card bg-surface px-4 py-3 text-aux text-muted"
+        >
+          <Info aria-hidden className="size-4 shrink-0" />
+          O link de página usado não é mais válido. Mostrando do início.
+        </p>
+      ) : null}
 
       <Card className="overflow-hidden">
-        {filtered.length === 0 ? (
+        {patients.length === 0 ? (
           hasFilters ? (
             <EmptyState
               icon={SearchX}
               title="Não encontramos pacientes com esses dados."
               action={
-                <Button variant="secondary" onClick={clearFilters}>
-                  Limpar busca
+                <Button asChild variant="secondary">
+                  <Link href="/pacientes">Limpar busca</Link>
                 </Button>
               }
             />
@@ -316,49 +279,57 @@ export function PatientsScreen({
           <>
             {/* Tabela a partir de 1024px, cards verticais abaixo disso */}
             <div className="hidden lg:block">
-              <PatientsTable patients={pageItems} />
+              <PatientsTable patients={patients} />
             </div>
             <div className="lg:hidden">
-              <PatientCardList patients={pageItems} />
+              <PatientCardList patients={patients} />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-card px-5 py-3.5">
-              <p className="text-label text-muted">
+              {/*
+               * "Mostrando N de M" morreu com o cursor: nao ha total sem um
+               * `count` caro por pagina, e inventar M seria pior que omiti-lo.
+               */}
+              <p role="status" className="text-label text-muted">
                 Mostrando{' '}
                 <span className="font-semibold text-foreground">
-                  {pageItems.length}
+                  {patients.length}
                 </span>{' '}
-                de{' '}
-                <span className="font-semibold text-foreground">
-                  {filtered.length}
-                </span>{' '}
-                {filtered.length === 1 ? 'paciente' : 'pacientes'}
+                {patients.length === 1 ? 'paciente' : 'pacientes'}
               </p>
 
-              <div className="flex items-center gap-1">
-                <IconButton
-                  label="Página anterior"
-                  variant="outline"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage((value) => Math.max(value - 1, 1))}
+              <div className="flex items-center gap-2">
+                {/*
+                 * "Anterior" volta pelo historico: com keyset o servidor conhece
+                 * a proxima ancora, nunca a anterior. O historico do navegador ja
+                 * guarda os cursores por onde se passou — e a unica fonte
+                 * correta, e nao exige empilhar ancoras na URL.
+                 */}
+                <Button
+                  variant="secondary"
+                  onClick={() => router.back()}
+                  disabled={!isPaginated}
                 >
                   <ChevronLeft aria-hidden className="size-4" />
-                </IconButton>
+                  Anterior
+                </Button>
 
-                <span className="px-2 text-label text-muted tabular-nums">
-                  {currentPage} / {totalPages}
-                </span>
-
-                <IconButton
-                  label="Próxima página"
-                  variant="outline"
-                  disabled={currentPage === totalPages}
-                  onClick={() =>
-                    setPage((value) => Math.min(value + 1, totalPages))
-                  }
-                >
-                  <ChevronRight aria-hidden className="size-4" />
-                </IconButton>
+                {hasMore && nextCursor ? (
+                  <Button asChild variant="secondary">
+                    <Link
+                      href={patientListHref(filters, nextCursor)}
+                      scroll={false}
+                    >
+                      Próxima
+                      <ChevronRight aria-hidden className="size-4" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button variant="secondary" disabled>
+                    Próxima
+                    <ChevronRight aria-hidden className="size-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </>

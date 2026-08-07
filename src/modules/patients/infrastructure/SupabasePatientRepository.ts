@@ -5,11 +5,36 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, PatientRow } from '@/lib/supabase/database.types'
 import type { Patient } from '@/modules/_shared/domain/types'
 
-import type { NewPatientData, PatientRepository } from '../domain/PatientRepository'
+import type {
+  NewPatientData,
+  PatientListQuery,
+  PatientMetrics,
+  PatientPage,
+  PatientRepository,
+} from '../domain/PatientRepository'
 import { PatientRepositoryError } from '../domain/PatientRepositoryError'
+import { PATIENT_PAGE_MAX_SIZE } from '../schemas/patientQuery.schema'
+import {
+  decodePatientCursor,
+  encodePatientCursor,
+  patientQueryFingerprint,
+} from './patientCursor'
+import {
+  buildPatientKeysetFilter,
+  buildPatientSearchFilter,
+  type PatientKeysetAnchor,
+} from './patientListFilters'
 import { toPatient } from './patientMapper'
 
 type Client = SupabaseClient<Database>
+
+/** Campos mínimos da listagem: nunca transporta CPF ou nota interna. */
+const PATIENT_LIST_COLUMNS =
+  'id, full_name, birth_date, phone, email, is_active, created_at'
+
+/** Campos permitidos no perfil server-side e no retorno de uma escrita. */
+const PATIENT_DETAIL_COLUMNS =
+  'id, full_name, birth_date, cpf, phone, email, admin_notes, is_active, created_at'
 
 /**
  * Adapter Supabase.
@@ -21,25 +46,194 @@ type Client = SupabaseClient<Database>
 export class SupabasePatientRepository implements PatientRepository {
   constructor(private readonly client: Client) {}
 
-  async listByClinic(clinicId: string): Promise<Patient[]> {
-    const { data, error } = await this.client
-      .from('patients')
-      .select('*')
-      .eq('clinic_id', clinicId)
-      .is('deleted_at', null)
-      .order('full_name', { ascending: true })
-
-    if (error) {
-      throw new Error(`Falha ao carregar pacientes: ${error.message}`)
-    }
-
-    const rows = (data ?? []) as PatientRow[]
-    const visits = await this.loadVisitDates(
-      clinicId,
-      rows.map((row) => row.id),
+  /**
+   * Uma pagina da listagem, por KEYSET em `(full_name ASC, id ASC)`.
+   *
+   * Tres decisoes que valem mais que o codigo:
+   *
+   *  - **`limit + 1` linhas, nunca `count`.** Saber se ha proxima pagina custa
+   *    uma linha a mais; `count: 'exact'` custa um segundo scan da fatia do
+   *    tenant a CADA pagina.
+   *  - **O cursor e resolvido contra o tenant ativo antes de valer qualquer
+   *    coisa.** Ver `resolveKeysetAnchor`.
+   *  - **Nunca lanca por cursor.** Cursor ruim serve a primeira pagina, com
+   *    `cursorApplied: false` para a tela poder dizer isso em voz alta.
+   */
+  async listPage(
+    clinicId: string,
+    query: PatientListQuery,
+  ): Promise<PatientPage> {
+    // O schema da rota ja clampa. Aqui de novo porque este metodo e publico na
+    // porta: o proximo chamador pode nao vir de uma URL validada.
+    const limit = Math.min(
+      Math.max(Math.trunc(query.limit) || 1, 1),
+      PATIENT_PAGE_MAX_SIZE,
     )
 
-    return rows.map((row) => toPatient(row, visits.get(row.id)))
+    const fingerprint = patientQueryFingerprint(query)
+    const anchor = await this.resolveKeysetAnchor(
+      clinicId,
+      query.cursor,
+      fingerprint,
+    )
+
+    let builder = this.client
+      .from('patients')
+      .select(PATIENT_LIST_COLUMNS)
+      .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
+
+    if (query.status === 'active') {
+      builder = builder.eq('is_active', true)
+    } else if (query.status === 'inactive') {
+      builder = builder.eq('is_active', false)
+    }
+
+    // Cada `.or()` vira um parametro `or=` proprio, e o PostgREST os combina com
+    // AND. Por isso busca e keyset podem ser dois grupos separados: juntar os
+    // dois num `or` so faria o keyset ser ALTERNATIVA da busca, nao restricao.
+    const searchFilter = buildPatientSearchFilter(query.search)
+    if (searchFilter !== null) builder = builder.or(searchFilter)
+    if (anchor !== null) builder = builder.or(buildPatientKeysetFilter(anchor))
+
+    const { data, error } = await builder
+      .order('full_name', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(limit + 1)
+
+    if (error) throw readFailure('listPage', error)
+
+    const rows = (data ?? []) as PatientRow[]
+    const hasMore = rows.length > limit
+    const pageRows = hasMore ? rows.slice(0, limit) : rows
+    const lastRow = pageRows.at(-1)
+
+    const visits = await this.loadVisitDates(
+      clinicId,
+      pageRows.map((row) => row.id),
+    )
+
+    return {
+      items: pageRows.map((row) => toPatient(row, visits.get(row.id))),
+      hasMore,
+      nextCursor:
+        hasMore && lastRow
+          ? encodePatientCursor(lastRow.id, fingerprint)
+          : null,
+      cursorApplied: anchor !== null,
+    }
+  }
+
+  /**
+   * Contagens do resumo — tres `head: true`, que devolvem numero sem linha.
+   *
+   * Nao derivam da pagina de proposito: com paginacao, `items.length` e o
+   * tamanho da pagina. "Total: 20" numa clinica de 1.284 pacientes seria uma
+   * tela mentindo com naturalidade.
+   */
+  async countMetrics(
+    clinicId: string,
+    reference: Date,
+  ): Promise<PatientMetrics> {
+    const monthStart = new Date(
+      reference.getFullYear(),
+      reference.getMonth(),
+      1,
+    )
+
+    const [total, newThisMonth, pendingAppointments] = await Promise.all([
+      this.countPatients(clinicId),
+      this.countPatients(clinicId, monthStart),
+      this.countPendingAppointments(clinicId, reference),
+    ])
+
+    return { total, newThisMonth, pendingAppointments }
+  }
+
+  private async countPatients(
+    clinicId: string,
+    createdSince?: Date,
+  ): Promise<number> {
+    let builder = this.client
+      .from('patients')
+      .select('id', { count: 'exact', head: true })
+      .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
+
+    if (createdSince) {
+      builder = builder.gte('created_at', createdSince.toISOString())
+    }
+
+    const { count, error } = await builder
+
+    if (error) throw readFailure('countPatients', error)
+
+    return count ?? 0
+  }
+
+  /**
+   * Agendamentos futuros nao cancelados, a partir do inicio do dia de
+   * referencia. Conta ATENDIMENTOS, nao pacientes — que e o que o card diz.
+   */
+  private async countPendingAppointments(
+    clinicId: string,
+    since: Date,
+  ): Promise<number> {
+    const { count, error } = await this.client
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('clinic_id', clinicId)
+      .gte('starts_at', since.toISOString())
+      .not('status', 'in', '("canceled","no_show")')
+
+    if (error) throw readFailure('countPendingAppointments', error)
+
+    return count ?? 0
+  }
+
+  /**
+   * Cursor -> `(full_name, id)` da linha onde a pagina anterior parou.
+   *
+   * A consulta e o unico ponto em que o cursor ganha significado, e por isso
+   * carrega os dois filtros que fecham o tenant: `clinic_id` da sessao e
+   * `deleted_at is null`. Um uuid de paciente de outra clinica nao acha linha
+   * (filtro explicito + RLS) e devolve `null` — primeira pagina do proprio
+   * tenant, sem erro e sem vazamento.
+   *
+   * Falha de rede aqui tambem devolve `null`: uma pagina do inicio e melhor
+   * resposta que um 500 por causa de um ponteiro de navegacao.
+   */
+  private async resolveKeysetAnchor(
+    clinicId: string,
+    cursor: string | null,
+    fingerprint: string,
+  ): Promise<PatientKeysetAnchor | null> {
+    const decoded = decodePatientCursor(cursor)
+    if (decoded === null) return null
+
+    // Cursor de outro recorte de filtro: aplicado aqui, saltaria linhas em
+    // silencio e o usuario veria uma lista plausivel comecando no meio.
+    if (decoded.f !== fingerprint) return null
+
+    const { data, error } = await this.client
+      .from('patients')
+      .select('id, full_name')
+      .eq('clinic_id', clinicId)
+      .eq('id', decoded.a)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[patients] resolveKeysetAnchor', {
+        code: error.code ?? null,
+        message: error.message ?? null,
+      })
+      return null
+    }
+
+    if (!data) return null
+
+    return { id: data.id, fullName: data.full_name }
   }
 
   async findById(
@@ -48,15 +242,13 @@ export class SupabasePatientRepository implements PatientRepository {
   ): Promise<Patient | null> {
     const { data, error } = await this.client
       .from('patients')
-      .select('*')
+      .select(PATIENT_DETAIL_COLUMNS)
       .eq('clinic_id', clinicId)
       .eq('id', patientId)
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (error) {
-      throw new Error(`Falha ao carregar o paciente: ${error.message}`)
-    }
+    if (error) throw readFailure('findById', error)
 
     if (!data) return null
 
@@ -101,7 +293,7 @@ export class SupabasePatientRepository implements PatientRepository {
         is_active: true,
         created_by: createdBy,
       })
-      .select('*')
+      .select(PATIENT_DETAIL_COLUMNS)
       .single()
 
     if (error) throw toWriteError(error)
@@ -140,7 +332,7 @@ export class SupabasePatientRepository implements PatientRepository {
       .eq('clinic_id', clinicId)
       .eq('id', patientId)
       .is('deleted_at', null)
-      .select('*')
+      .select(PATIENT_DETAIL_COLUMNS)
       .maybeSingle()
 
     if (error) throw toWriteError(error)
@@ -162,7 +354,7 @@ export class SupabasePatientRepository implements PatientRepository {
       .eq('clinic_id', clinicId)
       .eq('id', patientId)
       .is('deleted_at', null)
-      .select('*')
+      .select(PATIENT_DETAIL_COLUMNS)
       .maybeSingle()
 
     if (error) throw toWriteError(error)
@@ -176,6 +368,14 @@ export class SupabasePatientRepository implements PatientRepository {
   /**
    * Ultima e proxima visita de cada paciente, em uma consulta so.
    * Evita o N+1 que sairia de buscar as datas paciente a paciente.
+   *
+   * **Recebe no maximo os ids DA PAGINA** (<= `PATIENT_PAGE_MAX_SIZE`). Antes de
+   * P-02a recebia a clinica inteira, e o `in(...)` crescia dentro da URL do
+   * PostgREST ate estourar em HTTP 414 — algumas centenas de pacientes bastavam.
+   *
+   * Continua trazendo o historico completo desses pacientes, o que e aceitavel
+   * em 50 linhas. A forma correta (`last_visit_at` denormalizado, ou view) e
+   * migration, portanto P-02b.
    */
   private async loadVisitDates(
     clinicId: string,
@@ -196,9 +396,7 @@ export class SupabasePatientRepository implements PatientRepository {
       .not('status', 'in', '("canceled","no_show")')
       .order('starts_at', { ascending: true })
 
-    if (error) {
-      throw new Error(`Falha ao carregar os atendimentos: ${error.message}`)
-    }
+    if (error) throw readFailure('loadVisitDates', error)
 
     const now = Date.now()
 
@@ -222,6 +420,29 @@ export class SupabasePatientRepository implements PatientRepository {
 
     return result
   }
+}
+
+/**
+ * Falha de LEITURA -> erro generico na tela, causa so no log do servidor.
+ *
+ * A mensagem do Postgres nao pode subir para o boundary de erro: em dev ela
+ * aparece na tela, e nome de coluna, nome de policy e SQLSTATE sao mapa da
+ * estrutura interna. O `error.tsx` da rota ja mostra a copy correta ao usuario;
+ * o que falta e nao empurrar detalhe junto.
+ *
+ * Mesmo padrao do `toWriteError`, com uma diferenca: leitura nao tem vocabulario
+ * de dominio (nao ha "conflito" ao listar), entao sai um `Error` cru.
+ */
+function readFailure(
+  context: string,
+  error: { code?: string | null; message?: string | null },
+): Error {
+  console.error(`[patients] ${context}`, {
+    code: error.code ?? null,
+    message: error.message ?? null,
+  })
+
+  return new Error('Falha ao carregar os dados de pacientes.')
 }
 
 /**

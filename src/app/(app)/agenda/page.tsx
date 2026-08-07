@@ -3,6 +3,7 @@ import { connection } from 'next/server'
 
 import { addDays, startOfDay, startOfWeek } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
+import { PATIENT_PAGE_MAX_SIZE } from '@/modules/patients/schemas/patientQuery.schema'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { AgendaScreen } from '@/modules/scheduling/ui/AgendaScreen'
 
@@ -35,21 +36,34 @@ export default async function AgendaPage({
     getPatientRepository(today),
   ])
 
-  const [appointments, professionals, patients] = await Promise.all([
+  const [appointments, professionals, patientPage] = await Promise.all([
     appointmentSource.repository.listByRange(
       appointmentSource.clinicId,
       rangeStart,
       rangeEnd,
     ),
     appointmentSource.repository.listProfessionals(appointmentSource.clinicId),
-    patientSource.repository.listByClinic(patientSource.clinicId),
+    /*
+     * Seletor de paciente do modal — PRIMEIRA PAGINA, nao a clinica inteira.
+     *
+     * Ate P-02a este era o unico chamador que carregava a base completa em toda
+     * renderizacao da agenda. O limite explicito e a troca honesta: a lista para
+     * nos 50 primeiros em ordem alfabetica, e clinica grande precisa de um
+     * seletor com busca server-side — que e trabalho de A-01, nao desta fatia.
+     */
+    patientSource.repository.listPage(patientSource.clinicId, {
+      search: null,
+      status: 'all',
+      limit: PATIENT_PAGE_MAX_SIZE,
+      cursor: null,
+    }),
   ])
 
   return (
     <AgendaScreen
       today={today}
       initialAppointments={appointments}
-      patients={patients}
+      patients={patientPage.items}
       professionals={professionals}
       openNewOnMount={novo === '1'}
     />

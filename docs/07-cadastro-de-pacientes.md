@@ -1,13 +1,16 @@
 # P-01 — Cadastro, edição e arquivamento de pacientes
 
 > Primeira fatia de **escrita** do produto e primeiro chamador de runtime do
-> `createAction` (pendência **P-A6** de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md)).
+> `createAction` (a antiga pendência **P-A6** de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md)).
 > Escrito contra o código, os tipos gerados e **o banco remoto** em **07/08/2026**,
 > branch `feat/telas-e-camada-supabase`.
 
-Escopo: **criar, editar e arquivar/reativar** paciente, ponta a ponta. Busca
-paginada, consentimento LGPD, prontuário, agenda e Patient 360 continuam fora —
-ver §6.
+Escopo: **criar, editar e arquivar/reativar** paciente, ponta a ponta.
+Consentimento LGPD, prontuário, agenda e Patient 360 continuam fora — ver §6.
+
+> **Atualização 07/08/2026 — P-02a.** A listagem passou a ser **paginada por
+> cursor, com busca e filtro de status no servidor**. A §8 documenta a fatia,
+> incluindo o que ficou de fora e por quê.
 
 > **Achado que atravessa o produto inteiro:** a policy de `INSERT` de `audit_log`
 > **recusa o membro autenticado**. Nenhum evento de auditoria está sendo gravado
@@ -115,7 +118,7 @@ cadastrar 10/05 e recarregar a página continua mostrando 10/05.
 | Escrita sob RLS, com a sessão do usuário | O adapter recebe `context.supabase` — o mesmo cliente que o `createAction` montou. Nenhum caminho daqui alcança `SUPABASE_SECRET_KEY` |
 | Autorização por papel | `roles: ['owner','admin','receptionist','professional']`. `finance` fica de fora — cadastro é ato de recepção. Lista local e **provisória** até a matriz papel × ação (I-05) |
 | Validação no servidor | O Zod do servidor roda de novo, independente do formulário, e é mais estrito que ele (formato de telefone, data de calendário, limites de tamanho) |
-| Retorno serializável | A action devolve `{ id, name, phone, email, birthDate, createdAt }` com strings ISO. `Date` e linha crua do Supabase não atravessam a fronteira |
+| Retorno serializável | A action devolve `{ id, name, phone, email, birthDate, isActive, createdAt }` com strings ISO. `Date` e linha crua do Supabase não atravessam a fronteira |
 | Mensagem de erro sem detalhe de banco | Conflito, recusa de policy e falha inesperada viram texto genérico em pt-BR (`createPatientMessages`) |
 
 ### O que vai para o log do servidor — e o que não vai
@@ -222,14 +225,15 @@ clínica ativa, e aí o adapter em uso é o do Supabase.
 
 ## 6. Fora de escopo, deliberadamente
 
-Exclusão lógica pela interface, busca paginada por cursor (P-02), consentimento
-LGPD (P-03), prontuário, agenda, Patient 360, CPF/CNS, sexo biológico no
-formulário, endereço estruturado, contato de emergência, foto e importação em
-massa.
+Exclusão lógica pela interface, consentimento LGPD (P-03), prontuário, agenda,
+Patient 360, CPF/CNS, sexo biológico no formulário, endereço estruturado, contato
+de emergência, foto e importação em massa.
 
 Também fora: cache tags com `clinic_id` (F-02 — a action revalida por caminho,
-como todo o resto hoje) e testes automatizados (D5/F-04 — não há runner no
-projeto).
+como todo o resto hoje).
+
+Busca paginada por cursor **saiu desta lista**: foi entregue em P-02a, §8. O que
+sobrou dela está em P-02b, bloqueado por acesso ao banco.
 
 ---
 
@@ -261,6 +265,213 @@ As linhas de teste criadas para V1–V5 foram removidas por exclusão lógica
 | **P-P7** | **O JWT não carrega `clinic_id` nas claims (V10)**, embora `current_clinic_id()` responda corretamente — ou seja, a RPC não depende só do token. É a dívida **D14** do roadmap, agora com evidência. | Baixo hoje (tudo que precisa da clínica passa pela RPC). Alto no dia em que uma policy consultar a claim direto em vez da função. | Confirmar o registro do `custom_access_token_hook` no projeto remoto. |
 | **P-P1** | ~~Policy de `INSERT` de `patients` não verificada~~ — **resolvida** por V1/V6. | — | — |
 | **P-P2** | **Índices únicos de `patients` não são observáveis pelo repositório.** O gerador de tipos lê o OpenAPI do PostgREST, que expõe colunas e RPCs — não constraints. | Se existir único sobre alguma coluna que este insert preenche, o usuário recebe a mensagem de conflito (tratada), não um 500. | `select indexname, indexdef from pg_indexes where tablename='patients';` |
-| **P-P3** | **`patients.updated_at` tem trigger de atualização?** O insert não envia o campo; o `Insert` gerado o trata como opcional. | Nenhum hoje (o valor só importa na edição, que é outra fatia). | `select tgname from pg_trigger where tgrelid='patients'::regclass;` |
-| **P-P4** | **Nenhum teste automatizado.** Não há runner no projeto (D5). O fluxo foi verificado por `lint`, `tsc --noEmit`, `build`, pelas sondas V1–V10 contra o banco real e por leitura — nada disso é regressão automatizada. | O comportamento descrito aqui quebra em silêncio na próxima mudança. | F-04 (harness + CI), depois teste de tenancy de `patients` (R1) — V4 é exatamente o caso a automatizar. |
+| **P-P3** | **`patients.updated_at` tem trigger de atualização?** O insert não envia o campo; o `Insert` gerado o trata como opcional. | Nenhum hoje; o valor só importa para uma futura exibição de última alteração. | `select tgname from pg_trigger where tgrelid='patients'::regclass;` |
+| **P-P4** | ~~Nenhum teste automatizado~~ — **resolvida parcialmente**: há testes unitários do schema e teste de contrato do adapter, incluindo filtro por `clinic_id`, `id` e `deleted_at is null`. A validação de RLS entre tenants continua manual em V4. | O contrato local está protegido; a policy real ainda deve ser exercitada no CI quando o harness de integração existir. | F-04 (harness + CI) para transformar V4 em teste de tenancy automatizado. |
 | **P-P5** | **Fuso da clínica não é considerado na data de nascimento.** A validação "não pode ser futura" compara com o relógio do servidor em UTC. | No máximo, aceitar uma data um dia à frente para quem cadastra tarde da noite. Nunca recusa data válida. | Decidir com `clinics.timezone` quando a formatação de data por clínica entrar. |
+
+---
+
+## 8. P-02a — busca server-side e paginação por cursor
+
+> Entregue em **07/08/2026**, sem tocar no banco remoto: nenhuma migration,
+> nenhuma coluna nova, nenhuma dependência nova. O que exigia SQL virou P-02b.
+
+### 8.1 O defeito que esta fatia corrigiu
+
+Antes de P-02a a listagem **não tinha limite nenhum**:
+
+| Onde | O que fazia | Consequência |
+|---|---|---|
+| `listByClinic` | `select … eq(clinic_id) is(deleted_at,null) order(full_name)` sem `limit` | Trazia a clínica inteira em toda renderização |
+| `loadVisitDates` | `in('patient_id', [todos os ids])` | URL do PostgREST crescia até **HTTP 414** em algumas centenas de pacientes |
+| `pacientes/page.tsx` | passava todos os pacientes ao Client Component | Nome, e-mail, telefone e nascimento de **toda a base** no payload RSC, mostrando 8 |
+| `PatientsScreen` | filtrava por `useMemo` e paginava por `slice` | Busca e paginação eram ilusão de cliente |
+| `PatientsScreen` | busca/status/última visita em `useState` | Recarregar perdia o recorte; o link não reproduzia; voltar não funcionava |
+| `order('full_name')` | sem desempate | Ordenação instável entre homônimos — pré-requisito quebrado para keyset |
+| métricas do topo | derivadas de `patients.length` | Quebrariam junto com a paginação: "Total" viraria o tamanho da página |
+
+`listByClinic` **não existe mais**. Não foi substituído por uma versão com
+limite opcional: um método sem teto disponível na porta é convite a reintroduzir
+o problema em outra tela. Quem precisa de "todos" declara um limite e paga por
+ele — é o que a `/agenda` faz agora (`PATIENT_PAGE_MAX_SIZE`, com comentário
+dizendo que seletor de clínica grande é trabalho de A-01).
+
+### 8.2 O contrato
+
+`Paginated<T>` em `_shared/domain` (paga parte da dívida **D12**) e, na porta:
+
+```ts
+listPage(clinicId: string, query: PatientListQuery): Promise<PatientPage>
+countMetrics(clinicId: string, reference: Date): Promise<PatientMetrics>
+```
+
+`PatientPage` acrescenta `cursorApplied` a `Paginated<Patient>` — é o que
+permite à tela dizer "mostrando do início" quando o cursor pedido não valia,
+em vez de servir a primeira página fingindo que era a pedida.
+
+**Não há total em `PatientPage`, de propósito.** `totalPages` exigiria um `count`
+exato por página (segundo scan da fatia do tenant a cada navegação) e não
+sobrevive a escrita concorrente. O rodapé mostra "Mostrando N pacientes" e dois
+controles, não "3 / 47".
+
+### 8.3 Ordenação e keyset
+
+`ORDER BY full_name ASC, id ASC`, com `limit + 1` linhas para saber se há próxima
+página sem `count`.
+
+O desempate por `id` não é decorativo: sem ele dois homônimos podem **repetir ou
+sumir** na fronteira entre páginas, e o defeito só aparece em produção.
+
+**Risco conhecido (R-g):** `gt` e `ORDER BY` usam a mesma colação da coluna, então
+o keyset é consistente por construção — exceto sob colação **não determinística**
+(ICU com `deterministic = false`), em que `eq` casa com mais de uma grafia. Não é
+o padrão do Supabase e **não é verificável a partir do repositório** (B1). Se for
+confirmada, a ordem passa a ser `(created_at, id)` — e a lista deixa de ser
+alfabética.
+
+### 8.4 O cursor — opaco, por âncora, sem PII
+
+```
+cursor = base64url(JSON.stringify({ v: 1, a: <patients.id uuid>, f: <8 hex> }))
+```
+
+Duas regras duras, ambas em `patientCursor.ts`:
+
+- **Nunca carrega o nome do paciente.** O cursor vive na URL: histórico do
+  navegador, header `Referer`, log de proxy e CDN, print de tela. Nome de
+  paciente de uma clínica é dado pessoal em contexto de saúde, e o cursor
+  "óbvio" — `base64(full_name|id)` — vaza exatamente isso.
+- **Nunca carrega `clinic_id`.** A clínica sai da sessão; um `clinic_id` vindo do
+  cliente é o `clinicId` do cliente com outro nome (P3 de `01-arquitetura.md`).
+
+`f` é o fingerprint de `status|search`: impede que o cursor da busca "ana" seja
+aplicado à busca "bruno" e produza uma página silenciosamente errada.
+
+**Por que não precisa de HMAC:** nenhum dado do cursor tem autoridade. `a` só
+significa alguma coisa depois de resolvido por
+`select id, full_name from patients where clinic_id = <ativa> and id = <a> and deleted_at is null`.
+Um uuid de paciente de outra clínica não acha linha (filtro explícito + RLS) e a
+listagem volta para a primeira página do próprio tenant — sem erro, sem
+vazamento. Custo: um round-trip por página, por chave primária.
+
+Base64 quebrado, JSON inválido, versão desconhecida, campo a mais, uuid mal
+formado, cursor de 5.000 caracteres: **tudo devolve a primeira página, nada
+lança.**
+
+### 8.5 Busca — sanitização é requisito, não higiene
+
+O termo entra em uma **string de filtro do PostgREST** (`or=(...)`), não em um
+prepared statement. Isso não é SQL injection — a RLS e o `eq('clinic_id')`
+continuam valendo, e `is('deleted_at', null)` é um AND separado — mas é injeção
+na **gramática do filtro**.
+
+`sanitizePatientSearch` (aplicado na rota **e de novo** no adapter):
+
+1. Remove `%` e `_` — **não escapa**. O PostgREST não expõe a cláusula `ESCAPE`
+   do `LIKE`, então escapar é impossível; quem digita `100%` procura por `100`.
+2. Remove `"` `'` `\` `/` `,` `(` `)` `:` `;` `&` `|` e os invisíveis (`\p{Cc}`,
+   `\p{Cf}`). O **ponto passa** — e-mail depende dele, e as aspas duplas em volta
+   do valor o tornam inofensivo.
+3. Colapsa espaço, corta em 80 caracteres, `''` vira `null`.
+
+Campos buscados: `full_name` e `email` por `ilike` infixo; `phone` por `like` de
+**prefixo** sobre dígitos (a coluna guarda só dígitos), a partir de 3 dígitos.
+
+> **Diferença honesta em relação ao filtro local de P-01:** o telefone era
+> infixo no cliente e agora é prefixo no servidor. Buscar pelos 4 últimos dígitos
+> deixa de achar; buscar com DDD acha. Prefixo é a única forma que um btree comum
+> atende — infixo exigiria trigram, que é P-02b.
+
+**`cpf` e `cns` não são buscados.** Permitir busca por CPF transformaria a
+listagem em oráculo de existência de CPF por tentativa e erro. P-03.
+
+### 8.6 Limite
+
+`DEFAULT = 20`, `MAX = 50`. Clampado **duas vezes**: no schema Zod da rota e de
+novo no adapter (o método é público na porta; o próximo chamador pode não vir de
+uma URL validada).
+
+`?limit=100000` devolve 50, não a clínica inteira. `0`, `-1` e `abc` caem no
+padrão — são ausência de pedido, não pedido exagerado.
+
+### 8.7 Métricas do topo
+
+Três consultas `select('id', { count: 'exact', head: true })`, que devolvem número
+sem transferir linha:
+
+| Métrica | Consulta |
+|---|---|
+| Total | `clinic_id` + `deleted_at is null` |
+| Novos este mês | idem + `created_at >= início do mês de referência` |
+| Atendimentos pendentes | `appointments`: `clinic_id`, `starts_at >= início do dia`, status fora de `canceled`/`no_show` |
+
+A terceira **conta atendimentos, não pacientes** — que é o que o rótulo do card
+já dizia. Antes contava pacientes com próxima visita.
+
+Modo demonstração continua devolvendo os números do handoff (1.284 / 36 / 18),
+não a contagem dos 12 pacientes de mock: a vitrine mostra escala de clínica real
+e o banner já avisa que nada ali é dado de verdade.
+
+### 8.8 A tela
+
+- Recorte na URL: `?q=`, `?status=`, `?cursor=`. Recarregar mantém, o link
+  reproduz, voltar funciona.
+- Busca por `next/form` com `action="/pacientes"` — navegação client-side com
+  prefetch, e funciona sem JS. **O cursor não é campo do formulário**, e é isso
+  que reseta a paginação ao trocar de filtro.
+- Rodapé: "Mostrando N pacientes" + **Anterior** (`router.back()`, habilitado só
+  quando há cursor) e **Próxima** (`Link` para `?cursor=…`, prefetchável). Com
+  keyset o servidor conhece a próxima âncora, nunca a anterior; o histórico do
+  navegador já guarda os cursores por onde se passou.
+- **A inserção otimista do cadastro saiu.** Ela colocava o paciente novo no
+  índice 0; numa lista alfabética paginada isso é um item fantasma — aparece fora
+  de ordem e some no próximo carregamento. O banner e as ações continuam, com
+  `router.refresh()` no lugar (e "Ver perfil" some no modo demo, onde o id local
+  não resolve rota).
+- **"Última visita" está desabilitado**, com a razão escrita ao lado do controle.
+  Não foi escondido nem deixado filtrando só no mock: um filtro que funciona na
+  vitrine e não no produto é o R11.
+- Erro de leitura: mensagem genérica na tela (`error.tsx`), causa e SQLSTATE
+  apenas no `console.error` do servidor. Antes a mensagem do Postgres subia junto.
+
+### 8.9 O que os testes cobrem (`npm test`)
+
+Cursor round-trip, corrompido, versão desconhecida, campo a mais, `__proto__`,
+uuid inválido, fingerprint divergente, ausência de PII no payload · clamp de
+limite · sanitização contra 10 payloads de injeção, com assert sobre a string
+gerada · `clinic_id` e `deleted_at is null` na listagem **e na resolução da
+âncora** · âncora de outro tenant → primeira página · colunas do `select` sem
+`cpf`/`cns`/`admin_notes` · ordenação `(full_name, id)` e `limit + 1` ·
+`loadVisitDates` restrito aos ids da página · métricas por `head: true`.
+
+Os fakes gravam a cadeia de chamadas do supabase-js — **nenhuma chamada de rede**.
+Tenancy real continua sendo pgTAP (R1), ainda pendente.
+
+### 8.10 P-02b — o que ficou bloqueado
+
+| # | Item | Bloqueio |
+|---|---|---|
+| 1 | Filtro "Última visita (30/90 dias)" | Deriva de `appointments`; "mais de 90 dias" é anti-join (inclui quem nunca veio). Exige `last_visit_at` denormalizado ou RPC → migration |
+| 2 | Busca infixa em escala | `pg_trgm` (+ `unaccent` para acento) e índice GIN → migration |
+| 3 | Índice do keyset `(clinic_id, full_name, id) where deleted_at is null` | Migration |
+| 4 | Cache da listagem | F-02 (`lib/cache/tags.ts`): `use cache` sem tag por `clinic_id` é o R2 |
+| 5 | Confirmação da colação de `full_name` | Sem acesso SQL (B1) |
+
+Sem trigram, `ilike '%termo%'` é seq scan **dentro da fatia da clínica** —
+correto, e O(n) por clínica. Para milhares de pacientes é tolerável; a latência
+aparece primeiro na maior clínica do SaaS. **É pré-requisito de performance, não
+de correção.**
+
+### 8.11 Consultas que alguém com acesso ao SQL Editor precisa rodar
+
+```sql
+select indexname, indexdef from pg_indexes
+ where schemaname = 'public' and tablename = 'patients';
+
+select extname from pg_extension;   -- pg_trgm? unaccent? btree_gin?
+
+select collname, collprovider, collisdeterministic   -- confirma a 8.3
+  from pg_collation
+ where oid = (select attcollation from pg_attribute
+               where attrelid = 'patients'::regclass and attname = 'full_name');
+```

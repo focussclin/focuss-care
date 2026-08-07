@@ -1,3 +1,4 @@
+import type { Paginated } from '@/modules/_shared/domain/Paginated'
 import type { Patient } from '@/modules/_shared/domain/types'
 
 /**
@@ -27,6 +28,57 @@ export interface NewPatientData {
   adminNotes: string | null
 }
 
+/** Estados de cadastro que o banco sabe filtrar — `patients.is_active`. */
+export type PatientStatusFilter = 'all' | 'active' | 'inactive'
+
+/**
+ * Recorte de uma pagina da listagem.
+ *
+ * Tudo aqui ja passou pelo schema da rota (`patientListQuerySchema`): o termo
+ * chega sanitizado, o limite chega clampado e o cursor chega como string opaca
+ * ainda NAO confiavel — quem valida o cursor e o adapter, contra o tenant ativo.
+ */
+export interface PatientListQuery {
+  /** Termo ja normalizado e sanitizado, ou null quando a busca esta vazia. */
+  search: string | null
+  status: PatientStatusFilter
+  /** Ja clampado: 1..PATIENT_PAGE_MAX_SIZE. O adapter clampa de novo. */
+  limit: number
+  /** Cursor opaco vindo da URL, ou null para a primeira pagina. */
+  cursor: string | null
+}
+
+export interface PatientPage extends Paginated<Patient> {
+  /**
+   * `false` quando havia cursor na URL e ele NAO foi usado — expirado, forjado,
+   * de outro tenant, ou de outro recorte de filtro.
+   *
+   * Existe para a tela poder dizer "Mostrando do inicio" em vez de servir a
+   * primeira pagina fingindo que era a pedida. Silencio, aqui, seria mentira.
+   */
+  cursorApplied: boolean
+}
+
+/**
+ * Numeros do topo da listagem.
+ *
+ * Existem como consulta PROPRIA, e nao derivados da pagina: com paginacao,
+ * `items.length` e o tamanho da pagina, nunca o total da clinica.
+ */
+export interface PatientMetrics {
+  /** Pacientes nao excluidos da clinica ativa, incluindo arquivados. */
+  total: number
+  /** Cadastrados desde o primeiro dia do mes de referencia. */
+  newThisMonth: number
+  /**
+   * Agendamentos futuros nao cancelados.
+   *
+   * Conta **atendimentos**, nao pacientes — e o que o rotulo do card diz. Um
+   * paciente com tres consultas marcadas soma tres.
+   */
+  pendingAppointments: number
+}
+
 /**
  * PORTA do modulo de pacientes.
  *
@@ -34,8 +86,23 @@ export interface NewPatientData {
  * Supabase. Trocar o backend um dia mexe apenas em infrastructure/.
  */
 export interface PatientRepository {
-  /** Pacientes da clinica ativa, ordenados por nome. */
-  listByClinic(clinicId: string): Promise<Patient[]>
+  /**
+   * Uma pagina de pacientes da clinica ativa, em ordem `(full_name, id)`.
+   *
+   * **Nao existe metodo que liste a clinica inteira.** Havia (`listByClinic`), e
+   * era um defeito latente de escala: toda renderizacao trazia a base completa
+   * para a memoria do servidor e para o payload RSC. Quem precisa de "todos"
+   * precisa, na verdade, de um limite explicito — e paga o preco de declara-lo.
+   */
+  listPage(clinicId: string, query: PatientListQuery): Promise<PatientPage>
+
+  /**
+   * Contagens do resumo, em consultas `head` que nao transferem linha.
+   *
+   * `reference` e o "hoje" ja normalizado pela rota — o mes vem dele, nao de um
+   * `new Date()` escondido no adapter.
+   */
+  countMetrics(clinicId: string, reference: Date): Promise<PatientMetrics>
 
   findById(clinicId: string, patientId: string): Promise<Patient | null>
 
