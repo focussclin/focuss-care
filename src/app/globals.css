@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@import "../styles/tokens.primitives.css";
+@import "../styles/tokens.semantic.css";
+
+/*
+ * Handoffs atuais (LOGIN_DESIGN.md / DASHBOARD_DESIGN.md) especificam apenas o tema
+ * claro. Dark mode fica pendente de tokens do Codex — inventar uma paleta escura aqui
+ * geraria divergencia com o design. Ver docs/02-estrutura-de-pastas.md, secao 6.
+ */
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+
+  /* Foco visivel e consistente em toda a aplicacao (requisito de acessibilidade) */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

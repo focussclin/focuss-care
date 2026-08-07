@@ -1,0 +1,63 @@
+/**
+ * Focuss Care — tokens primitivos
+ * DONO: Codex (design). Aqui moram VALORES, extraidos de LOGIN_DESIGN.md e DASHBOARD_DESIGN.md.
+ * Nenhum componente deve consumir estas variaveis diretamente — use tokens.semantic.css.
+ */
+
+:root {
+  /* Verdes da marca */
+  --fc-green-900: #0f3028; /* hover da acao principal */
+  --fc-green-800: #173f35; /* verde profundo / acao principal / sidebar */
+  --fc-green-600: #3c8c70; /* foco */
+  --fc-green-300: #a9d7bd; /* barra do item ativo na sidebar */
+  --fc-green-200: #dcebe3; /* verde suave de apoio */
+  --fc-green-100: #e5f1e9; /* fundo dos icones circulares */
+
+  /* Neutros esverdeados */
+  --fc-neutral-900: #1c2b25; /* texto principal */
+  --fc-neutral-800: #263b34; /* labels */
+  --fc-neutral-500: #61706a; /* texto secundario */
+  --fc-neutral-400: #9db8aa; /* borda em hover */
+  --fc-neutral-300: #d6e0db; /* borda padrao */
+  --fc-neutral-200: #e1e9e4; /* borda dos cards */
+  --fc-neutral-50: #f5f7f5; /* fundo geral */
+  --fc-white: #ffffff; /* superficie */
+
+  /* Feedback */
+  --fc-danger-600: #b84a4a; /* erro */
+  --fc-danger-50: #fbeeee;
+
+  /*
+   * Atencao suave — DASHBOARD_DESIGN.md pede "cor de atencao suave" para o card
+   * "Pacientes aguardando" sem fixar o valor. Ambar terroso derivado para
+   * harmonizar com a paleta. Pendente de confirmacao do Codex.
+   */
+  --fc-attention-600: #a8761f;
+  --fc-attention-100: #f6eedd;
+
+  /* Status — AGENDA_DESIGN.md e PATIENTS_DESIGN.md usam a mesma escala */
+  --fc-status-positive-bg: #dcebe3; /* Confirmado / Ativo */
+  --fc-status-positive-fg: #245c48;
+  --fc-status-pending-bg: #fff1d6; /* Aguardando / Acompanhamento */
+  --fc-status-pending-fg: #8b5e18;
+  --fc-status-neutral-bg: #e9ecea; /* Concluido / Inativo */
+  --fc-status-neutral-fg: #61706a;
+  --fc-status-negative-bg: #f8e2e2; /* Cancelado */
+  --fc-status-negative-fg: #9b3d3d;
+
+  /* Superficies de interacao */
+  --fc-row-hover: #f7faf8; /* hover de linha da tabela */
+  --fc-grid-line: #e7eeea; /* linhas da grade da agenda */
+  --fc-link: #245c48; /* links e acoes secundarias */
+
+  /* Sombras — quase impercepiveis, conforme handoff */
+  --fc-shadow-card: 0 1px 2px rgba(28, 43, 37, 0.04);
+  --fc-shadow-raised: 0 4px 16px rgba(28, 43, 37, 0.06);
+  --fc-shadow-focus: 0 0 0 3px rgba(60, 140, 112, 0.24);
+  --fc-shadow-focus-danger: 0 0 0 3px rgba(184, 74, 74, 0.2);
+
+  /* Overlays da sidebar */
+  --fc-sidebar-item-active: rgba(255, 255, 255, 0.12);
+  --fc-sidebar-item-hover: rgba(255, 255, 255, 0.07);
+  --fc-sidebar-text-idle: rgba(255, 255, 255, 0.72);
+}

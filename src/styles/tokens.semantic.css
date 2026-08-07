@@ -1,0 +1,88 @@
+/**
+ * Focuss Care — tokens semanticos
+ * DONO: Claude (codigo). Aqui mora a ESTRUTURA: nomes por funcao, nao por cor.
+ * Componentes consomem apenas estes tokens (bg-surface, text-muted, border-default...).
+ * Trocar a marca = trocar tokens.primitives.css. Nenhum componente muda.
+ */
+
+@theme {
+  /* ---- Cores ---- */
+  --color-background: var(--fc-neutral-50);
+  --color-surface: var(--fc-white);
+
+  --color-brand: var(--fc-green-800);
+  --color-brand-hover: var(--fc-green-900);
+  --color-brand-soft: var(--fc-green-200);
+  --color-brand-subtle: var(--fc-green-100);
+  --color-brand-accent: var(--fc-green-300);
+  --color-brand-foreground: var(--fc-white);
+
+  --color-foreground: var(--fc-neutral-900);
+  --color-label: var(--fc-neutral-800);
+  --color-muted: var(--fc-neutral-500);
+  --color-on-brand-muted: var(--fc-sidebar-text-idle);
+
+  --color-border-default: var(--fc-neutral-300);
+  --color-border-hover: var(--fc-neutral-400);
+  --color-border-card: var(--fc-neutral-200);
+
+  --color-focus: var(--fc-green-600);
+  --color-danger: var(--fc-danger-600);
+  --color-danger-surface: var(--fc-danger-50);
+  --color-attention: var(--fc-attention-600);
+  --color-attention-surface: var(--fc-attention-100);
+
+  --color-link: var(--fc-link);
+  --color-row-hover: var(--fc-row-hover);
+  --color-grid-line: var(--fc-grid-line);
+
+  --color-status-positive: var(--fc-status-positive-fg);
+  --color-status-positive-surface: var(--fc-status-positive-bg);
+  --color-status-pending: var(--fc-status-pending-fg);
+  --color-status-pending-surface: var(--fc-status-pending-bg);
+  --color-status-neutral: var(--fc-status-neutral-fg);
+  --color-status-neutral-surface: var(--fc-status-neutral-bg);
+  --color-status-negative: var(--fc-status-negative-fg);
+  --color-status-negative-surface: var(--fc-status-negative-bg);
+
+  /* ---- Tipografia (Geist, ja carregada no root layout) ---- */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --text-display: 2rem; /* 32px — titulo do login */
+  --text-display--line-height: 1.15;
+  --text-display-sm: 1.75rem; /* 28px — titulo de pagina / login mobile */
+  --text-display-sm--line-height: 1.2;
+  --text-card-title: 1rem; /* 16px */
+  --text-card-title--line-height: 1.4;
+  --text-metric: 1.625rem; /* 26px — numero dos cards de resumo */
+  --text-metric--line-height: 1.15;
+  --text-control: 0.9375rem; /* 15px — campos, botoes, texto auxiliar */
+  --text-control--line-height: 1.5;
+  --text-aux: 0.875rem; /* 14px */
+  --text-aux--line-height: 1.5;
+  --text-label: 0.8125rem; /* 13px */
+  --text-label--line-height: 1.4;
+
+  --font-weight-semibold: 650;
+
+  /*
+   * Breakpoint proprio: DASHBOARD_DESIGN.md separa "sidebar reduzida" de
+   * "sidebar completa" em 1100px, valor que nao existe na escala padrao.
+   */
+  --breakpoint-nav: 1100px;
+
+  /* ---- Forma ---- */
+  --radius-field: 12px;
+  --radius-card: 16px;
+
+  --shadow-card: var(--fc-shadow-card);
+  --shadow-raised: var(--fc-shadow-raised);
+}
+
+/*
+ * Medidas fixas do handoff (52px de controle, 44px de area clicavel, 248/80px de
+ * sidebar, 420px de formulario) NAO viram tokens: elas aparecem uma unica vez, dentro
+ * do componente que as define (Button, TextField, Sidebar, AuthLayout). Reuso vem da
+ * componentizacao, nao da multiplicacao de variaveis.
+ */

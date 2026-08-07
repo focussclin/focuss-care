@@ -1,0 +1,36 @@
+-- =============================================================================
+-- Seed de desenvolvimento
+--
+-- DELIBERADAMENTE VAZIA de dados clinicos.
+--
+-- Pacientes, atendimentos e prontuarios sao dado pessoal sensivel (LGPD art. 11).
+-- Nao versionamos dados de saude — nem reais, nem realistas o bastante para serem
+-- confundidos com reais em um dump de banco.
+--
+-- O schema oficial ja vive no projeto Supabase remoto (ver supabase/README.md).
+-- Nao ha migrations locais a aplicar.
+--
+-- Como preparar um ambiente de desenvolvimento:
+--
+--   1. Crie um usuario pelo Supabase Auth (painel ou signUp). Nenhuma credencial
+--      entra neste arquivo.
+--
+--   2. Autenticado como esse usuario, crie a clinica pela funcao do proprio banco:
+--
+--        select public.create_clinic('minha-clinica', 'Minha Clinica');
+--
+--      Ela deriva o dono da sessao (auth.uid()) — nao aceita id de usuario como
+--      parametro, entao nao ha como criar vinculo para outra pessoa.
+--
+--   3. Force o refresh do token (signOut/signIn ou refreshSession). O JWT anterior
+--      ainda nao contem o vinculo recem-criado, e `current_clinic_id()` devolveria
+--      vazio.
+--
+--   4. Para trocar de clinica depois: select public.switch_clinic('<clinic_id>');
+--
+--   5. Cadastre dados de teste pela propria aplicacao, ja sob RLS.
+--
+-- Enquanto NEXT_PUBLIC_SUPABASE_URL/PUBLISHABLE_KEY nao estiverem definidas, a
+-- aplicacao usa os dados de demonstracao de src/lib/mocks/clinic-data.ts, que
+-- nunca tocam o banco.
+-- =============================================================================
