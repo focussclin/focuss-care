@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:types": "node --env-file=.env.local scripts/generate-database-types.mjs"
   },
   "dependencies": {
@@ -38,6 +41,7 @@
     "eslint-config-next": "16.3.0",
     "supabase": "^2.112.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }
