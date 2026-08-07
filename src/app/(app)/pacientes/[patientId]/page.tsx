@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
-import { ArrowLeft, CalendarPlus, CalendarX2, Pencil } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, CalendarX2, StickyNote } from 'lucide-react'
 import Link from 'next/link'
 
 import { Avatar } from '@/components/ui/avatar'
@@ -10,7 +10,9 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { getPatientNotes } from '@/lib/mocks/clinic-data'
+import { toIsoDate } from '@/modules/patients/application/toPatientDto'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
+import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
   formatDayHeading,
@@ -32,11 +34,14 @@ const MAX_HISTORY = 5
 
 export default async function PatientProfilePage({
   params,
+  searchParams,
 }: PageProps<'/pacientes/[patientId]'>) {
   await connection()
   const today = startOfDay(new Date())
 
   const { patientId } = await params
+  // O menu da listagem e o botao deste cabecalho linkam `?editar=1`.
+  const { editar } = await searchParams
 
   const [patientSource, appointmentSource] = await Promise.all([
     getPatientRepository(today),
@@ -65,7 +70,7 @@ export default async function PatientProfilePage({
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
     .slice(0, MAX_HISTORY)
 
-  const notes = getPatientNotes(today)
+  const notes = patientSource.isLive ? [] : getPatientNotes(today)
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,12 +101,19 @@ export default async function PatientProfilePage({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button asChild variant="secondary">
-            <Link href={`/pacientes/${patient.id}?editar=1`}>
-              <Pencil aria-hidden className="size-4" />
-              Editar paciente
-            </Link>
-          </Button>
+          <PatientProfileActions
+            patient={{
+              id: patient.id,
+              name: patient.name,
+              phone: patient.phone,
+              email: patient.email,
+              birthDate: toIsoDate(patient.birthDate),
+              adminNotes: patient.adminNotes ?? '',
+              isActive: patient.status !== 'inactive',
+            }}
+            isLive={patientSource.isLive}
+            openOnMount={editar === '1'}
+          />
           <Button asChild>
             <Link href="/agenda?novo=1">
               <CalendarPlus aria-hidden className="size-4" />
@@ -229,19 +241,26 @@ export default async function PatientProfilePage({
               title="Observações"
               description="Notas internas da equipe."
             />
-            <ul className="flex flex-col gap-3 px-5 pb-5">
-              {notes.map((note) => (
-                <li
-                  key={note.id}
-                  className="rounded-field bg-background p-4"
-                >
-                  <p className="text-aux text-foreground">{note.content}</p>
-                  <p className="mt-2 text-label text-muted">
-                    {note.authorName} · {formatShortDate(note.createdAt)}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            {notes.length === 0 ? (
+              <EmptyState
+                icon={StickyNote}
+                title="Nenhuma observação registrada."
+              />
+            ) : (
+              <ul className="flex flex-col gap-3 px-5 pb-5">
+                {notes.map((note) => (
+                  <li
+                    key={note.id}
+                    className="rounded-field bg-background p-4"
+                  >
+                    <p className="text-aux text-foreground">{note.content}</p>
+                    <p className="mt-2 text-label text-muted">
+                      {note.authorName} · {formatShortDate(note.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

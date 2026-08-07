@@ -40,6 +40,15 @@ export interface Patient {
   document?: string
   /** Opcional: o schema remoto ainda nao tem coluna de preferencia de contato. */
   contactPreference?: 'WhatsApp' | 'Telefone' | 'E-mail'
+  /**
+   * `patients.admin_notes` — observacao ADMINISTRATIVA do cadastro.
+   *
+   * Nao e prontuario nem nota clinica: essas moram em `records`, com versionamento
+   * e auditoria de leitura proprios (F5 do roadmap). Existe aqui porque o
+   * formulario de edicao precisa carregar o valor atual — sem ele, salvar o
+   * formulario apagaria a observacao ja gravada.
+   */
+  adminNotes?: string | null
   status: PatientStatus
   createdAt: Date
   lastVisitAt: Date | null

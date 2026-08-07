@@ -2,6 +2,7 @@
 
 import { CheckCircle2, ChevronLeft, ChevronRight, Plus, SearchX, UserPlus, Users } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -13,12 +14,17 @@ import { StatCard } from '@/components/ui/stat-card'
 import { addDays } from '@/lib/utils/date'
 import type { Patient } from '@/modules/_shared/domain/types'
 
-import type {
-  LastVisitFilter,
-  NewPatientInput,
-  StatusFilter,
+import { createPatientAction } from '../actions/createPatient.action'
+import {
+  createPatientMessages,
+  type LastVisitFilter,
+  type NewPatientInput,
+  type StatusFilter,
 } from '../schemas/patient.schema'
-import { NewPatientModal } from './NewPatientModal'
+import {
+  NewPatientModal,
+  type NewPatientSubmitFailure,
+} from './NewPatientModal'
 import { PatientCardList } from './PatientCardList'
 import { PatientFilters } from './PatientFilters'
 import { PatientsTable } from './PatientsTable'
@@ -32,6 +38,14 @@ export interface PatientsScreenProps {
     pendingAppointments: number
   }
   openNewOnMount?: boolean
+  /**
+   * Ha banco por tras desta tela.
+   *
+   * Falso significa demonstracao local (Supabase ausente do ambiente): o cadastro
+   * fica na memoria do navegador e a Server Action NAO e chamada. Verdadeiro
+   * significa clinica real com sessao real — todo cadastro persiste.
+   */
+  isLive?: boolean
 }
 
 const PAGE_SIZE = 8
@@ -41,7 +55,9 @@ export function PatientsScreen({
   initialPatients,
   metrics,
   openNewOnMount = false,
+  isLive = false,
 }: PatientsScreenProps) {
+  const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>(() => [
     ...initialPatients,
   ])
@@ -99,23 +115,94 @@ export function PatientsScreen({
     setPage(1)
   }
 
-  function handleCreate(values: NewPatientInput) {
-    const created: Patient = {
-      id: `pat-local-${patients.length + 1}`,
-      name: values.name,
-      email: values.email ?? '',
-      phone: values.phone,
-      birthDate: values.birthDate ? new Date(values.birthDate) : new Date(),
-      contactPreference: values.contactPreference,
-      status: 'active',
-      createdAt: today,
-      lastVisitAt: null,
-      nextVisitAt: null,
+  function announceCreated(patient: Patient) {
+    setPatients((current) => [patient, ...current])
+    setJustCreated(patient)
+    setPage(1)
+  }
+
+  /**
+   * Cadastro.
+   *
+   * Dois caminhos, e a diferenca entre eles e a regra D8/R7 do roadmap:
+   *
+   *  - **Sem banco (`isLive` falso)** — demonstracao local. A Server Action nao e
+   *    chamada; o paciente vive na memoria desta aba e o aviso de sucesso diz
+   *    isso, para ninguem confundir vitrine com produto.
+   *  - **Com banco** — `createPatientAction`. O modal so fecha depois que o
+   *    servidor confirma, e a linha que entra na lista usa o `id` devolvido por
+   *    ele. Falha nao vira sucesso otimista: o modal continua aberto.
+   */
+  async function handleCreate(
+    values: NewPatientInput,
+  ): Promise<NewPatientSubmitFailure | null> {
+    if (!isLive) {
+      announceCreated({
+        id: `pat-local-${Date.now()}`,
+        name: values.name,
+        email: values.email ?? '',
+        phone: values.phone,
+        birthDate: values.birthDate
+          ? new Date(`${values.birthDate}T00:00:00`)
+          : null,
+        contactPreference: values.contactPreference,
+        status: 'active',
+        createdAt: today,
+        lastVisitAt: null,
+        nextVisitAt: null,
+      })
+
+      return null
     }
 
-    setPatients((current) => [created, ...current])
-    setJustCreated(created)
-    setPage(1)
+    try {
+      const result = await createPatientAction(values)
+
+      if (!result.ok) {
+        if (result.error.code === 'unauthenticated') {
+          router.replace('/login?next=%2Fpacientes')
+          return null
+        }
+
+        if (result.error.code === 'no-active-clinic') {
+          router.replace('/onboarding')
+          return null
+        }
+
+        return {
+          message: result.error.message,
+          fieldErrors: result.error.fieldErrors,
+        }
+      }
+
+      announceCreated({
+        id: result.data.id,
+        name: result.data.name,
+        email: result.data.email,
+        phone: result.data.phone,
+        // 'YYYY-MM-DD' sem hora seria lido como UTC e voltaria um dia no fuso do
+        // Brasil. Com a hora local explicita, a data exibida e a que foi digitada.
+        birthDate: result.data.birthDate
+          ? new Date(`${result.data.birthDate}T00:00:00`)
+          : null,
+        // Preferencia de contato ainda nao tem coluna: mostra-la aqui seria exibir
+        // um dado que o proximo carregamento nao traz de volta.
+        contactPreference: undefined,
+        status: 'active',
+        createdAt: new Date(result.data.createdAt),
+        lastVisitAt: null,
+        nextVisitAt: null,
+      })
+
+      // A lista ja tem o paciente novo (estado local). O refresh existe para o
+      // resto do servidor: metricas do topo e qualquer tela em cache.
+      router.refresh()
+
+      return null
+    } catch {
+      // Falha de transporte: a Server Action nem chegou a responder.
+      return { message: createPatientMessages.unavailable }
+    }
   }
 
   return (
@@ -148,6 +235,7 @@ export function PatientsScreen({
           <p className="flex-1 text-aux text-status-positive">
             <span className="font-semibold">{justCreated.name}</span> foi
             cadastrado com sucesso.
+            {isLive ? null : ' Modo demonstração: nada foi salvo no banco.'}
           </p>
           <div className="flex items-center gap-2">
             <Button asChild variant="secondary">

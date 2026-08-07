@@ -46,6 +46,7 @@ export default async function PacientesPage({
       initialPatients={patients}
       metrics={metrics}
       openNewOnMount={novo === '1'}
+      isLive={isLive}
     />
   )
 }

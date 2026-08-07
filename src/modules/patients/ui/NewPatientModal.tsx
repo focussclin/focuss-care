@@ -1,12 +1,15 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
+import { AlertCircle } from 'lucide-react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
+import { TextareaField } from '@/components/ui/textarea-field'
 
 import {
   contactPreferenceOptions,
@@ -14,10 +17,25 @@ import {
   type NewPatientInput,
 } from '../schemas/patient.schema'
 
+/** Falha devolvida pelo chamador. Mantem o modal aberto e o formulario preenchido. */
+export interface NewPatientSubmitFailure {
+  /** Mensagem em pt-BR, pronta para exibicao. */
+  message: string
+  /** Mensagem por campo, quando o servidor sabe qual campo recusou. */
+  fieldErrors?: Partial<Record<keyof NewPatientInput, string>>
+}
+
 export interface NewPatientModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (values: NewPatientInput) => void
+  /**
+   * Executa o cadastro. Devolve `null` no sucesso — o modal fecha e limpa — ou a
+   * falha, e ai ele continua aberto com o que o usuario digitou.
+   *
+   * O modal nao sabe (nem precisa saber) se por tras ha Server Action ou estado
+   * local: quem decide isso e a PatientsScreen.
+   */
+  onSubmit: (values: NewPatientInput) => Promise<NewPatientSubmitFailure | null>
 }
 
 /**
@@ -29,11 +47,14 @@ export function NewPatientModal({
   onOpenChange,
   onSubmit,
 }: NewPatientModalProps) {
+  const [formError, setFormError] = useState<string | null>(null)
+
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    setError,
+    formState: { errors, isSubmitting },
   } = useForm<NewPatientInput>({
     resolver: zodResolver(newPatientSchema),
     mode: 'onSubmit',
@@ -47,9 +68,36 @@ export function NewPatientModal({
     },
   })
 
-  function handleValidSubmit(values: NewPatientInput) {
-    onSubmit(values)
+  function clear() {
     reset()
+    setFormError(null)
+  }
+
+  /**
+   * `isSubmitting` do react-hook-form fica verdadeiro enquanto esta promessa nao
+   * resolve — por isso o `await` importa: sem ele o modal fecharia antes de saber
+   * se o cadastro deu certo, que e exatamente "simular sucesso".
+   */
+  async function handleValidSubmit(values: NewPatientInput) {
+    setFormError(null)
+
+    const failure = await onSubmit(values)
+
+    if (failure) {
+      setFormError(failure.message)
+
+      // Erro que so o servidor conhece precisa aparecer NO CAMPO: um aviso solto
+      // no topo nunca e associado ao input por leitor de tela.
+      for (const [field, message] of Object.entries(failure.fieldErrors ?? {})) {
+        if (message) {
+          setError(field as keyof NewPatientInput, { type: 'server', message })
+        }
+      }
+
+      return
+    }
+
+    clear()
     onOpenChange(false)
   }
 
@@ -57,18 +105,28 @@ export function NewPatientModal({
     <Modal
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset()
+        // Fechar no meio do envio deixaria a escrita acontecendo sem ninguem para
+        // mostrar o desfecho.
+        if (isSubmitting) return
+        if (!next) clear()
         onOpenChange(next)
       }}
       title="Novo paciente"
       description="Comece com o essencial. O restante pode ser completado depois."
       footer={
         <>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="secondary"
+            disabled={isSubmitting}
+            onClick={() => {
+              clear()
+              onOpenChange(false)
+            }}
+          >
             Cancelar
           </Button>
-          <Button type="submit" form="new-patient-form">
-            Cadastrar paciente
+          <Button type="submit" form="new-patient-form" isLoading={isSubmitting}>
+            {isSubmitting ? 'Cadastrando...' : 'Cadastrar paciente'}
           </Button>
         </>
       }
@@ -79,10 +137,26 @@ export function NewPatientModal({
         onSubmit={handleSubmit(handleValidSubmit)}
         className="flex flex-col gap-4"
       >
+        {formError ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-field border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
+          >
+            <AlertCircle aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span>{formError}</span>
+          </div>
+        ) : null}
+
+        {/* Progresso anunciado a leitor de tela; o botao ja mostra o spinner. */}
+        <p role="status" aria-live="polite" className="sr-only">
+          {isSubmitting ? 'Cadastrando paciente...' : ''}
+        </p>
+
         <TextField
           label="Nome completo"
           autoComplete="name"
           placeholder="Nome do paciente"
+          disabled={isSubmitting}
           error={errors.name?.message}
           {...register('name')}
         />
@@ -93,6 +167,7 @@ export function NewPatientModal({
             type="tel"
             autoComplete="tel"
             placeholder="(11) 90000-0000"
+            disabled={isSubmitting}
             error={errors.phone?.message}
             {...register('phone')}
           />
@@ -101,6 +176,7 @@ export function NewPatientModal({
             type="email"
             autoComplete="email"
             placeholder="paciente@email.com"
+            disabled={isSubmitting}
             error={errors.email?.message}
             {...register('email')}
           />
@@ -111,32 +187,28 @@ export function NewPatientModal({
             label="Data de nascimento"
             type="date"
             autoComplete="bday"
+            disabled={isSubmitting}
             error={errors.birthDate?.message}
             {...register('birthDate')}
           />
           <SelectField
             label="Preferência de contato"
             options={contactPreferenceOptions}
+            disabled={isSubmitting}
             error={errors.contactPreference?.message}
             {...register('contactPreference')}
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="patient-notes"
-            className="text-label font-semibold text-label"
-          >
-            Observação inicial (opcional)
-          </label>
-          <textarea
-            id="patient-notes"
-            rows={3}
-            placeholder="Algo relevante para o primeiro atendimento?"
-            className="w-full rounded-field border border-border-default bg-surface px-4 py-3 text-control text-foreground placeholder:text-muted transition-colors hover:border-border-hover focus:border-focus focus:shadow-[0_0_0_3px_rgba(60,140,112,0.24)] focus:outline-none"
-            {...register('notes')}
-          />
-        </div>
+        <TextareaField
+          label="Observação inicial (opcional)"
+          rows={3}
+          disabled={isSubmitting}
+          maxLength={2000}
+          placeholder="Algo relevante para o primeiro atendimento?"
+          error={errors.notes?.message}
+          {...register('notes')}
+        />
       </form>
     </Modal>
   )
