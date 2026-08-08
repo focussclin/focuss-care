@@ -232,7 +232,6 @@ const eslintConfig = defineConfig([
     files: [
       "src/modules/*/infrastructure/**",
       "src/lib/**",
-      "src/proxy.ts",
     ],
     rules: { "no-restricted-imports": "off" },
   },
@@ -321,6 +320,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".open-next/**",
+    ".wrangler/**",
+    "cloudflare-env.d.ts",
     "out/**",
     "build/**",
     "next-env.d.ts",

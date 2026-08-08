@@ -37,7 +37,7 @@ export async function createSupabaseServerClient() {
           }
         } catch {
           // Server Components nao podem escrever cookies. A renovacao da sessao
-          // acontece no src/proxy.ts, entao ignorar aqui e seguro.
+          // acontece no cliente Supabase do navegador, entao ignorar aqui e seguro.
         }
       },
     },

@@ -1,0 +1,5 @@
+# Copie para .dev.vars apenas para testar o Worker localmente.
+# Nunca preencha este arquivo versionado com valores reais.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=

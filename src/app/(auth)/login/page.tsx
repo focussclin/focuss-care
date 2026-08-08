@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 
+import { getSessionState } from '@/lib/auth/session'
 import { LoginFormContainer } from '@/modules/identity/ui/LoginForm.container'
 import { OauthErrorNotice } from '@/modules/identity/ui/OauthErrorNotice'
 
@@ -37,7 +39,17 @@ export const metadata: Metadata = {
  * maioria dos acessos a `/login` nao vem de erro de OAuth, e reservar espaco
  * para uma mensagem que quase nunca aparece deslocaria o formulario.
  */
-export default function LoginPage({ searchParams }: PageProps<'/login'>) {
+/** A validacao server-side substitui o proxy no runtime Cloudflare Workers. */
+export const instant = false
+
+export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
+  const session = await getSessionState()
+
+  if (session.status === 'active') redirect('/dashboard')
+  if (session.status === 'needs-onboarding' || session.status === 'claims-stale') {
+    redirect('/onboarding')
+  }
+
   return (
     <LoginFormContainer
       notice={

@@ -31,6 +31,10 @@ const APP_DIR = join(process.cwd(), 'src', 'app')
 const INSTANT_OPT_OUTS: Record<string, string> = {
   '(app)/layout.tsx':
     'Toda a área autenticada lê sessão antes de decidir o que renderizar; a casca é a leitura.',
+  '(auth)/login/page.tsx':
+    'A pagina valida a sessao no servidor para redirecionar contas autenticadas sem depender do proxy Node, incompativel com Cloudflare Workers.',
+  '(auth)/cadastro/page.tsx':
+    'A pagina valida a sessao no servidor para redirecionar contas autenticadas sem depender do proxy Node, incompativel com Cloudflare Workers.',
   '(auth)/onboarding/page.tsx':
     'A página inteira é uma decisão de sessão que termina em redirect — dentro de <Suspense> o desvio deixaria de ser 307 e passaria a depender de JavaScript.',
   '(auth)/convite/[token]/page.tsx':
@@ -76,7 +80,6 @@ describe('P-C2 — opt-outs de shell estático', () => {
   })
 
   it.each([
-    ['(auth)/login/page.tsx'],
     ['(auth)/recuperar-senha/page.tsx'],
     ['(auth)/redefinir-senha/page.tsx'],
   ])('%s já foi convertida e não pode voltar sem discussão', (route) => {
