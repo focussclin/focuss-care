@@ -14,13 +14,16 @@ import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
 import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
 import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
+import { toPatientContactDto } from '@/modules/patients/application/toPatientContactDto'
 import { toIsoDate } from '@/modules/patients/application/toPatientDto'
 import { getMockPatientNotes } from '@/modules/patients/infrastructure/MockPatientRepository'
 import {
   getPatientConsentSource,
+  getPatientContactSource,
   getPatientRepository,
 } from '@/modules/patients/infrastructure/repository'
 import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel'
+import { PatientContactsPanel } from '@/modules/patients/ui/PatientContactsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
@@ -96,14 +99,22 @@ export default async function PatientProfilePage({
    * desabilitados — o painel se anuncia como demonstracao em vez de simular
    * registro (R11 do roadmap).
    */
-  const [session, consentSource] = await Promise.all([
+  const [session, consentSource, contactSource] = await Promise.all([
     getSessionState(),
     getPatientConsentSource(),
+    getPatientContactSource(),
   ])
 
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
         consentSource.clinicId,
+        patient.id,
+      )
+    : []
+
+  const contacts = contactSource.isLive
+    ? await contactSource.repository.listByPatient(
+        contactSource.clinicId,
         patient.id,
       )
     : []
@@ -186,6 +197,13 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          <PatientContactsPanel
+            patientId={patient.id}
+            contacts={contacts.map(toPatientContactDto)}
+            isLive={contactSource.isLive}
+            canManage={canManageConsents}
+          />
 
           <PatientConsentsPanel
             patientId={patient.id}

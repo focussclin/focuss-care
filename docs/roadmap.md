@@ -422,7 +422,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 
 | ID | Feature | Dono | Status |
 |---|---|---|---|
-| **P-01** | **Pacientes — cadastro real persistindo** | Claude | **Review** |
+| **P-01** | **Pacientes — cadastro real persistindo + contatos vinculados** | Claude | **Review** |
 | **P-02a** | **Pacientes — busca server-side e paginação por cursor** | Claude | **Review** |
 | P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
 | **P-03** | **Pacientes — consentimento LGPD** | Claude | **Review** |

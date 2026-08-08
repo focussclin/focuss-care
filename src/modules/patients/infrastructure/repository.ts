@@ -8,9 +8,11 @@ import { resolveDataSource } from '@/lib/data-source'
 import type { Database } from '@/lib/supabase/database.types'
 
 import type { PatientConsentRepository } from '../domain/PatientConsentRepository'
+import type { PatientContactRepository } from '../domain/PatientContactRepository'
 import type { PatientRepository } from '../domain/PatientRepository'
 import { MockPatientRepository } from './MockPatientRepository'
 import { SupabasePatientConsentRepository } from './SupabasePatientConsentRepository'
+import { SupabasePatientContactRepository } from './SupabasePatientContactRepository'
 import { SupabasePatientRepository } from './SupabasePatientRepository'
 
 /**
@@ -112,4 +114,31 @@ export function patientConsentRepositoryFor(
   client: SupabaseClient<Database>,
 ): PatientConsentRepository {
   return new SupabasePatientConsentRepository(client)
+}
+
+/** Leitura de contatos: sem adapter demo para não apresentar dados pessoais falsos. */
+export async function getPatientContactSource(): Promise<
+  | { repository: PatientContactRepository; clinicId: string; isLive: true }
+  | { repository: null; clinicId: null; isLive: false }
+> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabasePatientContactRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return { repository: null, clinicId: null, isLive: false }
+}
+
+export function patientContactRepositoryFor(
+  client: SupabaseClient<Database>,
+): PatientContactRepository {
+  return new SupabasePatientContactRepository(client)
 }

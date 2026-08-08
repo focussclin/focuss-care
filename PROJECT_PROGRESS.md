@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 762 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 779 testes em 60 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -48,7 +48,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | Módulo | Status | O que faz hoje |
 |---|---|---|
 | `identity` | **COMPLETO** | Cadastro, login, **recuperação de senha por e-mail**, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação, perfil pessoal |
-| `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, consentimento LGPD |
+| `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, contatos vinculados com CRUD, consentimento LGPD |
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
@@ -76,7 +76,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
 | `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
-| `/pacientes` e subrotas | **COMPLETO** | Banco (patients) | `patient.read` |
+| `/pacientes` e subrotas | **COMPLETO** | Banco (patients + patient_contacts + consents) | `patient.read`; alterações exigem `patient.write` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
@@ -93,7 +93,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 ## 4.0 Auditoria final local — 08/08/2026
 
 Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
-**762 testes em 54 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
+**779 testes em 60 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
 das 22 rotas com o servidor de desenvolvimento ativo.
 
 | Verificação | Resultado |
@@ -131,7 +131,7 @@ achou:**
 
 | Frente | Resultado |
 |---|---|
-| Botão/formulário inerte | Nenhum. Os controles sem operação local restante (filtro de última visita e paginação no fim da lista) dizem na própria tela por que estão assim; o sino agora lê notificações reais quando há sessão |
+| Botão/formulário inerte | Nenhum. Os controles sem operação local restante (filtro de última visita e paginação no fim da lista) dizem na própria tela por que estão assim; o sino lê notificações reais e contatos do paciente possuem CRUD quando há sessão |
 | `TODO`/`FIXME` no código | Nenhum |
 | `href="#"`, `onClick` vazio, `<form>` sem envio | Nenhum |
 | `clinic_id` nos repositórios | Todos os `.from()` filtram por clínica, exceto `profiles` (chaveada por usuário) e `clinics` (chaveada pelo próprio id) — corretos |
