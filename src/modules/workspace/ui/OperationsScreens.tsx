@@ -14,7 +14,6 @@ import {
   Clock3,
   FileCheck2,
   FileText,
-  Filter,
   Info,
   LockKeyhole,
   Mail,
@@ -35,7 +34,7 @@ import {
   WalletCards,
   Workflow,
 } from 'lucide-react'
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { useState, type CSSProperties, type FormEvent } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
@@ -89,95 +88,6 @@ function Notice({ children, tone = 'info' }: { children: string; tone?: 'info' |
   )
 }
 
-type CareStatus = 'waiting' | 'in_progress' | 'completed' | 'no_show'
-
-const careStatusMeta: Record<CareStatus, { label: string; tone: StatusTone }> = {
-  waiting: { label: 'Aguardando', tone: 'pending' },
-  in_progress: { label: 'Em atendimento', tone: 'positive' },
-  completed: { label: 'Concluído', tone: 'neutral' },
-  no_show: { label: 'Não compareceu', tone: 'negative' },
-}
-
-const initialCareRows = [
-  { id: 'care-1', time: '09:00', patient: 'Marina Costa', professional: 'Dra. Ana Ribeiro', type: 'Consulta de rotina', wait: 'Concluído', status: 'completed' as CareStatus, patientId: 'pat-1' },
-  { id: 'care-2', time: '11:00', patient: 'Luiza Prado', professional: 'Dra. Helena Souza', type: 'Avaliação nutricional', wait: 'há 8 min', status: 'waiting' as CareStatus, patientId: 'pat-7' },
-  { id: 'care-3', time: '15:30', patient: 'João Almeida', professional: 'Dr. Paulo Freitas', type: 'Retorno', wait: 'Confirmado', status: 'waiting' as CareStatus, patientId: 'pat-2' },
-  { id: 'care-4', time: '17:00', patient: 'Gustavo Peixoto', professional: 'Dra. Ana Ribeiro', type: 'Primeira consulta', wait: 'Confirmado', status: 'waiting' as CareStatus, patientId: 'pat-12' },
-]
-
-export function AtendimentosScreen() {
-  const [tab, setTab] = useState('today')
-  const [query, setQuery] = useState('')
-  const [rows, setRows] = useState(initialCareRows)
-  const [notice, setNotice] = useState('')
-
-  const visibleRows = useMemo(() => {
-    const term = query.trim().toLowerCase()
-    return rows.filter((row) => {
-      const matchesQuery = !term || `${row.patient} ${row.professional} ${row.type}`.toLowerCase().includes(term)
-      if (tab === 'waiting') return matchesQuery && row.status === 'waiting'
-      if (tab === 'history') return matchesQuery && (row.status === 'completed' || row.status === 'no_show')
-      return matchesQuery
-    })
-  }, [query, rows, tab])
-
-  function updateStatus(id: string, status: CareStatus, message: string) {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, status, wait: status === 'in_progress' ? 'Iniciado agora' : row.wait } : row)))
-    setNotice(message)
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Operação da clínica"
-        title="Atendimentos"
-        description="Acompanhe o que está acontecendo agora e mantenha a fila organizada."
-        actions={<Button disabled title="A criação de atendimento acontece pela Agenda."><Plus aria-hidden className="size-4" /> Novo atendimento</Button>}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Na fila hoje" value="03" icon={Clock3} tone="attention" />
-        <StatCard label="Em atendimento" value="01" icon={Stethoscope} />
-        <StatCard label="Concluídos" value="18" icon={CheckCircle2} trend="+8%" />
-      </div>
-
-      {notice ? <Notice tone="success">{notice}</Notice> : null}
-
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-border-card px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <Tabs tabs={[{ id: 'today', label: 'Hoje' }, { id: 'waiting', label: 'Fila de espera' }, { id: 'history', label: 'Histórico' }]} active={tab} onChange={setTab} />
-          <div className="flex w-full gap-2 lg:w-auto">
-            <SearchField label="Buscar atendimento" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Paciente ou profissional" className="lg:w-64" />
-            <Button variant="secondary" className="mt-auto shrink-0" title="Filtros avançados serão habilitados com os dados reais"><Filter aria-hidden className="size-4" /><span className="hidden sm:inline">Filtros</span></Button>
-          </div>
-        </div>
-
-        {visibleRows.length === 0 ? (
-          <EmptyState icon={Search} title="Nenhum atendimento encontrado" description="Ajuste a busca ou selecione outra aba para continuar." />
-        ) : (
-          <>
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[760px] text-left">
-                <thead className="border-b border-border-card bg-background text-label font-semibold text-muted">
-                  <tr><th className="px-5 py-3">Horário</th><th className="px-5 py-3">Paciente</th><th className="px-5 py-3">Profissional</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Ações</th></tr>
-                </thead>
-                <tbody className="divide-y divide-border-card">
-                  {visibleRows.map((row) => {
-                    const meta = careStatusMeta[row.status]
-                    return <tr key={row.id} className="text-aux transition-colors hover:bg-row-hover"><td className="px-5 py-4 font-semibold text-foreground">{row.time}<span className="mt-0.5 block text-label font-normal text-muted">{row.wait}</span></td><td className="px-5 py-4"><Link href={`/pacientes/${row.patientId}`} className="font-semibold text-foreground hover:text-link">{row.patient}</Link></td><td className="px-5 py-4 text-muted">{row.professional}</td><td className="px-5 py-4 text-muted">{row.type}</td><td className="px-5 py-4"><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></td><td className="px-5 py-4"><div className="flex justify-end gap-2">{row.status === 'waiting' ? <Button size="md" variant="secondary" onClick={() => updateStatus(row.id, 'in_progress', `${row.patient} foi chamado para atendimento.`)}>Iniciar</Button> : null}<Button size="md" variant="ghost" asChild><Link href={`/pacientes/${row.patientId}`}>Ver paciente</Link></Button><button type="button" title="Mais ações em breve" disabled className="inline-flex size-11 items-center justify-center rounded-field text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></td></tr>
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="grid gap-3 p-4 md:hidden">
-              {visibleRows.map((row) => { const meta = careStatusMeta[row.status]; return <article key={row.id} className="rounded-xl border border-border-card p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-label font-semibold text-muted">{row.time} · {row.wait}</p><Link href={`/pacientes/${row.patientId}`} className="mt-1 block text-control font-semibold text-foreground">{row.patient}</Link><p className="mt-1 text-label text-muted">{row.type} · {row.professional}</p></div><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></div><div className="mt-4 flex gap-2">{row.status === 'waiting' ? <Button size="md" fullWidth onClick={() => updateStatus(row.id, 'in_progress', `${row.patient} foi chamado para atendimento.`)}>Iniciar</Button> : null}<Button size="md" variant="secondary" fullWidth asChild><Link href={`/pacientes/${row.patientId}`}>Ver paciente</Link></Button></div></article> })}
-            </div>
-          </>
-        )}
-      </Card>
-    </div>
-  )
-}
 
 const recordItems = [
   { id: 'record-1', patientId: 'pat-1', patient: 'Marina Costa', type: 'Evolução clínica', professional: 'Dra. Ana Ribeiro', date: 'Hoje, 09:32', summary: 'Paciente relatou melhora após ajuste da medicação. Manter acompanhamento mensal.' },
