@@ -79,7 +79,7 @@ export function SidebarNav({
         <span
           key={item.href}
           aria-disabled="true"
-          title={`${item.label} — em breve`}
+          title={`${item.label} — não faz parte desta versão`}
           className={className}
         >
           {content}
@@ -167,7 +167,9 @@ export function SidebarNav({
                               sideOffset={10}
                               className="z-50 rounded-lg bg-foreground px-2.5 py-1.5 text-label font-medium text-white shadow-raised"
                             >
-                              {item.disabled ? `${item.label} — em breve` : item.label}
+                              {item.disabled
+                                ? `${item.label} — não faz parte desta versão`
+                                : item.label}
                             </TooltipPrimitive.Content>
                           </TooltipPrimitive.Portal>
                         </TooltipPrimitive.Root>

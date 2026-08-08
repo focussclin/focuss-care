@@ -53,7 +53,15 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   section: NavSection
-  /** Rotas ainda não liberadas ficam visíveis, mas nunca parecem clicáveis. */
+  /**
+   * Rotas que não existem ficam visíveis, mas nunca parecem clicáveis.
+   *
+   * O texto delas diz "não faz parte desta versão", e não "em breve". Nenhum
+   * destes itens — `/teleatendimento`, `/crm`, `/estoque` e os outros — aparece
+   * em fatia nenhuma do roadmap: "em breve" afirmava um cronograma que não
+   * existe, e é o mesmo defeito que fez `/pagamentos` e `/caixa` prometerem
+   * recursos que já estavam entregues.
+   */
   disabled?: boolean
   /**
    * Permissão exigida pela ROTA para renderizar.

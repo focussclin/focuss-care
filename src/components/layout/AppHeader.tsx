@@ -93,15 +93,22 @@ export function AppHeader({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/*
+            O marcador de "há aviso não lido" saiu daqui.
+
+            Ele era uma bolinha fixa no CSS — aparecia sempre, em toda tela, sem
+            nenhum aviso por trás. Um indicador de alerta que nunca desliga
+            ensina a pessoa a ignorá-lo, e é o primeiro que ela vai ignorar
+            quando houver um de verdade.
+          */}
           <button
             type="button"
-            aria-label="Notificações — em breve"
-            title="Notificações — em breve"
+            aria-label="Notificações: o sistema ainda não envia avisos automáticos"
+            title="O sistema ainda não envia avisos automáticos"
             disabled
             className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
           >
             <Bell aria-hidden className="size-[18px]" />
-            <span aria-hidden className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-attention" />
           </button>
 
           <DropdownMenu.Root>

@@ -93,7 +93,7 @@ export default async function DashboardPage() {
         description="Aqui está o resumo da sua clínica hoje."
         actions={
           <>
-            <NotificationBell count={snapshot.waitingNow} />
+            <NotificationBell />
 
             <span className="inline-flex size-11 items-center justify-center">
               <Avatar name={displayName} size="md" />
