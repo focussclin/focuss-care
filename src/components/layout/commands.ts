@@ -1,4 +1,5 @@
 import { can, type Permission } from '@/lib/auth/permissions'
+import { patientSearchHref } from '@/lib/routes/patientRoutes'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 
 import { navItems } from './navigation'
@@ -8,18 +9,19 @@ import { navItems } from './navigation'
  *
  * # O que entra aqui, e o que não entra
  *
- * Só **navegação para rota que existe** e **criação que abre um formulário de
- * verdade**. Nada mais.
+ * Três coisas, e nada além delas: **navegação para rota que existe**, **criação
+ * que abre um formulário de verdade** e **a busca de pacientes**, que é a única
+ * listagem do produto com busca por parâmetro de URL.
  *
- * O campo de busca do cabeçalho prometia "Buscar pacientes, agenda…" e não fazia
- * nada — um input inerte é pior que um botão desabilitado, porque a pessoa
- * digita, espera e conclui que a busca não achou nada. A paleta resolve o
- * inerte; ela **não** resolve a busca. Procurar um paciente pelo nome exige
- * consulta ao banco com recorte por clínica, e isso é outra fatia.
+ * A busca não consulta nada no navegador — ver `patientSearchCommand`. Ela leva
+ * a uma tela que consulta no servidor, com o termo no endereço.
  *
- * Por isso o estado vazio da paleta diz, em texto, que ela navega entre telas e
- * não procura registros. Sem isso, trocaríamos um campo que não faz nada por um
- * que parece fazer e devolve "nenhum resultado" para um paciente que existe.
+ * O campo do cabeçalho prometia "Buscar pacientes, agenda…" e não fazia nada.
+ * Hoje a metade da frase que era falsa continua fora: agenda, prontuário,
+ * financeiro e convênios **não** têm busca por termo, e o estado vazio da
+ * paleta diz isso. Trocar um campo inerte por um que responde "nenhum
+ * resultado" sobre uma tela que nunca foi pesquisada seria o mesmo engano com
+ * outra roupa.
  */
 export interface Command {
   id: string
@@ -30,7 +32,7 @@ export interface Command {
   keywords?: readonly string[]
   /** Mesma matriz de I-05 do menu: não oferecer o que o papel não alcança. */
   permission?: Permission
-  group: 'Ir para' | 'Criar'
+  group: 'Buscar' | 'Ir para' | 'Criar'
 }
 
 /**
@@ -120,6 +122,65 @@ export function visibleCommands(
   return ALL_COMMANDS.filter(
     (command) => !command.permission || can(role, command.permission),
   )
+}
+
+/**
+ * A partir de quantos caracteres a busca de pacientes é oferecida.
+ *
+ * Uma letra casaria com quase toda a base, e o resultado seria a lista inteira
+ * com um filtro no meio — pior que não filtrar, porque parece filtrado.
+ */
+export const MIN_SEARCH_LENGTH = 2
+
+/**
+ * O comando de buscar paciente — **a única busca real da paleta**.
+ *
+ * # Por que ele existe, e por que só ele
+ *
+ * `/pacientes` já faz busca no SERVIDOR, por parâmetro de URL (P-02a). Então
+ * este comando não consulta nada: ele leva a pessoa para uma tela que consulta,
+ * com o termo já no endereço. Nenhuma linha é lida no navegador, nenhum
+ * resultado é inventado, e o que aparece é o que a RLS deixou passar.
+ *
+ * Agenda, prontuário, financeiro e convênios **não têm** busca equivalente por
+ * URL — a listagem deles não aceita termo. Um comando "Buscar atendimentos"
+ * levaria a `/agenda` sem filtro nenhum, e a pessoa concluiria que não há
+ * atendimento com aquele nome. Por isso a paleta oferece um, não cinco, e o
+ * estado vazio diz quais ainda não são pesquisáveis.
+ */
+export function patientSearchCommand(
+  role: MembershipRole | null | undefined,
+  query: string,
+): Command | null {
+  const term = query.trim()
+  if (term.length < MIN_SEARCH_LENGTH) return null
+
+  // Mesma matriz do resto: quem não lê paciente não recebe o caminho.
+  if (role !== undefined && !can(role, 'patient.read')) return null
+
+  return {
+    id: 'buscar-pacientes',
+    label: `Buscar pacientes por "${term}"`,
+    href: patientSearchHref(term),
+    permission: 'patient.read',
+    group: 'Buscar',
+  }
+}
+
+/**
+ * O que a paleta mostra para este papel e esta consulta.
+ *
+ * A busca vem PRIMEIRO: quem digitou um nome quer o nome, não a tela cujo
+ * rótulo por acaso contém as mesmas letras.
+ */
+export function commandsFor(
+  role: MembershipRole | null | undefined,
+  query: string,
+): readonly Command[] {
+  const matches = filterCommands(visibleCommands(role), query)
+  const search = patientSearchCommand(role, query)
+
+  return search ? [search, ...matches] : matches
 }
 
 /** Sem acento e sem caixa — 'Prontuários' é encontrado por 'prontuarios'. */

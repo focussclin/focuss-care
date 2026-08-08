@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils/cn'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 
 import {
-  filterCommands,
+  commandsFor,
+  MIN_SEARCH_LENGTH,
   moveHighlight,
-  visibleCommands,
   type Command,
 } from './commands'
 
@@ -27,11 +27,17 @@ export interface CommandPaletteProps {
  *
  * # O que ela faz, e o que ela declara não fazer
  *
- * Navega entre telas e abre os dois formulários que abrem por URL. **Não
- * procura pacientes, atendimentos nem cobranças** — isso exige consulta ao
- * banco com recorte por clínica, e é outra fatia. O estado vazio diz isso em
- * texto, porque a alternativa seria trocar um campo que não faz nada por um que
- * responde "nenhum resultado" para um paciente que existe.
+ * Navega entre telas, abre os dois formulários que abrem por URL e **busca
+ * paciente pelo nome** a partir de dois caracteres.
+ *
+ * A busca não consulta nada aqui: ela leva a `/pacientes?q=…`, e é o servidor
+ * que consulta, com a RLS no caminho. Nenhuma linha atravessa o navegador antes
+ * de a pessoa escolher.
+ *
+ * **Atendimento, prontuário, cobrança e guia não são pesquisados** — a listagem
+ * deles não aceita termo por URL, e um comando que fingisse buscar levaria a uma
+ * tela sem filtro. O estado vazio diz qual é qual, porque silêncio ali faria
+ * alguém concluir que o registro não existe quando ninguém chegou a procurar.
  *
  * # Acessibilidade
  *
@@ -54,11 +60,12 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
 
-  const commands = useMemo(() => visibleCommands(role), [role])
-  const results = useMemo(
-    () => filterCommands(commands, query),
-    [commands, query],
-  )
+  /*
+   * A lista inteira depende de papel E consulta: o comando de buscar paciente
+   * so existe a partir de dois caracteres, e some quando o campo esvazia — o
+   * que tambem cuida do reset ao fechar, ja que fechar limpa a consulta.
+   */
+  const results = useMemo(() => commandsFor(role, query), [role, query])
 
   /*
    * O cabeçalho de grupo é decidido ANTES do render, e não com uma variável
@@ -144,7 +151,7 @@ export function CommandPalette({
                 setHighlighted(0)
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Ir para uma tela ou criar…"
+              placeholder="Buscar paciente, ir para uma tela ou criar…"
               aria-label="Buscar telas e ações"
               role="combobox"
               aria-expanded
@@ -160,12 +167,18 @@ export function CommandPalette({
                 Nenhuma tela ou ação com esse nome.
               </p>
               {/*
-                A ressalva importa: sem ela, quem digitasse o nome de um paciente
-                leria "nenhum resultado" e concluiria que o paciente não existe.
+                O estado vazio precisa dizer o que É pesquisável e o que não é.
+
+                Paciente já se procura por aqui — a partir de dois caracteres, o
+                comando de busca aparece acima desta mensagem. Agenda,
+                prontuário, financeiro e convênios não têm busca por termo, e
+                omitir isso faria alguém concluir que não existe atendimento com
+                aquele nome quando ninguém chegou a procurar.
               */}
               <p className="mt-1 text-label text-muted">
-                Esta busca encontra telas e ações do sistema. Ela ainda não
-                procura pacientes, atendimentos ou cobranças pelo nome.
+                {query.trim().length < MIN_SEARCH_LENGTH
+                  ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome.'
+                  : 'Pacientes você busca por aqui. Atendimentos, prontuários, cobranças e guias ainda não são pesquisados pelo nome — abra a tela correspondente.'}
               </p>
             </div>
           ) : (

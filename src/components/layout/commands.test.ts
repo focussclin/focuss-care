@@ -3,12 +3,14 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { MEMBERSHIP_ROLES } from '@/lib/auth/permissions'
+import { can, MEMBERSHIP_ROLES } from '@/lib/auth/permissions'
 
 import {
   ALL_COMMANDS,
+  commandsFor,
   filterCommands,
   moveHighlight,
+  patientSearchCommand,
   visibleCommands,
 } from './commands'
 import { visibleNavItems } from './navigation'
@@ -251,6 +253,121 @@ describe('filterCommands', () => {
   it('devolve vazio quando nada casa', () => {
     // O componente troca isso pelo aviso de que a busca nao procura registros.
     expect(filterCommands(commands, 'zzzzzzzz')).toEqual([])
+  })
+})
+
+describe('busca de pacientes', () => {
+  it('só aparece a partir de dois caracteres', () => {
+    /*
+     * Uma letra casaria com quase toda a base: o resultado seria a lista
+     * inteira com um filtro no meio, que e pior que nao filtrar porque parece
+     * filtrado.
+     */
+    expect(patientSearchCommand('owner', '')).toBeNull()
+    expect(patientSearchCommand('owner', 'm')).toBeNull()
+    expect(patientSearchCommand('owner', ' m ')).toBeNull()
+
+    expect(patientSearchCommand('owner', 'ma')).not.toBeNull()
+  })
+
+  it('monta a URL que a rota realmente lê', () => {
+    const command = patientSearchCommand('owner', 'Maria')
+
+    // `?q=`, nao `?search=`: a rota ignora o segundo em silencio.
+    expect(command?.href).toBe('/pacientes?q=Maria')
+  })
+
+  it('codifica o termo', () => {
+    expect(patientSearchCommand('owner', 'maria & joão')?.href).toBe(
+      '/pacientes?q=maria+%26+jo%C3%A3o',
+    )
+  })
+
+  it('mostra no rótulo o termo digitado, sem acento removido', () => {
+    // O rotulo e o contrato visivel: se dissesse 'Jose' e buscasse 'José', a
+    // pessoa duvidaria do resultado.
+    expect(patientSearchCommand('owner', 'José')?.label).toBe(
+      'Buscar pacientes por "José"',
+    )
+  })
+
+  it('usa o termo aparado, não o que tem espaço nas pontas', () => {
+    const command = patientSearchCommand('owner', '  Maria  ')
+
+    expect(command?.href).toBe('/pacientes?q=Maria')
+    expect(command?.label).toBe('Buscar pacientes por "Maria"')
+  })
+
+  it('exige `patient.read`', () => {
+    const command = patientSearchCommand('owner', 'maria')
+
+    expect(command?.permission).toBe('patient.read')
+  })
+
+  it('não aparece para sessão sem papel na clínica', () => {
+    // `null` e diferente de `undefined`: ha sessao, e ela nao tem papel aqui.
+    expect(patientSearchCommand(null, 'maria')).toBeNull()
+  })
+
+  it('aparece na demonstração, onde não há papel a consultar', () => {
+    expect(patientSearchCommand(undefined, 'maria')).not.toBeNull()
+  })
+
+  it('todo papel com `patient.read` recebe a busca', () => {
+    for (const role of MEMBERSHIP_ROLES) {
+      const expected = can(role, 'patient.read')
+      const command = patientSearchCommand(role, 'maria')
+
+      expect({ role, has: command !== null }).toEqual({ role, has: expected })
+    }
+  })
+})
+
+describe('commandsFor', () => {
+  it('põe a busca em PRIMEIRO lugar', () => {
+    // Quem digitou um nome quer o nome, nao a tela cujo rotulo por acaso tem as
+    // mesmas letras.
+    const results = commandsFor('owner', 'pa')
+
+    expect(results[0]?.id).toBe('buscar-pacientes')
+  })
+
+  it('sem busca, devolve só os comandos filtrados', () => {
+    const results = commandsFor('owner', 'p')
+
+    expect(results.some((command) => command.id === 'buscar-pacientes')).toBe(
+      false,
+    )
+  })
+
+  it('consulta vazia não traz busca — é o estado ao abrir e ao fechar', () => {
+    /*
+     * A paleta limpa a consulta ao fechar, entao este caso tambem cobre o
+     * reset: reabrir nao pode mostrar a busca do termo anterior.
+     */
+    const results = commandsFor('owner', '')
+
+    expect(results.some((command) => command.id === 'buscar-pacientes')).toBe(
+      false,
+    )
+    expect(results).toEqual(visibleCommands('owner'))
+  })
+
+  it('a busca respeita o papel junto com o resto', () => {
+    const results = commandsFor(null, 'maria')
+
+    expect(results.some((command) => command.id === 'buscar-pacientes')).toBe(
+      false,
+    )
+  })
+
+  it('termo sem correspondência devolve só a busca', () => {
+    // O caso real: digitar o nome de um paciente. Nenhuma TELA casa, e a unica
+    // acao util e procurar por ele.
+    const results = commandsFor('owner', 'zzzzzzzz')
+
+    expect(results).toHaveLength(1)
+    expect(results[0].id).toBe('buscar-pacientes')
   })
 })
 

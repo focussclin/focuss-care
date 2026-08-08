@@ -34,6 +34,44 @@
  * chamadores passam o id que **saiu do repositório**, depois da RLS: a linha que
  * o banco confirmou, não a que o cliente pediu.
  */
+/**
+ * A listagem de pacientes já filtrada por um termo.
+ *
+ * # O nome do parâmetro é `q`, e isso não é detalhe
+ *
+ * `/pacientes` lê `q` — está em `patientListQuerySchema` e em
+ * `patientListHref`. Montar `?search=…` produziria uma URL que a rota **ignora
+ * em silêncio**: a pessoa pediria "Maria" e receberia a base inteira, sem erro
+ * nenhum na tela. É o mesmo formato que a listagem já usa nos próprios links de
+ * filtro e paginação, e mantê-los iguais é o que garante que o botão "próxima
+ * página" continue funcionando depois de uma busca vinda daqui.
+ *
+ * # O termo NÃO é higienizado aqui
+ *
+ * Quem limpa é a rota, com `sanitizePatientSearch` — ela tira curinga de LIKE,
+ * gramática do PostgREST e caractere invisível antes de a consulta existir.
+ * Repetir a limpeza aqui criaria duas regras para a mesma coisa, e a que
+ * envelhecesse primeiro passaria a discordar em silêncio. Este helper só
+ * codifica para caber numa URL.
+ *
+ * # `URLSearchParams`, e não `encodeURIComponent`
+ *
+ * As duas codificações funcionam, e produzem strings DIFERENTES: espaço vira
+ * `+` na primeira e `%20` na segunda. A listagem monta os próprios links de
+ * filtro e paginação com `URLSearchParams` (`patientListHref`), então usar a
+ * outra aqui faria a mesma busca ter dois endereços. Um teste compara os dois
+ * construtores justamente para que continuem idênticos.
+ */
+export function patientSearchHref(term: string): string {
+  const trimmed = term.trim()
+  if (trimmed === '') return '/pacientes'
+
+  const params = new URLSearchParams()
+  params.set('q', trimmed)
+
+  return `/pacientes?${params.toString()}`
+}
+
 export function patientPaths(patientId: string): readonly string[] {
   /*
    * Guarda de sanidade, não validação de entrada.
