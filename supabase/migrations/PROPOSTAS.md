@@ -1,10 +1,8 @@
-# Migrations propostas — aguardando aprovação e acesso ao banco
+# Migrations aplicadas — histórico e justificativas
 
-> **Nenhuma destas foi aplicada.** Não há `DATABASE_URL`, senha do banco nem
-> `SUPABASE_ACCESS_TOKEN` neste ambiente (bloqueio **B1** do roadmap), e mudança
-> de schema exige aprovação do Codex e PR isolado (§7.4). Os arquivos existem
-> para serem revisados e aplicados por quem tem acesso — não para dar a impressão
-> de que o banco já mudou.
+> As quatro migrations abaixo foram aplicadas no projeto Supabase em 08/08/2026
+> e verificadas estruturalmente. Os arquivos continuam versionados para
+> reproduzir o schema e preservar a justificativa técnica de cada mudança.
 
 Cada arquivo é idempotente e reversível. Depois de aplicar, rodar
 `npm run db:types` e repetir a verificação indicada.

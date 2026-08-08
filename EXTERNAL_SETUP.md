@@ -50,9 +50,9 @@ Toda escrita é recusada nesse modo, com mensagem explícita. Nada finge salvar.
 
 | Item | Estado verificado | Observação |
 |---|---|---|
-| Schema (55 tabelas, 1 view, 31 enums, 19 RPCs) | **Aplicado** | Tipos gerados por `npm run db:types` |
+| Schema (56 tabelas, 1 view, 32 enums, 19 RPCs) | **Aplicado** | Tipos gerados por `npm run db:types` |
 | RLS ativa em 56/56 objetos | **Verificado** | Levantamento em `docs/03-banco-de-dados.md` |
-| Policy de `INSERT` em `audit_log` | **Recusa o membro autenticado** | Ver §3 |
+| Policy de `INSERT` em `audit_log` | **Aplicada e verificada** | Eventos de mutação podem ser auditados |
 | `custom_access_token_hook` | Necessário para as claims de clínica no JWT | Painel → Authentication → Hooks |
 | Provedor de e-mail/senha | Necessário para login e cadastro | Painel → Authentication → Providers |
 | URL de redirecionamento do callback | `<origem>/auth/callback` | Painel → Authentication → URL Configuration |
@@ -92,25 +92,24 @@ transformaria o formulário num verificador de quem tem conta na clínica.
 
 ---
 
-## 2. Acesso administrativo ao banco — **ausente neste ambiente**
+## 2. Banco — migrations críticas aplicadas; validações funcionais restantes
 
-Cinco itens do produto dependem de rodar SQL no projeto, e **nenhum caminho para
-isso existe aqui**: não há `DATABASE_URL`, senha do banco nem
-`SUPABASE_ACCESS_TOKEN`. É o bloqueio **B1**.
+As quatro migrations críticas foram aplicadas no Supabase e a consulta de
+verificação retornou `true` para cada item: policy de auditoria, tabela/RLS de
+glosas, proteção contra sobreposição e RPC de emissão de convite. Este ambiente
+local não possui credencial administrativa para ler corpos de RPC ou executar
+pgTAP; a aceitação funcional de um convite emitido pela aplicação ainda deve ser
+validada com duas contas reais no painel.
 
 **O roteiro executável está em
 [`docs/supabase-migrations-runbook.md`](./docs/supabase-migrations-runbook.md)**:
 pré-requisitos, backup, dry-run, ordem segura, as consultas de revisão que
 bloqueiam cada arquivo, e os testes de tenancy, papel e auditoria depois.
 
-Resumo do que há para aplicar, em ordem de impacto:
+As consultas que ainda destravam módulos futuros são:
 
 | Arquivo em `supabase/migrations/` | Destrava |
 |---|---|
-| `20260807_audit_log_insert_policy.sql` | **Toda a trilha de auditoria.** Hoje nenhum evento é gravado |
-| `20260808_appointments_no_overlap.sql` | Atomicidade da recusa de horário sobreposto |
-| `20260807_create_invitation_rpc.sql` | Emissão de convite pela aplicação (revisar o algoritmo de hash antes) |
-| `20260808_insurance_claim_denials.sql` | Controle de glosas |
 
 E responder a três consultas de diagnóstico, todas em `docs/roadmap.md`:
 
@@ -127,14 +126,10 @@ select conname, pg_get_constraintdef(oid) from pg_constraint
 select distinct kind from public.document_sequences;
 ```
 
-**Nenhuma migration foi aplicada.** Elas existem para serem revisadas por quem
-tem acesso — não para dar a impressão de que o banco já mudou.
-
-Duas das quatro têm **gate de revisão**, e o runbook os detalha: a de glosas
-depende de `can_access_financial()` cobrir o papel `finance`, e a de convite
-depende de o algoritmo de hash bater com `accept_invitation` — se não bater,
-todo convite emitido é recusado no aceite, e o defeito só aparece quando uma
-pessoa real tenta entrar.
+As migrations continuam versionadas como histórico reproduzível. A emissão usa
+`create_invitation` e a aceitação usa `accept_invitation`; o teste funcional com
+duas contas é necessário para confirmar no ambiente remoto que os algoritmos de
+hash estão alinhados.
 
 ---
 

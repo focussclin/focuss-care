@@ -24,14 +24,9 @@ export const teamMessages = {
   notFound: 'Este vínculo não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a ação agora. Tente novamente.',
-  /**
-   * Emissão de convite indisponível.
-   *
-   * Texto exibido no lugar do botão. Diz o que está faltando e que não é falha
-   * de quem está usando — um "em breve" genérico faria a pessoa tentar de novo.
-   */
+  /** Falha de configuração do endereço público usado no link do convite. */
   inviteUnavailable:
-    'A emissão de convites ainda não está disponível: depende de uma alteração no banco de dados que precisa ser aplicada pela equipe técnica. Convites já existentes continuam funcionando normalmente.',
+    'Não foi possível montar o link público do convite. Configure APP_URL no ambiente do servidor e tente novamente.',
 } as const
 
 /** Papéis que a tela oferece, com o que cada um significa na prática. */
@@ -87,6 +82,24 @@ export const revokeMembershipSchema = z.object({
 })
 
 export type RevokeMembershipInput = z.infer<typeof revokeMembershipSchema>
+
+export const createInvitationSchema = z.object({
+  email: z
+    .email(teamMessages.invalidFields)
+    .trim()
+    .toLowerCase()
+    .max(254, teamMessages.invalidFields),
+  role: z.enum(roleValues),
+})
+
+export type CreateInvitationInput = z.infer<typeof createInvitationSchema>
+
+export interface CreatedInvitationDto {
+  email: string
+  role: string
+  expiresAt: string
+  inviteUrl: string
+}
 
 /**
  * O que as Server Actions devolvem ao cliente.

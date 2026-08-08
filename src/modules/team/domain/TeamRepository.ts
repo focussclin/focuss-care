@@ -6,18 +6,20 @@ import type {
   NewTimeOffData,
   TimeOff,
 } from './Employee'
-import type { PendingInvitation, TeamMember } from './TeamMember'
+import type {
+  CreatedInvitation,
+  PendingInvitation,
+  TeamMember,
+} from './TeamMember'
 
 /**
  * PORTA da equipe.
  *
- * # O que NÃO está aqui
+ * # Decisões de segurança
  *
- * **Não há `invite`.** `invitations` guarda `token_hash` e o schema remoto não
- * expõe RPC de criação; emitir exigiria a aplicação conhecer o algoritmo de
- * comparação, e quem sabe gerar hash válido sabe forjar convite. Um método aqui
- * seria uma promessa que o adapter não pode cumprir — a ausência é deliberada,
- * e a tela diz por quê em vez de mostrar um botão quebrado.
+ * Convites são emitidos por uma RPC `SECURITY DEFINER` no banco. A aplicação
+ * nunca calcula `token_hash` e nunca lê esse hash; recebe o token cru somente no
+ * momento da emissão, para montar o link que será entregue ao administrador.
  *
  * **Não há `remove`.** Tirar alguém da equipe é `revoke`: o vínculo continua na
  * base com `status = 'revoked'` e a data. Quem teve acesso a dado de saúde e
@@ -29,6 +31,13 @@ export interface TeamRepository {
 
   /** Convites emitidos e ainda pendentes. Somente leitura — ver o JSDoc acima. */
   listPendingInvitations(clinicId: string): Promise<PendingInvitation[]>
+
+  /** Emite um convite e devolve o token cru uma única vez. */
+  createInvitation(
+    clinicId: string,
+    email: string,
+    role: MembershipRole,
+  ): Promise<CreatedInvitation>
 
   /**
    * Troca o papel de um membro.

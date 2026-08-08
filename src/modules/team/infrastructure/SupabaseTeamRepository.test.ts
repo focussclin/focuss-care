@@ -347,3 +347,37 @@ describe('convites pendentes', () => {
     )
   })
 })
+
+describe('emissão de convites', () => {
+  it('usa a RPC do banco e recebe o token cru uma única vez', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: 'a'.repeat(64),
+      error: null,
+    })
+
+    const invitation = await new SupabaseTeamRepository({ rpc } as never).createInvitation(
+      CLINIC,
+      ' Pessoa@Clinica.com ',
+      'professional',
+    )
+
+    expect(rpc).toHaveBeenCalledWith('create_invitation', {
+      p_email: ' Pessoa@Clinica.com ',
+      p_role: 'professional',
+    })
+    expect(invitation.token).toBe('a'.repeat(64))
+    expect(invitation.expiresAt.getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('não aceita retorno vazio da RPC como convite válido', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
+
+    await expect(
+      new SupabaseTeamRepository({ rpc } as never).createInvitation(
+        CLINIC,
+        'pessoa@clinica.com',
+        'professional',
+      ),
+    ).rejects.toMatchObject({ reason: 'unexpected' })
+  })
+})

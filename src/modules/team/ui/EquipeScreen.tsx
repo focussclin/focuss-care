@@ -1,6 +1,6 @@
 'use client'
 
-import { MailPlus, ShieldOff, Users } from 'lucide-react'
+import { ShieldOff, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 
@@ -23,6 +23,7 @@ import {
   type TimeOffDto,
 } from '../schemas/team.schema'
 import { RevokeAccessDialog } from './RevokeAccessDialog'
+import { InviteMemberPanel } from './InviteMemberPanel'
 import { StaffPanel } from './StaffPanel'
 
 export interface EquipeScreenProps {
@@ -53,16 +54,8 @@ const roleLabels = new Map<string, string>(
  *
  * Substitui a tela de vitrine que vivia em `OperationsScreens.tsx`.
  *
- * # Por que o botão de convidar não existe
- *
- * Não é "em breve". `invitations` guarda `token_hash` e o schema remoto não
- * expõe RPC de criação — emitir exigiria a aplicação conhecer o algoritmo de
- * hash, e quem sabe gerar hash válido sabe forjar convite. Um botão aqui
- * produziria links que nunca seriam aceitos, e o defeito só apareceria quando
- * uma pessoa real tentasse entrar.
- *
- * A tela diz isso, em texto, no lugar onde o botão estaria. Convites que já
- * existam no banco continuam listados e continuam funcionando.
+ * A emissão usa a RPC do banco para que o hash nunca passe pela aplicação. O
+ * link cru aparece só uma vez, na sessão de quem o emitiu.
  */
 export function EquipeScreen({
   members,
@@ -131,16 +124,7 @@ export function EquipeScreen({
         description="Quem tem acesso a esta clínica e com qual perfil."
       />
 
-      {/*
-        O aviso ocupa o lugar do botão. Explica o que falta e diz que não é
-        falha de quem está usando — um "em breve" faria a pessoa tentar de novo.
-      */}
-      {canManage ? (
-        <p className="flex items-start gap-2.5 rounded-card border border-border-card bg-surface px-4 py-3 text-aux text-muted">
-          <MailPlus aria-hidden className="mt-0.5 size-4 shrink-0" />
-          {teamMessages.inviteUnavailable}
-        </p>
-      ) : null}
+      <InviteMemberPanel canManage={canManage} isLive={isLive} />
 
       {isLive ? null : (
         <p

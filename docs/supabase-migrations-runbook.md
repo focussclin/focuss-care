@@ -1,8 +1,8 @@
-# Runbook — aplicar as migrations pendentes
+# Runbook — histórico das migrations aplicadas e verificações restantes
 
-> **Nada aqui foi executado.** Este ambiente não tem `DATABASE_URL`, senha do
-> banco nem `SUPABASE_ACCESS_TOKEN` (bloqueio **B1**), então as migrations
-> existem como proposta revisável, não como mudança feita.
+> As quatro migrations críticas foram aplicadas no Supabase em 08/08/2026 e
+> retornaram `true` na verificação estrutural. Este runbook permanece para
+> auditoria, reprodução controlada e validações funcionais futuras.
 >
 > Este documento é para quem TEM acesso ao projeto Supabase. Ele não contém
 > segredo nenhum — só nomes de variável, comandos e consultas.
@@ -16,10 +16,10 @@
 
 | # | Arquivo | Estado | Custo de não aplicar |
 |---|---|---|---|
-| 1 | `20260807_audit_log_insert_policy.sql` | Escrita | **Nenhum evento de auditoria é gravado.** Para dado de saúde, trilha é requisito legal |
-| 2 | `20260808_insurance_claim_denials.sql` | Escrita | Glosas não têm onde ser registradas |
-| 3 | `20260808_appointments_no_overlap.sql` | Escrita | Duas pessoas marcando ao mesmo tempo gravam horários sobrepostos |
-| 4 | `20260807_create_invitation_rpc.sql` | Escrita, **com decisão pendente** | Convites só nascem direto no banco |
+| 1 | `20260807_audit_log_insert_policy.sql` | **Aplicada e verificada** | Trilha de auditoria habilitada |
+| 2 | `20260808_insurance_claim_denials.sql` | **Aplicada e verificada** | Tabela de glosas disponível |
+| 3 | `20260808_appointments_no_overlap.sql` | **Aplicada e verificada** | Corrida de sobreposição protegida pelo banco |
+| 4 | `20260807_create_invitation_rpc.sql` | **Aplicada e verificada** | Emissão de convite disponível pela aplicação |
 | 5 | Índices de `patients` (P-02b) | **Não escrita** | Filtro "Última visita" fica desabilitado |
 
 A #5 não existe como arquivo de propósito: escrevê-la exige saber quais índices

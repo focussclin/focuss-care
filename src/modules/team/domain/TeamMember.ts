@@ -38,14 +38,8 @@ export interface TeamMember {
 /**
  * Convite emitido e ainda não aceito.
  *
- * Somente leitura nesta fatia: **não há como emitir um pela aplicação**.
- * `invitations` guarda `token_hash` e o schema não expõe RPC de criação —
- * emitir exigiria a aplicação conhecer o algoritmo de hash, e quem sabe gerar
- * hash válido sabe forjar convite. A migration está proposta em
- * `supabase/migrations/20260807_create_invitation_rpc.sql`.
- *
- * Listar o que já existe continua útil: um convite criado direto no banco
- * aparece aqui, e quem administra vê que ele está pendente.
+ * O token cru nunca faz parte desta entidade. Ele só existe no retorno da RPC
+ * de emissão e é entregue uma única vez para que a aplicação monte o link.
  */
 export interface PendingInvitation {
   id: string
@@ -53,4 +47,13 @@ export interface PendingInvitation {
   role: MembershipRole
   expiresAt: Date
   createdAt: Date
+}
+
+/**
+ * Resultado da emissão. O token só atravessa o caso de uso uma vez e nunca é
+ * persistido, listado ou enviado para auditoria.
+ */
+export interface CreatedInvitation {
+  token: string
+  expiresAt: Date
 }

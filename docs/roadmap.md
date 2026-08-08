@@ -547,7 +547,7 @@ rótulo "Perfil e configurações", e até então entregava só a segunda metade
 |---|---|
 | **Sobreposição de horário do mesmo profissional** | **Entregue.** Consulta de intervalo semiaberto antes de criar e de remarcar, com `clinic_id` e `professional_id` no filtro. Recusa dura |
 | **Horário de funcionamento da clínica** | **Entregue.** Só o que foi salvo em C-01 vale; padrão de tela não é imposto. Recusa reversível por confirmação explícita, auditada |
-| **Atomicidade da recusa de sobreposição** | **Bloqueado (B1).** Constraint proposta em `20260808_appointments_no_overlap.sql`, não aplicada |
+| **Atomicidade da recusa de sobreposição** | **Entregue.** Constraint aplicada em `20260808_appointments_no_overlap.sql` e verificada |
 | **Disponibilidade por profissional (`availability_rules`)** | **Bloqueado (B1).** Ver abaixo |
 | **Exceções de agenda (`availability_exceptions`)** | **Fora de escopo.** Depende de `availability_rules` estar interpretável |
 
@@ -596,11 +596,10 @@ informação — "a clínica não faturou" e "o sistema ainda não registra
 faturamento" são coisas diferentes, e o painel diria a primeira. Entram com
 **B-01** e **V-01**.
 
-**A atividade recente não vem de `audit_log`.** A policy de `INSERT` daquela
-tabela recusa o membro autenticado (**P-P6**), o que a mantém vazia: um feed lido
-de lá ficaria permanentemente em branco e pareceria defeito. Vem das próprias
-operações — e **nenhuma descrição cita o paciente**, porque o painel não tem
-recorte por papel e "encerrou o atendimento de Fulano" é informação de saúde.
+**A atividade recente agora pode ser auditada em `audit_log`.** A policy de
+`INSERT` foi aplicada e verificada (**P-P6**). O feed do painel ainda mantém as
+próprias operações como fonte para não expor informação clínica sem recorte por
+papel — "encerrou o atendimento de Fulano" continua fora da descrição.
 
 **Três decisões sobre ausência de dado**, que valem para os relatórios que vierem:
 
@@ -673,7 +672,7 @@ select distinct kind from public.document_sequences;
 | **Planos** com coparticipação e prazo de pagamento | **Entregue.** Exige operadora antes — a dependência aparece na interface |
 | **Guias**: abrir solicitação com procedimentos | **Entregue.** Nasce em `requested`, sem número |
 | **Resposta da operadora**: autorizada com número, ou negada com motivo | **Entregue.** Só guia pendente aceita resposta |
-| **Glosas** | **Ausente.** Não há onde guardar — ver abaixo |
+| **Glosas** | **Infraestrutura entregue.** Tabela aplicada; tela e fluxo financeiro seguem em evolução |
 | **Elegibilidade junto à operadora** | **Ausente.** Exige integração externa (TISS/portal) |
 
 **Glosa não tem tabela, e não é a mesma coisa que guia negada.**
@@ -683,7 +682,8 @@ Glosa é recusa de **pagamento**: a operadora autorizou, o atendimento foi
 prestado, a fatura foi enviada — e o dinheiro não vem. Modelar a segunda em cima
 da primeira somaria dois fatos com efeitos financeiros opostos e esconderia
 justamente o número que a clínica precisa acompanhar. A migration está em
-`supabase/migrations/20260808_insurance_claim_denials.sql`, **não aplicada**.
+`supabase/migrations/20260808_insurance_claim_denials.sql`, aplicada no banco em
+08/08/2026. A tela completa de glosas continua sendo uma próxima fatia.
 
 **Elegibilidade não é a validade cadastrada.** `patient_insurances.valid_until` é
 uma data que a clínica digitou. Consultar a operadora exige integração externa

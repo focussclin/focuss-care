@@ -2,8 +2,8 @@
 -- create_invitation: emitir convite e devolver o token CRU uma unica vez
 -- =============================================================================
 --
--- PROPOSTA — NAO APLICADA, E COM UM PONTO QUE EXIGE REVISAO HUMANA.
--- Ver supabase/migrations/PROPOSTAS.md.
+-- APLICADA no projeto Supabase em 08/08/2026. O aceite funcional com duas
+-- contas ainda deve ser verificado no ambiente remoto.
 --
 -- Problema: `invitations` guarda `token_hash` e o schema so expoe
 -- `accept_invitation(p_token)`. Nao ha RPC de criacao, entao a aplicacao teria

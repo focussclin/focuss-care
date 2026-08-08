@@ -2,7 +2,8 @@
 -- Glosas: recusa de pagamento da operadora APOS o faturamento
 -- =============================================================================
 --
--- PROPOSTA — NAO APLICADA. Ver supabase/migrations/PROPOSTAS.md.
+-- APLICADA no projeto Supabase em 08/08/2026. Este arquivo permanece como
+-- migration reproduzível e documentação do motivo da tabela.
 --
 -- Problema (V-01). O schema nao tem onde registrar glosa. O que existe e
 -- `insurance_authorizations.status = 'denied'`, e isso e OUTRA COISA:

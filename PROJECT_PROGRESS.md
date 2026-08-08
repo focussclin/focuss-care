@@ -1,14 +1,14 @@
 # Focuss Care — estado real do produto
 
-> Levantado contra o código em **08/08/2026**, branch `feat/telas-e-camada-supabase`,
-> commit `0d26f65`+. Este documento descreve o que **existe e funciona**, não o que
+> Levantado contra o código em **08/08/2026**, branch `feat/telas-e-camada-supabase`.
+> Este documento descreve o que **existe e funciona**, não o que
 > está planejado — o plano é o [`docs/roadmap.md`](./docs/roadmap.md).
 >
 > Regra de preenchimento: uma linha só é **COMPLETO** se a fatia vertical fecha
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 754 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 755 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -25,7 +25,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 17 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
-| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
+| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |
 
 ---
 
@@ -35,7 +35,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 |---|---|---|
 | `createAction` — pipeline único de mutação | **COMPLETO** | `src/modules/_shared/application/createAction.ts` · usado por 28 actions (27 escritas + `patient.search`, leitura que precisa rodar sem sair do modal) |
 | `Result` / `AppError` tipado | **COMPLETO** | `src/modules/_shared/domain/Result.ts` |
-| Auditoria (`recordAuditEvent`) | **EM ANDAMENTO** | Código completo; **nenhum evento persiste** — ver P-P6 na §6 |
+| Auditoria (`recordAuditEvent`) | **COMPLETO** | Código e policy de inserção aplicados; eventos passam pelo `audit_log` |
 | Cache tags tenant-scoped | **COMPLETO** | `src/lib/cache/tags.ts` + a primeira leitura cacheada, em `settings/infrastructure/settingsCache.ts` (`use cache: private`) |
 | 6 regras de arquitetura no lint | **COMPLETO** | `eslint.config.mjs` · `eslint-plugin-boundaries` |
 | Harness de teste + CI | **COMPLETO** | Vitest (`node` por padrão, `jsdom` por arquivo) · `.github/workflows/` |
@@ -52,7 +52,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
-| `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários e ausências funcionam; **convite e escalas ausentes** (RPC e P-WD) |
+| `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento e caixa funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
@@ -79,7 +79,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/pacientes` e subrotas | **COMPLETO** | Banco (patients) | `patient.read` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
-| `/equipe` | **EM ANDAMENTO** | Banco (team) | `team.read` |
+| `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + patients) | `invoice.read` |
@@ -93,7 +93,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 ## 4.0 Auditoria final local — 08/08/2026
 
 Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
-**754 testes em 54 arquivos**, `lint`, `typecheck` e `build` limpos, e smoke HTTP
+**755 testes em 54 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
 das 22 rotas com o servidor de desenvolvimento ativo.
 
 | Verificação | Resultado |
@@ -192,9 +192,11 @@ de progresso.
 > 08/08/2026. O quadro abaixo mantém os demais bloqueios ainda válidos; as
 > referências a essas quatro migrations representam o estado anterior.
 
-**B1 — sem acesso SQL ao banco.** Não há `DATABASE_URL`, senha nem
-`SUPABASE_ACCESS_TOKEN` neste ambiente. Consequência: nenhuma migration é
-aplicada, nenhum corpo de RPC é legível, nenhuma policy é verificável.
+**B1 — resolvido para as migrations críticas.** As quatro migrations foram
+aplicadas no Supabase e as verificações estruturais retornaram `true`. Ainda não
+há credencial administrativa no ambiente local para ler corpos de RPC ou rodar
+testes funcionais contra o banco remoto; por isso a aceitação real de um convite
+emitido pela aplicação continua sendo uma validação manual pendente.
 
 **O roteiro para sair daqui está pronto e documentado:**
 [`docs/supabase-migrations-runbook.md`](./docs/supabase-migrations-runbook.md).
@@ -205,10 +207,10 @@ projeto Supabase.
 
 | # | Bloqueio | Custo hoje | Como sair |
 |---|---|---|---|
-| **P-P6** | Policy de `INSERT` de `audit_log` recusa o membro autenticado | **Nenhum dos ~20 eventos de auditoria está sendo gravado.** Para dado de saúde, trilha de auditoria é requisito legal | Aplicar `20260807_audit_log_insert_policy.sql` |
-| **P-INV** | Não há RPC de criação de convite | Convites só nascem direto no banco; a tela diz isso onde estaria o botão | Aplicar `20260807_create_invitation_rpc.sql` (revisar o hash antes) |
-| **P-OVL** | Sem constraint de exclusão em `appointments` | Duas recepcionistas clicando no mesmo instante podem gravar horários sobrepostos | Aplicar `20260808_appointments_no_overlap.sql` |
-| **P-GLO** | Glosa não tem tabela | O controle de glosas não existe, e a tela declara isso | Aplicar `20260808_insurance_claim_denials.sql` |
+| **P-P6** | Policy de `INSERT` de `audit_log` | **RESOLVIDO** — policy aplicada e verificada |
+| **P-INV** | RPC de emissão de convite | **RESOLVIDO no banco**; aplicação emite link seguro. Falta apenas aceite funcional com outra conta |
+| **P-OVL** | Constraint de exclusão em `appointments` | **RESOLVIDO** — constraint aplicada e verificada |
+| **P-GLO** | Tabela de glosas | **RESOLVIDO no banco** — tela completa segue como próxima fatia de produto |
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
@@ -234,7 +236,6 @@ que não funciona:
 
 | Ausência | Onde a tela diz | Por quê |
 |---|---|---|
-| Emissão de convite | `/equipe` | Exigiria a aplicação saber gerar `token_hash` — e quem sabe gerar sabe forjar |
 | Emissão fiscal numerada | `/financeiro` | `issue_invoice` com assinatura não resolvida; numeração que pula é problema com a prefeitura |
 | Despesas e contas a pagar | `/financeiro` | `payables` existe, nenhuma tela grava; card em R$ 0,00 diria que a clínica não tem custo |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |

@@ -2,7 +2,8 @@
 -- appointments: impedir sobreposicao de horario do mesmo profissional
 -- =============================================================================
 --
--- PROPOSTA — NAO APLICADA. Ver supabase/migrations/PROPOSTAS.md.
+-- APLICADA no projeto Supabase em 08/08/2026. Este arquivo permanece como
+-- migration reproduzível e documentação do motivo da constraint.
 --
 -- Problema (A-02). A aplicacao ja verifica sobreposicao antes de gravar: le os
 -- atendimentos do profissional no intervalo e recusa se houver algum. Isso
