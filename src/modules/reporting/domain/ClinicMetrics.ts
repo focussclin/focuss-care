@@ -93,3 +93,35 @@ export interface PeriodReport {
    */
   truncated: boolean
 }
+
+/**
+ * Um mês da série histórica.
+ *
+ * `month` é o PRIMEIRO instante do mês, na zona local — a mesma âncora que o
+ * adapter usa para montar a janela `[mês, mês+1)`. Guardar o mês como `Date`, e
+ * não como `"2026-08"`, evita que a tela precise reconstruir a data para
+ * formatar o rótulo em pt-BR.
+ */
+export interface MonthlyPoint {
+  month: Date
+  /** Atendimentos com hora marcada no mês, exceto cancelados. */
+  appointments: number
+  /** Quantos daqueles efetivamente aconteceram. */
+  completed: number
+  /** Pacientes cadastrados no mês. */
+  newPatients: number
+}
+
+/**
+ * A série que a tela de indicadores desenha.
+ *
+ * Existe separada de `PeriodReport` porque responde outra pergunta. Aquele é uma
+ * FOTOGRAFIA de um intervalo: quantos atendimentos, quantas faltas, quem
+ * atendeu. Este é a EVOLUÇÃO: a clínica está crescendo ou encolhendo, e desde
+ * quando. Um número isolado não responde isso, e foi por isso que a tela de
+ * relatórios nunca conseguiu servir de painel de gestão.
+ */
+export interface MonthlyTrend {
+  /** Do mês mais antigo para o mais recente — a ordem em que o gráfico lê. */
+  points: readonly MonthlyPoint[]
+}

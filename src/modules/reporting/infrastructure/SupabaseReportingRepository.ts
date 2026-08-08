@@ -8,6 +8,8 @@ import type { ActivityEntry } from '@/modules/_shared/domain/types'
 import type {
   AttendanceRate,
   DailySnapshot,
+  MonthlyPoint,
+  MonthlyTrend,
   PeriodReport,
   ProfessionalWorkload,
 } from '../domain/ClinicMetrics'
@@ -377,6 +379,67 @@ export class SupabaseReportingRepository implements ReportingRepository {
 
     return toAttendanceRate(completed, noShow)
   }
+  /**
+   * Serie mensal — uma contagem por mes, sem transferir linha.
+   *
+   * Poderia ser uma leitura so, agrupando no cliente, e seria pior: teria de
+   * trazer todas as linhas do periodo para conta-las, esbarraria no
+   * `PERIOD_ROW_CAP` e devolveria uma serie AMOSTRADA com cara de completa.
+   * Doze contagens `head` sao doze idas ao banco e zero linha no fio.
+   *
+   * O filtro de tenant vai em toda contagem, como no resto do adapter: a RLS e
+   * a ultima linha, nao a unica.
+   */
+  async monthlyTrend(
+    clinicId: string,
+    reference: Date,
+    months: number,
+  ): Promise<MonthlyTrend> {
+    const currentMonthStart = startOfMonth(reference)
+
+    const windows = Array.from({ length: months }, (_, index) => {
+      const from = addMonths(currentMonthStart, index - (months - 1))
+      return { from, to: addMonths(from, 1) }
+    })
+
+    const points = await Promise.all(
+      windows.map(async ({ from, to }): Promise<MonthlyPoint> => {
+        const [appointments, completed, newPatients] = await Promise.all([
+          this.countAppointments(clinicId, from, to, null),
+          this.countAppointments(clinicId, from, to, 'completed'),
+          this.countNewPatients(clinicId, from, to),
+        ])
+
+        return { month: from, appointments, completed, newPatients }
+      }),
+    )
+
+    return { points }
+  }
+
+  /** Atendimentos da janela; `status` nulo conta tudo menos cancelado. */
+  private async countAppointments(
+    clinicId: string,
+    from: Date,
+    to: Date,
+    status: AppointmentStatus | null,
+  ): Promise<number> {
+    const query = this.client
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('clinic_id', clinicId)
+      .gte('starts_at', from.toISOString())
+      .lt('starts_at', to.toISOString())
+
+    const { count, error } = await (status === null
+      ? query.not('status', 'in', toInList(CANCELED))
+      : query.eq('status', status))
+
+    if (error) throw readFailure('monthlyTrend.appointments', error)
+
+    return count ?? 0
+  }
+
 }
 
 /**

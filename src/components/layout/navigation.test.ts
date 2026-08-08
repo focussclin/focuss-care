@@ -29,6 +29,7 @@ const EXISTING_ROUTES = new Set([
   '/automacoes',
   '/auditoria',
   '/display',
+  '/indicadores',
 ])
 
 describe('navItems', () => {

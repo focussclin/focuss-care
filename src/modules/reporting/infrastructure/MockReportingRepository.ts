@@ -5,7 +5,12 @@ import {
 } from '@/lib/mocks/clinic-data'
 import type { ActivityEntry } from '@/modules/_shared/domain/types'
 
-import type { DailySnapshot, PeriodReport } from '../domain/ClinicMetrics'
+import type {
+  DailySnapshot,
+  MonthlyPoint,
+  MonthlyTrend,
+  PeriodReport,
+} from '../domain/ClinicMetrics'
 import type { ReportingRepository } from '../domain/ReportingRepository'
 
 /**
@@ -129,5 +134,46 @@ export class MockReportingRepository implements ReportingRepository {
       // A demonstração é pequena por construção: nunca há o que truncar.
       truncated: false,
     }
+  }
+  /**
+   * Serie mensal da demonstracao, contada das MESMAS listas.
+   *
+   * Os meses sem dado devolvem zero em vez de sumir: uma serie com buracos
+   * desenharia um grafico que sobe onde a clinica so ficou parada.
+   */
+  async monthlyTrend(
+    _clinicId: string,
+    reference: Date,
+    months: number,
+  ): Promise<MonthlyTrend> {
+    const appointments = getAppointments(reference)
+    const patients = getPatients(reference)
+    const anchor = new Date(reference.getFullYear(), reference.getMonth(), 1)
+
+    const inMonth = (date: Date, from: Date, to: Date) =>
+      date >= from && date < to
+
+    const points: MonthlyPoint[] = Array.from({ length: months }, (_, index) => {
+      const from = new Date(
+        anchor.getFullYear(),
+        anchor.getMonth() + index - (months - 1),
+        1,
+      )
+      const to = new Date(from.getFullYear(), from.getMonth() + 1, 1)
+
+      const doMes = appointments.filter((item) =>
+        inMonth(item.startsAt, from, to),
+      )
+
+      return {
+        month: from,
+        appointments: doMes.filter((item) => item.status !== 'canceled').length,
+        completed: doMes.filter((item) => item.status === 'completed').length,
+        newPatients: patients.filter((item) => inMonth(item.createdAt, from, to))
+          .length,
+      }
+    })
+
+    return { points }
   }
 }

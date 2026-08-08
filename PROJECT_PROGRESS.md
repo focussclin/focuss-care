@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 817 testes em 63 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 833 testes em 64 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 23 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -65,7 +65,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 24 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 25 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -83,6 +83,7 @@ As 24 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
+| `/indicadores` | **COMPLETO** | Banco (reporting) — série de 12 meses contada por `count`, sem transferir linha | `report.read` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/auditoria` | **COMPLETO** | Banco (`audit_log`) — sem IP, user-agent ou metadados brutos | `audit.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |

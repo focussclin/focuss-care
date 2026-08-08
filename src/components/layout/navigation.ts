@@ -77,7 +77,7 @@ export interface NavItem {
 
 export const navItems: readonly NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutGrid, section: 'workspace' },
-  { label: 'Indicadores e BI', href: '/indicadores', icon: Gauge, section: 'workspace', disabled: true },
+  { label: 'Indicadores e BI', href: '/indicadores', icon: Gauge, section: 'workspace', permission: 'report.read' },
 
   { label: 'Agenda', href: '/agenda', icon: CalendarDays, section: 'care', permission: 'appointment.read' },
   { label: 'Pacientes 360', href: '/pacientes', icon: Users, section: 'care', permission: 'patient.read' },
