@@ -83,7 +83,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Pacientes 360', href: '/pacientes', icon: Users, section: 'care', permission: 'patient.read' },
   { label: 'Atendimentos', href: '/atendimentos', icon: Stethoscope, section: 'care', permission: 'encounter.read' },
   { label: 'Prontuários', href: '/prontuarios', icon: ClipboardList, section: 'care', permission: 'record.read' },
-  { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', disabled: true },
+  { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', permission: 'encounter.read' },
   { label: 'Fila e senhas', href: '/fila', icon: PanelTop, section: 'care', disabled: true },
   { label: 'Check-in digital', href: '/check-in', icon: ScanLine, section: 'care', disabled: true },
   { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', permission: 'encounter.read' },
