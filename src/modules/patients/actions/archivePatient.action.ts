@@ -51,7 +51,9 @@ const runArchivePatient = createAction<ArchivePatientInput, PatientDto>({
     cacheTags.patients(clinicId),
     cacheTags.patient(clinicId, output.id),
   ],
-  revalidatePaths: ['/pacientes'],
+  // Arquivar mexe em `is_active`, que e exatamente o filtro de 'pacientes
+  // ativos' do relatorio. O painel nao muda: ele conta por `created_at`.
+  revalidatePaths: ['/pacientes', '/relatorios'],
 
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)

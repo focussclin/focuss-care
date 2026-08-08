@@ -58,7 +58,13 @@ const runCreatePatient = createAction<
     cacheTags.patients(clinicId),
     cacheTags.patient(clinicId, output.id),
   ],
-  revalidatePaths: ['/pacientes'],
+  /*
+   * O painel conta 'novos pacientes no mes' e lista 'cadastrou um paciente' na
+   * atividade recente; o relatorio conta novos e base ativa no periodo. Os tres
+   * numeros mudam nesta escrita — sem invalidar, quem navega de volta ve a
+   * contagem de antes do cadastro que acabou de fazer.
+   */
+  revalidatePaths: ['/pacientes', '/dashboard', '/relatorios'],
 
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)

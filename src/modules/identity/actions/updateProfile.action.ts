@@ -41,13 +41,18 @@ const runUpdateProfile = createAction<UpdateProfileInput, ProfileDto, Field>({
     unexpected: profileMessages.unexpected,
   },
   /*
-   * Revalida o LAYOUT, e não só `/configuracoes`.
+   * Revalida o LAYOUT, e não a página raiz.
    *
-   * O nome aparece no topo da tela e no menu lateral, que são do layout de
-   * `(app)`. Sem isto, a pessoa salvaria o nome novo e continuaria vendo o
-   * antigo no canto — o que parece exatamente com não ter salvo.
+   * `revalidatePath('/')` sozinho invalida apenas `/` — a casca compartilhada
+   * por `/agenda`, `/pacientes` e todas as outras continuaria servindo o nome
+   * antigo do Client Cache. O nome aparece no topo da tela e no menu lateral,
+   * que são do layout: sem o `type`, a pessoa salvaria o nome novo e continuaria
+   * vendo o antigo no canto — o que parece exatamente com não ter salvo.
+   *
+   * `{ path: '/', type: 'layout' }` purga o Client Cache inteiro. É pesado, e é
+   * o alcance certo: o dado mudado aparece em toda rota autenticada.
    */
-  revalidatePaths: ['/', '/configuracoes'],
+  revalidatePaths: [{ path: '/', type: 'layout' }],
 
   handler: async (input, context) => {
     const repository = profileRepositoryFor(context.supabase)

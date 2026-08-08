@@ -41,7 +41,14 @@ const runUpdateClinicProfile = createAction<
     unavailable: settingsMessages.unavailable,
     unexpected: settingsMessages.unexpected,
   },
-  revalidatePaths: ['/', '/configuracoes'],
+  /*
+   * LAYOUT, e não a página raiz — mesmo motivo de `profile.update`.
+   *
+   * O nome fantasia aparece no cabeçalho e no seletor de clínicas, que são da
+   * casca de `(app)`. `revalidatePath('/')` sozinho deixaria o nome antigo no
+   * topo de toda rota que a pessoa já tivesse visitado.
+   */
+  revalidatePaths: [{ path: '/', type: 'layout' }],
 
   handler: async (input, context) => {
     const repository = clinicSettingsRepositoryFor(context.supabase)

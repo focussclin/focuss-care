@@ -71,6 +71,23 @@ export interface ActionCacheScope {
   userId: string
 }
 
+/**
+ * Um alvo de revalidacao.
+ *
+ * String simples revalida a PAGINA daquele caminho. O objeto existe por causa de
+ * um detalhe que custou caro: `revalidatePath('/')` invalida apenas a pagina
+ * raiz — nao a casca compartilhada por todas as rotas. Quem muda o nome da
+ * clinica ou o proprio nome precisa de `{ path: '/', type: 'layout' }`, que
+ * purga o Client Cache inteiro; sem isso o nome novo aparece em
+ * `/configuracoes` e continua velho no topo de `/agenda`.
+ *
+ * Ver node_modules/next/dist/docs/01-app/03-api-reference/04-functions/
+ * revalidatePath.md §"Revalidating all data".
+ */
+export type RevalidateTarget =
+  | string
+  | { path: string; type: 'page' | 'layout' }
+
 export interface CreateActionOptions<TInput, TOutput, F extends string = string> {
   /**
    * Nome estavel da acao, no formato `<entidade>.<verbo>`: 'patient.create'.
@@ -130,7 +147,7 @@ export interface CreateActionOptions<TInput, TOutput, F extends string = string>
    * nenhum `use cache` no caminho. Tag invalida entrada de `use cache`, que ainda
    * nao existe. Enquanto nao existir, remover daqui apagaria a revalidacao real.
    */
-  revalidatePaths?: readonly string[]
+  revalidatePaths?: readonly RevalidateTarget[]
   /**
    * Evento de auditoria do sucesso. Devolva null para nao auditar.
    *
@@ -262,8 +279,12 @@ export function createAction<TInput, TOutput, F extends string = string>(
         updateTag(tag)
       }
 
-      for (const path of options.revalidatePaths ?? []) {
-        revalidatePath(path)
+      for (const target of options.revalidatePaths ?? []) {
+        if (typeof target === 'string') {
+          revalidatePath(target)
+        } else {
+          revalidatePath(target.path, target.type)
+        }
       }
 
       // `after()` roda depois da resposta: tira do caminho critico as quatro

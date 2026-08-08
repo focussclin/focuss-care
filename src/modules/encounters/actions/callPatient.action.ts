@@ -36,7 +36,10 @@ const runCallPatient = createAction<CallPatientInput, QueueEntryDto>({
     unavailable: encounterMessages.unavailable,
     unexpected: encounterMessages.unexpected,
   },
-  revalidatePaths: ['/atendimentos'],
+  // Chamar move a fila de 'waiting' para 'called', e o cartao 'pacientes
+  // aguardando' do painel conta exatamente status='waiting'. Sem isto o numero
+  // fica alto ate alguem recarregar.
+  revalidatePaths: ['/atendimentos', '/dashboard'],
 
   handler: async (input, context) => {
     const repository = encounterRepositoryFor(context.supabase)

@@ -49,7 +49,9 @@ const runCancelAppointment = createAction<
   cacheTags: ({ clinicId }, output) => [
     cacheTags.agenda(clinicId, civilDay(new Date(output.startsAt))),
   ],
-  revalidatePaths: ['/agenda', '/dashboard'],
+  // O relatorio conta atendimentos por desfecho no periodo — criar, remarcar
+  // e cancelar mudam esses numeros.
+  revalidatePaths: ['/agenda', '/dashboard', '/relatorios'],
 
   handler: async (input, context) => {
     const repository = appointmentRepositoryFor(context.supabase)
