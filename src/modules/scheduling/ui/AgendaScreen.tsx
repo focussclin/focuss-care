@@ -38,6 +38,7 @@ import {
   NewAppointmentModal,
   type AppointmentSubmitFailure,
   type AppointmentSubmitOptions,
+  type PatientFieldRenderer,
 } from './NewAppointmentModal'
 import { WeekView } from './WeekView'
 
@@ -50,6 +51,13 @@ export interface AgendaScreenProps {
   openNewOnMount?: boolean
   /** Duracao padrao configurada em /configuracoes (C-01). */
   defaultDurationMinutes?: number
+  /**
+   * Seletor de paciente, montado pela ROTA.
+   *
+   * Ele busca no servidor e pertence ao modulo `patients`; a agenda nao alcanca
+   * o interior dele (regra 4). Atravessa esta tela so para chegar ao modal.
+   */
+  renderPatientField: PatientFieldRenderer
   /**
    * Ha banco por tras desta tela.
    *
@@ -74,6 +82,7 @@ export function AgendaScreen({
   professionals,
   openNewOnMount = false,
   defaultDurationMinutes = 30,
+  renderPatientField,
   isLive = false,
 }: AgendaScreenProps) {
   const router = useRouter()
@@ -500,8 +509,8 @@ export function AgendaScreen({
           // Fechar o formulario abandona a remarcacao: reabri-lo depois cria.
           if (!open) setReschedulingId(null)
         }}
-        patients={patients}
         professionals={professionals}
+        renderPatientField={renderPatientField}
         existingAppointments={appointments}
         defaultDate={toDateInputValue(referenceDate)}
         defaultTime={createTime}

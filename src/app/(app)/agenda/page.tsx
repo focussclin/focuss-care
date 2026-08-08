@@ -3,7 +3,8 @@ import { connection } from 'next/server'
 
 import { addDays, startOfDay, startOfWeek } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
-import { PATIENT_PAGE_MAX_SIZE } from '@/modules/patients/schemas/patientQuery.schema'
+import { PICKER_RESULT_LIMIT } from '@/modules/patients/schemas/patientPicker.schema'
+import { PatientPicker } from '@/modules/patients/ui/PatientPicker'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { AgendaScreen } from '@/modules/scheduling/ui/AgendaScreen'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
@@ -69,20 +70,38 @@ export default async function AgendaPage({
     ),
     appointmentSource.repository.listProfessionals(appointmentSource.clinicId),
     /*
-     * Seletor de paciente do modal — PRIMEIRA PAGINA, nao a clinica inteira.
+     * Estado INICIAL do seletor de paciente — nao a base para filtrar.
      *
-     * Ate P-02a este era o unico chamador que carregava a base completa em toda
-     * renderizacao da agenda. O limite explicito e a troca honesta: a lista para
-     * nos 50 primeiros em ordem alfabetica, e clinica grande precisa de um
-     * seletor com busca server-side — que e trabalho de A-01, nao desta fatia.
+     * Ate P-02a esta consulta trazia a clinica inteira; depois dela, as 50
+     * primeiras em ordem alfabetica, que o `datalist` filtrava no navegador. As
+     * duas versoes tinham o mesmo defeito: quem nao estivesse no pedaco
+     * carregado simplesmente nao existia para a agenda.
+     *
+     * Agora quem procura vai ao servidor (`patient.search`), e estes oito servem
+     * so ao campo vazio — abrir o modal e ver uma lista em branco nao ajuda
+     * ninguem. `status: 'active'` acompanha a busca: nao se marca consulta para
+     * paciente arquivado.
      */
     patientSource.repository.listPage(patientSource.clinicId, {
       search: null,
-      status: 'all',
-      limit: PATIENT_PAGE_MAX_SIZE,
+      status: 'active',
+      limit: PICKER_RESULT_LIMIT,
       cursor: null,
     }),
   ])
+
+  /*
+   * O seletor de paciente e montado AQUI, e nao dentro da agenda.
+   *
+   * `PatientPicker` pertence ao modulo `patients` e a agenda nao alcanca o
+   * interior dele (regra 4 da arquitetura). A tela declara um buraco com forma
+   * conhecida — `renderPatientField` — e a rota o preenche. Mesmo padrao do
+   * seletor de clinica e do cartao de perfil.
+   */
+  const patientOptions = patientPage.items.map((patient) => ({
+    id: patient.id,
+    name: patient.name,
+  }))
 
   return (
     <AgendaScreen
@@ -93,6 +112,15 @@ export default async function AgendaPage({
       openNewOnMount={novo === '1'}
       defaultDurationMinutes={defaultDurationMinutes}
       isLive={appointmentSource.isLive}
+      renderPatientField={(control) => (
+        <PatientPicker
+          initialOptions={patientOptions}
+          value={control.value}
+          onChange={control.onChange}
+          error={control.error}
+          isLive={patientSource.isLive}
+        />
+      )}
     />
   )
 }

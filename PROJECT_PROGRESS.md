@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 522 testes em 39 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 569 testes em 42 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -28,7 +28,7 @@
 
 | Item | Status | Evidência |
 |---|---|---|
-| `createAction` — pipeline único de mutação | **COMPLETO** | `src/modules/_shared/application/createAction.ts` · usado por 20 actions |
+| `createAction` — pipeline único de mutação | **COMPLETO** | `src/modules/_shared/application/createAction.ts` · usado por 28 actions (27 escritas + `patient.search`, leitura que precisa rodar sem sair do modal) |
 | `Result` / `AppError` tipado | **COMPLETO** | `src/modules/_shared/domain/Result.ts` |
 | Auditoria (`recordAuditEvent`) | **EM ANDAMENTO** | Código completo; **nenhum evento persiste** — ver P-P6 na §6 |
 | Cache tags tenant-scoped | **COMPLETO** | `src/lib/cache/tags.ts` + a primeira leitura cacheada, em `settings/infrastructure/settingsCache.ts` (`use cache: private`) |
@@ -43,7 +43,7 @@
 | Módulo | Status | O que faz hoje |
 |---|---|---|
 | `identity` | **COMPLETO** | Cadastro, login, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação, **perfil pessoal** |
-| `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, consentimento LGPD |
+| `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, consentimento LGPD |
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
@@ -68,7 +68,7 @@ As 21 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/onboarding` | **COMPLETO** | `create_clinic()` | Sessão sem clínica |
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
-| `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) | Membro |
+| `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
 | `/pacientes` e subrotas | **COMPLETO** | Banco (patients) | `patient.read` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
