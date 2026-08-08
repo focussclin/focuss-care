@@ -7,10 +7,15 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { displayNameOf, getSessionState } from '@/lib/auth/session'
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { currentUser } from '@/lib/mocks/clinic-data'
 import { addDays, formatEyebrowDate, getGreeting, startOfDay } from '@/lib/utils/date'
+import { getBillingRepository } from '@/modules/billing/infrastructure/repository'
 import { getReportingRepository } from '@/modules/reporting/infrastructure/repository'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
+import { buildFinancialPulse } from '@/modules/dashboard/application/financialPulse'
+import { FinancialPulseCard } from '@/modules/dashboard/ui/FinancialPulseCard'
 import { NotificationBell } from '@/modules/dashboard/ui/NotificationBell'
 import { QuickActionsCard } from '@/modules/dashboard/ui/QuickActionsCard'
 import { RecentActivityCard } from '@/modules/dashboard/ui/RecentActivityCard'
@@ -43,6 +48,11 @@ export default async function DashboardPage() {
     getReportingRepository(),
   ])
 
+  const role = await getActiveClinicRole()
+  const billingSource = can(role, 'invoice.read')
+    ? await getBillingRepository()
+    : null
+
   /*
    * Composicao entre modulos acontece na ROTA (regra 4): `reporting` conta, e
    * `scheduling` entrega a agenda do dia. Nenhum dos dois alcanca o interior do
@@ -57,6 +67,16 @@ export default async function DashboardPage() {
     reportingSource.repository.dailySnapshot(reportingSource.clinicId, now),
     reportingSource.repository.recentActivity(reportingSource.clinicId, 5),
   ])
+
+  const financialPulse = billingSource
+    ? buildFinancialPulse(
+        await billingSource.repository.listPayables(
+          billingSource.clinicId,
+          new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()),
+        ),
+        today,
+      )
+    : null
 
   /*
    * Variacao de novos pacientes — mes corrente contra o anterior.
@@ -147,6 +167,8 @@ export default async function DashboardPage() {
       <section aria-label="Ações rápidas">
         <QuickActionsCard />
       </section>
+
+      {financialPulse ? <FinancialPulseCard pulse={financialPulse} /> : null}
 
       {/* Conteudo principal — 60% / 40% a partir de 1100px */}
       <section aria-label="Detalhes do dia">

@@ -57,7 +57,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
-| `dashboard` | **COMPLETO** | Cartões, agenda do dia e atividade — todos contados do banco |
+| `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 
 ---
