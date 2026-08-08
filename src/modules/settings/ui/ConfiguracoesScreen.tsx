@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -12,6 +13,14 @@ export interface ConfiguracoesScreenProps {
   settings: ClinicSettingsDto
   /** `clinic.settings` na matriz de I-05 — hoje `owner` e `admin`. */
   canManage: boolean
+  /**
+   * O card de perfil pessoal, montado pela ROTA.
+   *
+   * Chega como slot, e não como dados, porque perfil é do módulo `identity` e
+   * clínica é do `settings` — um módulo não alcança o interior do outro (regra
+   * 4). É o mesmo desenho do seletor de clínicas na casca da aplicação.
+   */
+  profileSlot?: ReactNode
   isLive?: boolean
 }
 
@@ -37,6 +46,7 @@ export interface ConfiguracoesScreenProps {
 export function ConfiguracoesScreen({
   settings,
   canManage,
+  profileSlot,
   isLive = false,
 }: ConfiguracoesScreenProps) {
   return (
@@ -66,6 +76,13 @@ export function ConfiguracoesScreen({
           responsabilidade de quem administra.
         </p>
       )}
+
+      {/*
+        O perfil pessoal vem primeiro: é o único card desta tela que TODO mundo
+        pode editar. Quem não administra a clínica encontra o que veio fazer sem
+        passar por três cartões somente-leitura.
+      */}
+      {profileSlot}
 
       <ClinicIdentityForm
         profile={settings.profile}
@@ -139,7 +156,7 @@ export function ConfiguracoesScreen({
         Notificações, aparência, marca e integrações ainda não têm ajuste aqui —
         não porque falta a tela, mas porque falta o que elas controlariam:
         nenhum caminho do sistema envia aviso automático nem aplica logotipo
-        ainda. Seus dados pessoais de acesso também não são alterados por aqui.
+        ainda.
       </p>
     </div>
   )

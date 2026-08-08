@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 407 testes em 31 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 421 testes em 33 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -17,9 +17,9 @@
 
 | Status | O que significa | Quantos |
 |---|---|---|
-| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 15 |
+| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 16 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
-| **PENDENTE** | Não implementado, e nada bloqueia começar | 2 |
+| **PENDENTE** | Não implementado, e nada bloqueia começar | 1 |
 | **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |
 
 ---
@@ -42,7 +42,7 @@
 
 | Módulo | Status | O que faz hoje |
 |---|---|---|
-| `identity` | **COMPLETO** | Cadastro, login, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação |
+| `identity` | **COMPLETO** | Cadastro, login, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação, **perfil pessoal** |
 | `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, consentimento LGPD |
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
@@ -73,7 +73,7 @@ As 21 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/equipe` | **EM ANDAMENTO** | Banco (team) | `team.read` |
-| `/configuracoes` | **COMPLETO** | Banco (settings) | Membro; edição exige `clinic.settings` |
+| `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + patients) | `invoice.read` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance) | `insurance.manage` |
@@ -127,7 +127,6 @@ aplicada, nenhum corpo de RPC é legível, nenhuma policy é verificável.
 
 | Item | Por que ainda não |
 |---|---|
-| Perfil pessoal (nome, telefone de quem usa) | Mora em `profiles`, é do módulo `identity`, e nenhuma fatia o pegou |
 | Escalas e ausências (`work_schedules`, `time_off`) | Pendem de `employees` — o vínculo trabalhista, entidade que o produto não modela |
 
 ---

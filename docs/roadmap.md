@@ -534,9 +534,11 @@ agenda o consulta: atendimento fora do expediente pede confirmação antes de se
 gravado, e a confirmação vira evento de auditoria. O formato guarda **um turno
 por dia** — intervalo de almoço ainda não é representável.
 
-**Perfil pessoal não entra aqui.** Nome e telefone de quem usa moram em
-`profiles`, e são do módulo `identity`, não de `settings` — a tela diz que não
-se alteram por ali em vez de repetir o formulário falso da vitrine.
+**Perfil pessoal ENTROU depois**, e não como parte de `settings`. Nome e
+telefone moram em `profiles` e são do módulo `identity`; o card chega a
+`/configuracoes` como slot, composto na rota — a mesma solução do seletor de
+clínicas na casca. É para lá que o menu da pessoa aponta desde sempre, com o
+rótulo "Perfil e configurações", e até então entregava só a segunda metade.
 
 ### O que A-02 entregou, e o que ficou de fora
 

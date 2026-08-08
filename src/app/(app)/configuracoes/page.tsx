@@ -2,7 +2,10 @@ import type { Metadata } from 'next'
 import { connection } from 'next/server'
 
 import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { getSessionState } from '@/lib/auth/session'
 import { can } from '@/lib/auth/permissions'
+import { getProfileRepository } from '@/modules/identity/infrastructure/repository'
+import { PersonalProfileForm } from '@/modules/identity/ui/PersonalProfileForm'
 import { toClinicSettingsDto } from '@/modules/settings/application/toSettingsDto'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 import { ConfiguracoesScreen } from '@/modules/settings/ui/ConfiguracoesScreen'
@@ -37,13 +40,48 @@ export default async function ConfiguracoesPage() {
    */
   const role = await getActiveClinicRole()
 
-  const source = await getClinicSettingsRepository()
+  const [source, session, profileRepository] = await Promise.all([
+    getClinicSettingsRepository(),
+    getSessionState(),
+    getProfileRepository(),
+  ])
+
   const settings = await source.repository.load(source.clinicId)
+
+  /*
+   * Composição entre módulos na ROTA (regra 4): `settings` não alcança o
+   * interior de `identity`, e vice-versa. O card chega à tela como slot.
+   *
+   * A leitura é defensiva: perfil é o card menos importante desta página, e
+   * derrubar as configurações da clínica porque ele não carregou trocaria um
+   * problema pequeno por um grande. Sem Supabase configurado o repositório é
+   * nulo — e um perfil de demonstração editável seria pior que nenhum.
+   */
+  const profile =
+    session.status === 'active' && profileRepository
+      ? await profileRepository.findById(session.user.id).catch((cause) => {
+          console.error('[configuracoes] perfil indisponivel', {
+            kind: cause instanceof Error ? cause.name : typeof cause,
+          })
+          return null
+        })
+      : null
 
   return (
     <ConfiguracoesScreen
       settings={toClinicSettingsDto(settings)}
       canManage={can(role, 'clinic.settings')}
+      profileSlot={
+        profile ? (
+          <PersonalProfileForm
+            profile={{
+              fullName: profile.fullName,
+              email: profile.email,
+              phone: profile.phone,
+            }}
+          />
+        ) : null
+      }
       isLive={source.isLive}
     />
   )
