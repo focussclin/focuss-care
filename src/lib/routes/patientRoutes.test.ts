@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { describe, expect, it } from 'vitest'
 
 import { patientPaths } from './patientRoutes'
@@ -69,34 +66,10 @@ describe('patientPaths', () => {
   })
 })
 
-describe('quem chama, chama com id validado', () => {
-  const ACTIONS = [
-    'src/modules/patients/actions/updatePatient.action.ts',
-    'src/modules/patients/actions/archivePatient.action.ts',
-    'src/modules/scheduling/actions/createAppointment.action.ts',
-    'src/modules/scheduling/actions/rescheduleAppointment.action.ts',
-    'src/modules/scheduling/actions/cancelAppointment.action.ts',
-  ]
-
-  it('o id vem do OUTPUT, nunca da entrada do formulário', () => {
-    /*
-     * `output` e a linha que o repositorio devolveu, depois da RLS. `input` e o
-     * que o navegador mandou. Montar a URL a partir do segundo deixaria o
-     * cliente escolher qual rota expirar — o mesmo motivo pelo qual `cacheTags`
-     * nao recebe `input`.
-     */
-    for (const file of ACTIONS) {
-      const source = readFileSync(join(process.cwd(), file), 'utf8')
-      const calls = [...source.matchAll(/patientPaths\(([^)]*)\)/g)].map(
-        (match) => match[1].trim(),
-      )
-
-      expect(calls.length).toBeGreaterThan(0)
-
-      for (const argument of calls) {
-        expect(argument.startsWith('output.')).toBe(true)
-        expect(argument).not.toContain('input')
-      }
-    }
-  })
-})
+/*
+ * A checagem de "o id vem do `output`, nunca do `input`" vivia aqui, com a
+ * lista dos cinco chamadores escrita à mão. Saiu: a varredura de
+ * `revalidateTargets.test.ts` passou a fazê-la para QUALQUER helper de rota,
+ * descoberto no fonte. Duas listas dos mesmos arquivos envelheceriam em
+ * velocidades diferentes, e a que envelhecesse primeiro passaria verde sozinha.
+ */

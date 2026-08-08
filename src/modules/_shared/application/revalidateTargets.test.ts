@@ -12,13 +12,34 @@ import { describe, expect, it } from 'vitest'
  * simplesmente não atualiza — o defeito só é notado quando alguém jura que
  * salvou e o número continua velho.
  *
- * A segunda regra guarda um erro que já aconteceu: `revalidatePath('/')` sem
- * `type` invalida apenas a página raiz, não a casca compartilhada. Quem escreve
- * `'/'` numa action quase sempre queria o layout — o nome no topo da tela.
+ * # Caminho derivado por helper
+ *
+ * Rota com segmento dinâmico não pode ser escrita literalmente na action: o id
+ * só existe depois da escrita. Ela vem de um helper — `patientPaths(output.id)`
+ * — e, até este arquivo aprender a segui-lo, esses caminhos eram **invisíveis
+ * para a auditoria**: a varredura passava verde sem nunca olhar para
+ * `/pacientes/<id>`.
+ *
+ * A checagem compara o TEMPLATE do helper com o padrão da rota real, sem
+ * executar nada: `/pacientes/${x}` e `/pacientes/[patientId]` viram o mesmo
+ * `/pacientes/:seg`. Renomear a pasta da rota, ou errar `historia` por
+ * `historico`, quebra o teste.
  */
 
-const MODULES_DIR = join(process.cwd(), 'src', 'modules')
-const APP_DIR = join(process.cwd(), 'src', 'app')
+const ROOT = process.cwd()
+const MODULES_DIR = join(ROOT, 'src', 'modules')
+const APP_DIR = join(ROOT, 'src', 'app')
+
+/**
+ * Helpers que uma action pode espalhar dentro de `revalidatePaths`.
+ *
+ * **Toda entrada nova precisa ser registrada aqui.** Um helper não mapeado é
+ * exatamente o buraco que esta fatia fecha: os caminhos dele não seriam
+ * conferidos contra `src/app`, e ninguém notaria.
+ */
+const ROUTE_HELPERS: Record<string, string> = {
+  patientPaths: 'src/lib/routes/patientRoutes.ts',
+}
 
 function collectFiles(dir: string, suffix: string): string[] {
   const found: string[] = []
@@ -34,6 +55,20 @@ function collectFiles(dir: string, suffix: string): string[] {
   }
 
   return found
+}
+
+/**
+ * Rota real e template de helper reduzidos à mesma forma.
+ *
+ * `[patientId]` e `${trimmed}` são a mesma coisa aqui: um segmento que só se
+ * conhece em tempo de execução. Comparar sem essa redução exigiria executar o
+ * helper, e aí o teste passaria a depender de um id de exemplo em vez do
+ * formato.
+ */
+function toPattern(value: string): string {
+  return value
+    .replace(/\[[^\]]+\]/g, ':seg')
+    .replace(/\$\{[^}]+\}/g, ':seg')
 }
 
 /** Rotas que existem em `src/app`, derivadas dos arquivos `page.tsx`. */
@@ -54,12 +89,20 @@ function existingRoutes(): Set<string> {
   return routes
 }
 
+interface HelperCall {
+  name: string
+  /** O argumento, como está escrito no fonte. */
+  argument: string
+}
+
 interface ActionRevalidation {
   file: string
   /** Strings simples de `revalidatePaths`. */
   paths: string[]
   /** Entradas com `type` explícito. */
   typed: { path: string; type: string }[]
+  /** Chamadas espalhadas, como `...patientPaths(output.id)`. */
+  helpers: HelperCall[]
 }
 
 function readRevalidations(): ActionRevalidation[] {
@@ -69,15 +112,15 @@ function readRevalidations(): ActionRevalidation[] {
       const source = readFileSync(file, 'utf8')
       const paths: string[] = []
       const typed: { path: string; type: string }[] = []
+      const helpers: HelperCall[] = []
 
       /*
-       * Cada bloco `revalidatePaths: [...]` do arquivo, nas DUAS formas.
+       * Cada bloco `revalidatePaths: [...]`, nas DUAS formas.
        *
-       * Desde que caminhos passaram a depender do resultado — a ficha de um
-       * paciente precisa do id —, `revalidatePaths` tambem aceita
-       * `(scope, output) => [...]`. Sem o trecho opcional da assinatura abaixo,
-       * esta varredura ficaria cega justamente para as actions mais novas, e
-       * passaria verde sem verificar nada.
+       * Desde que caminhos passaram a depender do resultado, `revalidatePaths`
+       * também aceita `(scope, output) => [...]`. Sem o trecho opcional da
+       * assinatura, esta varredura ficaria cega para as actions mais novas — e
+       * são justamente as que montam URL na mão.
        */
       for (const block of source.matchAll(
         /revalidatePaths:\s*(?:\([^)]*\)\s*=>\s*)?\[([\s\S]*?)\]/g,
@@ -88,6 +131,10 @@ function readRevalidations(): ActionRevalidation[] {
           /\{\s*path:\s*'([^']+)',\s*type:\s*'([^']+)'\s*\}/g,
         )) {
           typed.push({ path: entry[1], type: entry[2] })
+        }
+
+        for (const entry of body.matchAll(/\.\.\.(\w+)\(([^)]*)\)/g)) {
+          helpers.push({ name: entry[1], argument: entry[2].trim() })
         }
 
         // Strings soltas — descontadas as que já vieram no formato objeto.
@@ -101,13 +148,36 @@ function readRevalidations(): ActionRevalidation[] {
         }
       }
 
-      return { file: file.slice(process.cwd().length + 1), paths, typed }
+      return { file: file.slice(ROOT.length + 1), paths, typed, helpers }
     })
-    .filter((entry) => entry.paths.length > 0 || entry.typed.length > 0)
+    .filter(
+      (entry) =>
+        entry.paths.length > 0 ||
+        entry.typed.length > 0 ||
+        entry.helpers.length > 0,
+    )
+}
+
+/**
+ * Os templates de caminho que um helper de rota produz.
+ *
+ * Comentários saem antes da leitura, e não por elegância: o JSDoc de
+ * `patientRoutes` explica a decisão citando `/pacientes/` e `/pacientes/<id>`
+ * entre crases, como exemplos do que NÃO fazer. Lidos como código, viravam dois
+ * caminhos inexistentes e faziam o teste acusar o próprio comentário.
+ */
+function helperTemplates(relativeFile: string): string[] {
+  const source = readFileSync(join(ROOT, relativeFile), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|\s)\/\/[^\n]*/g, '$1')
+
+  // Template literal que comeca com barra: e um caminho de rota.
+  return [...source.matchAll(/`(\/[^`]*)`/g)].map((match) => match[1])
 }
 
 const revalidations = readRevalidations()
 const routes = existingRoutes()
+const routePatterns = new Set([...routes].map(toPattern))
 
 describe('varredura das Server Actions', () => {
   it('encontra as actions do produto', () => {
@@ -117,12 +187,6 @@ describe('varredura das Server Actions', () => {
   })
 
   it('enxerga também a forma com callback', () => {
-    /*
-     * As actions que revalidam a ficha de um paciente usam
-     * `revalidatePaths: (scope, output) => [...]`, porque o caminho depende do
-     * id. Uma varredura que só reconhecesse o array literal passaria verde sem
-     * olhar para elas — e são justamente as que montam URL na mão.
-     */
     const withCallback = revalidations
       .map((entry) => entry.file.replace(/\\/g, '/'))
       .filter((file) =>
@@ -161,11 +225,11 @@ describe('varredura das Server Actions', () => {
   })
 
   it('as duas actions de identidade revalidam a casca inteira', () => {
-    const layoutTargets = revalidations.filter((entry) =>
-      entry.typed.some((item) => item.path === '/' && item.type === 'layout'),
-    )
-
-    const files = layoutTargets.map((entry) => entry.file.replace(/\\/g, '/'))
+    const files = revalidations
+      .filter((entry) =>
+        entry.typed.some((item) => item.path === '/' && item.type === 'layout'),
+      )
+      .map((entry) => entry.file.replace(/\\/g, '/'))
 
     expect(files).toContain(
       'src/modules/identity/actions/updateProfile.action.ts',
@@ -174,22 +238,115 @@ describe('varredura das Server Actions', () => {
       'src/modules/settings/actions/updateClinicProfile.action.ts',
     )
   })
+})
 
-  it('nenhuma action revalida uma rota que ela não alimenta', () => {
+describe('caminhos derivados por helper', () => {
+  const usedHelpers = [
+    ...new Set(
+      revalidations.flatMap((entry) => entry.helpers.map((call) => call.name)),
+    ),
+  ]
+
+  it('algum helper de rota está em uso', () => {
+    // Se isto zerar, os testes abaixo passam sem verificar nada — e o buraco
+    // que esta secao fecha volta em silencio.
+    expect(usedHelpers.length).toBeGreaterThan(0)
+  })
+
+  it('TODO helper espalhado está mapeado', () => {
+    /*
+     * O teste regressivo do buraco.
+     *
+     * Uma action que espalhasse `...invoicePaths(output.id)` sem registrar o
+     * helper teria seus caminhos ignorados pela auditoria inteira: nao seriam
+     * conferidos contra `src/app`, nao entrariam na checagem de rota alheia, e
+     * ninguem notaria ate a tela nao atualizar em producao.
+     */
+    const unmapped = usedHelpers.filter((name) => !(name in ROUTE_HELPERS))
+
+    expect(unmapped).toEqual([])
+  })
+
+  it('todo helper mapeado continua sendo usado', () => {
+    // Registro que sobrevive ao seu unico chamador vira documentacao falsa.
+    const unused = Object.keys(ROUTE_HELPERS).filter(
+      (name) => !usedHelpers.includes(name),
+    )
+
+    expect(unused).toEqual([])
+  })
+
+  it('os caminhos do helper batem com rotas reais', () => {
+    const broken: string[] = []
+
+    for (const [name, file] of Object.entries(ROUTE_HELPERS)) {
+      const templates = helperTemplates(file)
+
+      // Helper sem template nenhum e leitura quebrada, nao helper vazio.
+      expect(templates.length).toBeGreaterThan(0)
+
+      for (const template of templates) {
+        if (!routePatterns.has(toPattern(template))) {
+          broken.push(`${name}: ${template}`)
+        }
+      }
+    }
+
+    /*
+     * `/pacientes/${id}` casa com `/pacientes/[patientId]`; `/pacientes/${id}/
+     * historia` nao casa com nada. Renomear a pasta da rota tambem quebra aqui,
+     * que e o ponto — hoje o helper e a rota so se encontram em producao.
+     */
+    expect(broken).toEqual([])
+  })
+
+  it('o argumento do helper vem do OUTPUT, nunca do formulário', () => {
+    /*
+     * `output` e a linha que o repositorio devolveu, depois da RLS. `input` e o
+     * que o navegador mandou. Montar a URL a partir do segundo deixaria o
+     * cliente escolher qual rota expirar — o mesmo motivo pelo qual `cacheTags`
+     * nao recebe `input`.
+     */
+    const suspicious = revalidations.flatMap((entry) =>
+      entry.helpers
+        .filter((call) => !call.argument.startsWith('output.'))
+        .map((call) => `${entry.file} -> ${call.name}(${call.argument})`),
+    )
+
+    expect(suspicious).toEqual([])
+  })
+})
+
+describe('nenhuma action revalida rota que não alimenta', () => {
+  it('cada módulo fica dentro do que suas telas leem', () => {
     /*
      * Mapa deliberadamente escrito à mão, e por módulo: é a afirmação de quais
      * telas leem o dado que cada módulo escreve. Uma action que revalidasse
-     * `/prontuarios` ao mexer em convênio nao quebraria nada visivelmente — so
+     * `/prontuarios` ao mexer em convênio não quebraria nada visivelmente — só
      * jogaria fora cache alheio a cada escrita.
+     *
+     * Os padrões com `:seg` são os caminhos do helper, já reduzidos.
      */
     const allowedByModule: Record<string, readonly string[]> = {
       billing: ['/financeiro'],
       encounters: ['/atendimentos', '/dashboard'],
       identity: ['/'],
       insurance: ['/convenios'],
-      patients: ['/pacientes', '/dashboard', '/relatorios'],
+      patients: [
+        '/pacientes',
+        '/dashboard',
+        '/relatorios',
+        '/pacientes/:seg',
+        '/pacientes/:seg/historico',
+      ],
       records: ['/prontuarios'],
-      scheduling: ['/agenda', '/dashboard', '/relatorios'],
+      scheduling: [
+        '/agenda',
+        '/dashboard',
+        '/relatorios',
+        '/pacientes/:seg',
+        '/pacientes/:seg/historico',
+      ],
       settings: ['/', '/configuracoes', '/agenda'],
       team: ['/equipe'],
     }
@@ -199,7 +356,14 @@ describe('varredura das Server Actions', () => {
       const moduleName = normalized.split('/')[2]
       const allowed = allowedByModule[moduleName] ?? []
 
-      return [...entry.paths, ...entry.typed.map((item) => item.path)]
+      const literal = [...entry.paths, ...entry.typed.map((item) => item.path)]
+
+      const derived = entry.helpers.flatMap((call) => {
+        const file = ROUTE_HELPERS[call.name]
+        return file ? helperTemplates(file).map(toPattern) : []
+      })
+
+      return [...literal, ...derived]
         .filter((path) => !allowed.includes(path))
         .map((path) => `${normalized} -> ${path}`)
     })
