@@ -9,13 +9,11 @@ import {
   BellRing,
   Building2,
   Bot,
-  CheckCircle2,
   Clock3,
   FileCheck2,
   FileText,
   Info,
   LockKeyhole,
-  Mail,
   MessageCircle,
   MoreHorizontal,
   Paperclip,
@@ -35,10 +33,8 @@ import {
 import { useState, type CSSProperties, type FormEvent } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
-import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import { SearchField } from '@/components/ui/search-field'
 import { SelectField } from '@/components/ui/select-field'
 import { StatCard } from '@/components/ui/stat-card'
@@ -211,26 +207,6 @@ export function ConfiguracoesScreen() {
   )
 }
 
-const teamMembers = [
-  { id: 'member-1', name: 'Tamara Vieira', role: 'Administradora', email: 'tamara@focusscare.com.br', status: 'Ativo', lastActivity: 'Agora' },
-  { id: 'member-2', name: 'Dra. Ana Ribeiro', role: 'Clínica geral', email: 'ana.ribeiro@focusscare.com.br', status: 'Ativo', lastActivity: 'Hoje, 09:32' },
-  { id: 'member-3', name: 'Dr. Paulo Freitas', role: 'Ortopedia', email: 'paulo.freitas@focusscare.com.br', status: 'Ativo', lastActivity: 'Ontem, 17:20' },
-  { id: 'member-4', name: 'Helena Souza', role: 'Nutrição', email: 'helena.souza@focusscare.com.br', status: 'Convite pendente', lastActivity: 'Aguardando acesso' },
-]
-
-export function EquipeScreen() {
-  const [query, setQuery] = useState('')
-  const members = teamMembers.filter((member) => `${member.name} ${member.role}`.toLowerCase().includes(query.trim().toLowerCase()))
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Gestão da clínica" title="Equipe" description="Organize as pessoas que fazem o cuidado acontecer." actions={<Button disabled title="Convites serão habilitados com o módulo de permissões"><Plus aria-hidden className="size-4" /> Convidar profissional</Button>} />
-      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Membros ativos" value="03" icon={UsersRound} /><StatCard label="Convites pendentes" value="01" icon={Mail} tone="attention" /><StatCard label="Disponíveis hoje" value="02" icon={CheckCircle2} /></div>
-      <Card className="overflow-hidden"><div className="flex flex-col gap-4 border-b border-border-card p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-card-title font-semibold text-foreground">Pessoas da clínica</h2><p className="mt-0.5 text-label text-muted">Funções e acessos em um só lugar.</p></div><SearchField label="Buscar membro" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou função" className="sm:w-72" /></div><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[720px] text-left"><thead className="border-b border-border-card bg-background text-label font-semibold text-muted"><tr><th className="px-5 py-3">Pessoa</th><th className="px-5 py-3">Função</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Última atividade</th><th className="px-5 py-3 text-right">Ações</th></tr></thead><tbody className="divide-y divide-border-card">{members.map((member) => <tr key={member.id} className="text-aux hover:bg-row-hover"><td className="px-5 py-4"><div className="flex items-center gap-3"><Avatar name={member.name} size="sm" /><div><p className="font-semibold text-foreground">{member.name}</p><p className="mt-0.5 text-label text-muted">{member.email}</p></div></div></td><td className="px-5 py-4 text-muted">{member.role}</td><td className="px-5 py-4"><StatusBadge tone={member.status === 'Ativo' ? 'positive' : 'pending'}>{member.status}</StatusBadge></td><td className="px-5 py-4 text-muted">{member.lastActivity}</td><td className="px-5 py-4"><div className="flex justify-end"><button type="button" disabled title="Permissões detalhadas em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></td></tr>)}</tbody></table></div><div className="divide-y divide-border-card md:hidden">{members.map((member) => <div key={member.id} className="flex items-start gap-3 p-4"><Avatar name={member.name} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-aux font-semibold text-foreground">{member.name}</p><p className="mt-1 truncate text-label text-muted">{member.role} · {member.email}</p><div className="mt-3 flex items-center justify-between gap-3"><StatusBadge tone={member.status === 'Ativo' ? 'positive' : 'pending'}>{member.status}</StatusBadge><span className="text-label text-muted">{member.lastActivity}</span></div></div></div>)}</div>{members.length === 0 ? <EmptyState icon={UsersRound} title="Nenhum membro encontrado" /> : null}</Card>
-      <Notice>Prontuários e informações sensíveis continuam sujeitos às permissões definidas no Supabase.</Notice>
-    </div>
-  )
-}
 
 const insuranceProviders = [
   { name: 'Particular', patients: '842 pacientes', table: 'Tabela própria', status: 'Ativo' },
