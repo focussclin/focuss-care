@@ -11,6 +11,11 @@
 **Validação atual:** 754 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
+**Atualização do banco (08/08/2026):** as quatro migrations propostas foram
+aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
+agendamentos e RPC de convites. As cinco verificações estruturais retornaram
+`true`, e os tipos locais foram regenerados no commit `851688e`.
+
 ---
 
 ## 1. Resumo por status
@@ -182,6 +187,10 @@ de progresso.
 ---
 
 ## 6. Bloqueios reais, e o que cada um custa
+
+> Atualização: P-P6, P-INV, P-OVL e P-GLO foram resolvidos no banco remoto em
+> 08/08/2026. O quadro abaixo mantém os demais bloqueios ainda válidos; as
+> referências a essas quatro migrations representam o estado anterior.
 
 **B1 — sem acesso SQL ao banco.** Não há `DATABASE_URL`, senha nem
 `SUPABASE_ACCESS_TOKEN` neste ambiente. Consequência: nenhuma migration é

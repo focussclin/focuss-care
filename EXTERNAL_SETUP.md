@@ -8,6 +8,16 @@
 
 ---
 
+## Estado atualizado — 08/08/2026
+
+As quatro migrations pendentes do projeto foram aplicadas no Supabase e
+verificadas estruturalmente. O arquivo `src/lib/supabase/database.types.ts`
+foi regenerado a partir do schema remoto e commitado em `851688e`.
+
+A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
+Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
+ao `.env.example` nem ao bundle do navegador.
+
 ## 1. Supabase — obrigatório para qualquer dado real
 
 Um único projeto Supabase cobre banco, autenticação e RLS. **É a única dependência
