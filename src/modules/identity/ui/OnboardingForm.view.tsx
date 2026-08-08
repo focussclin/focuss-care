@@ -8,7 +8,6 @@ import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
 
-import { signOutAction } from '../actions/signOut.action'
 import {
   createClinicSchema,
   slugifyClinicName,
@@ -32,6 +31,7 @@ export function OnboardingFormView({
   fieldErrors,
   isSuccess,
   claimsStale,
+  onSignOut,
   greetingName,
 }: OnboardingFormViewProps) {
   const {
@@ -149,7 +149,7 @@ export function OnboardingFormView({
       </form>
 
       {claimsStale ? (
-        <form action={signOutAction} className="mt-4">
+        <form action={onSignOut} className="mt-4">
           <Button type="submit" variant="secondary" size="lg" fullWidth>
             Sair e entrar novamente
           </Button>

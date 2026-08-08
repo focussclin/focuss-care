@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 
 import { createClinicAction } from '../actions/createClinic.action'
+import { signOutAction } from '../actions/signOut.action'
 import {
   clinicMessages,
   type CreateClinicInput,
@@ -63,6 +64,7 @@ export function OnboardingFormContainer({
       fieldErrors={fieldErrors}
       isSuccess={isSuccess}
       claimsStale={claimsStale}
+      onSignOut={signOutAction}
       greetingName={greetingName}
     />
   )
