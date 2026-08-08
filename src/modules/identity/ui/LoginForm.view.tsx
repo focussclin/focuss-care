@@ -23,6 +23,7 @@ export function LoginFormView({
   onSubmit,
   isSubmitting,
   formError,
+  notice,
   socialAuthEnabled,
   onGoogleSignIn,
   isGoogleSubmitting = false,
@@ -62,6 +63,14 @@ export function LoginFormView({
       <p className="mt-2 text-control text-muted">
         Entre na sua conta para continuar de onde parou.
       </p>
+
+      {/*
+        O aviso externo vem ANTES do erro do envio, e nao no lugar dele: o
+        primeiro fala da tentativa anterior (o retorno do OAuth), o segundo fala
+        do que a pessoa acabou de enviar. Trocar um pelo outro esconderia a
+        razao de a tela ter sido reaberta.
+      */}
+      {notice}
 
       {formError ? (
         <div

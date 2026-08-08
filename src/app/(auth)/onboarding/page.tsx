@@ -11,9 +11,27 @@ export const metadata: Metadata = {
 }
 
 /**
- * A sessao (cookie) decide se esta tela existe ou se redireciona — nao ha shell
- * estatico possivel antes dessa leitura. Mesma opcao documentada de `/login`,
- * agora por `cookies()` em vez de `searchParams` (F-02).
+ * P-C2 — este segmento NAO pode sair do `instant = false`, e o motivo nao e
+ * falta de fallback desenhado.
+ *
+ * O conserto padrao (empurrar a leitura para dentro de um `<Suspense>`) muda o
+ * redirecionamento de lugar: hoje ele acontece ANTES da resposta comecar, e o
+ * navegador recebe um 307 de verdade. Dentro de um boundary, a resposta ja
+ * teria comecado a ser enviada e o desvio viraria navegacao no cliente. Duas
+ * consequencias, as duas ruins:
+ *
+ *  - **Sem JavaScript, o desvio nao acontece.** Quem ja tem clinica ficaria
+ *    parado numa tela de configuracao inicial que nao e mais dele. Portao de
+ *    autenticacao que depende de JS nao e portao.
+ *  - **Com JavaScript, pisca.** A pessoa ve a casca do onboarding e e jogada
+ *    para `/dashboard` — conteudo pintado para ser descartado.
+ *
+ * E nao ha o que ganhar em troca: a pagina INTEIRA e a decisao de sessao. O
+ * shell estatico possivel seria um esqueleto neutro, e um esqueleto antes do
+ * redirecionamento e uma pintura a mais, nao uma a menos.
+ *
+ * `/login` saiu do `instant = false` porque nao redireciona: la o formulario e
+ * o shell, e so o aviso de OAuth depende da requisicao.
  */
 export const instant = false
 

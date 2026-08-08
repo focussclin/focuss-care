@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type ReactNode } from 'react'
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
@@ -13,24 +13,18 @@ import { LoginFormView } from './LoginForm.view'
  * Nao contem decisao visual: apenas dados, estado de envio e navegacao.
  */
 interface LoginFormContainerProps {
-  oauthError?: string
-  nextPath?: string
+  /**
+   * Aviso montado pela ROTA, exibido acima do erro do envio.
+   *
+   * Hoje e o retorno do OAuth (`?error=`), dentro de um `<Suspense>`. Ele chega
+   * como elemento pronto, e nao como texto, porque o formulario precisa ficar
+   * FORA da fronteira dinamica para prerenderizar — ver `OauthErrorNotice`.
+   */
+  notice?: ReactNode
 }
 
-const oauthMessages: Record<string, string> = {
-  oauth_cancelled: 'O login com Google foi cancelado. Você pode tentar novamente.',
-  oauth_error: 'Não foi possível concluir o login com Google. Tente novamente.',
-  invalid_callback: 'O retorno da autenticação é inválido. Inicie o login novamente.',
-  connection_error: 'Não foi possível conectar ao serviço de autenticação.',
-}
-
-export function LoginFormContainer({
-  oauthError,
-  nextPath = '/dashboard',
-}: LoginFormContainerProps) {
-  const [formError, setFormError] = useState<string | null>(
-    oauthError ? oauthMessages[oauthError] ?? oauthMessages.oauth_error : null,
-  )
+export function LoginFormContainer({ notice }: LoginFormContainerProps) {
+  const [formError, setFormError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [isGooglePending, setIsGooglePending] = useState(false)
 
@@ -63,8 +57,19 @@ export function LoginFormContainer({
       return
     }
 
+    /*
+     * O retorno do OAuth vai SEMPRE para `/dashboard`.
+     *
+     * Antes existia um prop `nextPath`, vindo de `?next=` da URL, e ele era
+     * fixado em `/dashboard` na linha seguinte — ou seja, nao tinha efeito
+     * nenhum. O prop saiu; a decisao continua, agora dita em voz alta: destino
+     * escolhido pela URL num retorno de autenticacao e redirecionamento aberto,
+     * e o convite (`/login?next=/convite/<token>`) e o unico caso que perde
+     * algo com isso. Preserva-lo exige uma lista de destinos permitidos, que e
+     * trabalho proprio — nao um `set()` que aceita o que vier.
+     */
     const callbackUrl = new URL('/auth/callback', window.location.origin)
-    callbackUrl.searchParams.set('next', nextPath === '/dashboard' ? nextPath : '/dashboard')
+    callbackUrl.searchParams.set('next', '/dashboard')
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -85,6 +90,7 @@ export function LoginFormContainer({
       onSubmit={handleSubmit}
       isSubmitting={isPending}
       formError={formError}
+      notice={notice}
       // Habilitar quando o provedor OAuth estiver configurado no Supabase.
       // O handoff pede o botao social apenas se a autenticacao estiver disponivel.
       socialAuthEnabled

@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 573 testes em 43 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 588 testes em 45 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -19,7 +19,7 @@
 |---|---|---|
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 16 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
-| **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
+| **PENDENTE** | Não implementado, e nada bloqueia começar | 1 |
 | **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
 
 ---
@@ -64,7 +64,8 @@ As 21 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
 | `/` | **COMPLETO** | Estático | Pública |
-| `/login`, `/cadastro`, `/recuperar-senha` | **COMPLETO** | Supabase Auth | Pública |
+| `/login`, `/cadastro` | **COMPLETO** | Supabase Auth · `/login` prerenderiza; só o aviso de retorno do OAuth é dinâmico | Pública |
+| `/recuperar-senha` | **PENDENTE** | Nenhum — o formulário não tem `action` nem `onSubmit`, e `resetPasswordForEmail` não é chamado em lugar nenhum: o botão é decorativo | Pública |
 | `/onboarding` | **COMPLETO** | `create_clinic()` | Sessão sem clínica |
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
@@ -126,7 +127,7 @@ projeto Supabase.
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
-| **P-C2** | `cacheComponents` exige shell estático | **5 segmentos** usam `instant = false` (eram 14). Um cobre toda a área autenticada; os outros quatro são de `(auth)` e precisam de fallback desenhado | Empurrar leitura de sessão/`searchParams` para dentro de `<Suspense>` nas quatro telas públicas |
+| **P-C2** | `cacheComponents` exige shell estático | **4 segmentos** usam `instant = false` (eram 14, depois 5). `/login` saiu e agora prerenderiza. Os quatro restantes têm motivo escrito no próprio arquivo e registrado em `src/app/instantOptOuts.test.ts` — três são portões de sessão que terminam em `redirect`, e convertê-los trocaria um 307 por navegação dependente de JavaScript | Só encolhe junto com o que os bloqueia: `/recuperar-senha` depende de a tela passar a enviar de fato; `/onboarding` e `/convite` dependeriam de mover o portão para fora da página |
 
 ---
 
@@ -134,7 +135,7 @@ projeto Supabase.
 
 | Item | Por que ainda não |
 |---|---|
-| _(vazio)_ | Toda pendência local sem bloqueio foi entregue. O que resta depende de acesso ao banco ou de integração externa — ver §6 |
+| **Recuperação de senha** | A tela `/recuperar-senha` existe, e o botão "Enviar link de recuperação" **não envia nada**: o `<form>` não tem `action` nem `onSubmit`, e `resetPasswordForEmail` não aparece em lugar nenhum do projeto. Encontrado em 08/08/2026, ao tratar P-C2. Nada bloqueia — o método é do cliente Supabase que já existe; falta a fatia inteira (envio, validação, estado, tela de "e-mail enviado" e a rota de definir a nova senha) |
 
 ---
 

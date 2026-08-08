@@ -23,14 +23,19 @@ export const metadata: Metadata = {
  * quem decide é a pessoa, não a navegação.
  */
 /**
- * `cacheComponents` (F-02) exige que toda rota produza um shell estático não
- * vazio. Esta lê a sessão em cookie ANTES de decidir se redireciona — não há
- * shell a prerenderizar, porque nem se sabe ainda se a rota renderiza.
+ * P-C2 — este segmento **permanece** com `instant = false`, pelo mesmo motivo
+ * de `/onboarding`: a rota lê a sessão para decidir se redireciona.
  *
- * `instant = false` é a saída documentada para adoção incremental: marca o
- * segmento como "pode bloquear", sem forçar a rota a ser dinâmica e sem cachear
- * nada. Mesmo tratamento já dado à casca de `(app)` — é a pendência P-C2, agora
- * com um segmento a mais.
+ * Empurrar essa leitura para dentro de um `<Suspense>` faria o desvio deixar de
+ * ser um 307 e virar navegação no cliente. Aqui o caso é ainda mais concreto que
+ * no onboarding: quem chega sem sessão precisa ir para o login **com o `next`
+ * carregando o token**, e é esse desvio que faz o convite sobreviver ao login.
+ * Se ele depender de JavaScript, um visitante sem JS fica numa tela de convite
+ * que nunca vai conseguir aceitar — e o link, que costuma vir de e-mail e é
+ * usado uma vez, se perde.
+ *
+ * O que se ganharia em troca é pequeno: o shell seria o título "Você foi
+ * convidado", pintado antes de saber se a pessoa sequer pode aceitar.
  */
 export const instant = false
 
