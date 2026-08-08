@@ -17,6 +17,8 @@ interface AppHeaderProps {
   userRole: string
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  /** Centro real de notificações, montado na casca com sessão e tenant. */
+  notificationSlot?: ReactNode
   /** Seletor de clinica (I-03), quando ha mais de um vinculo. */
   clinicSwitcher?: ReactNode
   onMenuClick: () => void
@@ -45,6 +47,7 @@ export function AppHeader({
   userRole,
   clinicName,
   clinicSwitcher,
+  notificationSlot,
   onMenuClick,
   onOpenCommands,
 }: AppHeaderProps) {
@@ -117,15 +120,17 @@ export function AppHeader({
             ensina a pessoa a ignorá-lo, e é o primeiro que ela vai ignorar
             quando houver um de verdade.
           */}
-          <button
-            type="button"
-            aria-label="Notificações: o sistema ainda não envia avisos automáticos"
-            title="O sistema ainda não envia avisos automáticos"
-            disabled
-            className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
-          >
-            <Bell aria-hidden className="size-[18px]" />
-          </button>
+          {notificationSlot ?? (
+            <button
+              type="button"
+              aria-label="Notificações indisponíveis nesta demonstração"
+              title="Notificações indisponíveis nesta demonstração"
+              disabled
+              className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
+            >
+              <Bell aria-hidden className="size-[18px]" />
+            </button>
+          )}
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>

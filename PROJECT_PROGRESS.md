@@ -131,7 +131,7 @@ achou:**
 
 | Frente | Resultado |
 |---|---|
-| Botão/formulário inerte | Nenhum. Os cinco controles desabilitados que restam (sino de notificações, filtro de última visita, paginação no fim da lista) dizem na própria tela por que estão assim |
+| Botão/formulário inerte | Nenhum. Os controles sem operação local restante (filtro de última visita e paginação no fim da lista) dizem na própria tela por que estão assim; o sino agora lê notificações reais quando há sessão |
 | `TODO`/`FIXME` no código | Nenhum |
 | `href="#"`, `onClick` vazio, `<form>` sem envio | Nenhum |
 | `clinic_id` nos repositórios | Todos os `.from()` filtram por clínica, exceto `profiles` (chaveada por usuário) e `clinics` (chaveada pelo próprio id) — corretos |
@@ -238,6 +238,7 @@ que não funciona:
 |---|---|---|
 | Emissão fiscal numerada | `/financeiro` | `issue_invoice` com assinatura não resolvida; numeração que pula é problema com a prefeitura |
 | Repasse a profissional | `/financeiro` | `professional_payouts` existe, mas a RPC de prévia/emissão ainda não tem assinatura verificável |
+| Geração automática de notificações | `/whatsapp`, `/automacoes` | O centro lê e marca avisos persistidos; os produtores automáticos dependem do executor de automações e integrações externas |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |
 | Elegibilidade junto à operadora | `/convenios` | Exige integração externa; o que existe é a validade cadastrada |
 | Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |
