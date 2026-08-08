@@ -23,6 +23,13 @@ import { isAppointmentRepositoryError } from '../domain/AppointmentRepositoryErr
  */
 export interface ScheduleFailureMessages {
   conflict: string
+  /**
+   * Chamada à ação, acrescentada ao motivo que o adapter montou.
+   *
+   * Duas partes porque a primeira é dinâmica ("Sábado: a clínica atende das
+   * 08:00 às 12:00") e a segunda é fixa. Só a fixa mora em `scheduleMessages`.
+   */
+  outsideBusinessHours: string
   forbidden: string
   notFound: string
   unavailable: string
@@ -43,6 +50,22 @@ export function toScheduleFailure<F extends string>(
     switch (cause.reason) {
       case 'conflict':
         return err<F>('conflict', messages.conflict)
+      /*
+       * 'needs-confirmation', e não 'conflict': a operação é possível, e quem
+       * recebe este código precisa OFERECER a confirmação. Devolver 'conflict'
+       * aqui transformaria uma pergunta em recusa com texto amigável, e a
+       * recepção acabaria registrando hora falsa para conseguir marcar.
+       *
+       * `userDetail` é montado por este código a partir da configuração da
+       * clínica — nunca é mensagem do Postgres. Ver o JSDoc do campo.
+       */
+      case 'outside-business-hours':
+        return err<F>(
+          'needs-confirmation',
+          [cause.userDetail, messages.outsideBusinessHours]
+            .filter(Boolean)
+            .join(' '),
+        )
       case 'not-found':
         return err<F>('not-found', messages.notFound)
       case 'forbidden':

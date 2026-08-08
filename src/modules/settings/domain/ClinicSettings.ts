@@ -1,3 +1,10 @@
+import type {
+  BusinessDay,
+  BusinessHours,
+  BusinessHoursSource,
+  Weekday,
+} from '@/lib/clinic/business-hours'
+
 /**
  * Configuração da clínica — feature **C-01**.
  *
@@ -21,42 +28,21 @@
  *    produto os lê**: data e hora são renderizadas pelo relógio do dispositivo.
  *    Um seletor que grava o fuso sem mudar o que a agenda mostra seria pior que
  *    a ausência — a pessoa acreditaria ter resolvido um problema que continua lá.
+ *
+ * # O horário de funcionamento não é definido aqui
+ *
+ * `BusinessDay` e companhia vivem em `lib/clinic/business-hours`, porque a
+ * agenda (A-02) verifica o mesmo dado que esta tela edita — e a regra 4 impede
+ * um módulo de alcançar o interior do outro. O tipo é reexportado para que quem
+ * lê este arquivo encontre o vocabulário completo.
  */
-
-/** Dia da semana no padrão ISO-8601: 1 = segunda-feira … 7 = domingo. */
-export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
-
-/**
- * O expediente de um dia.
- *
- * # Um turno por dia, e isto é uma limitação conhecida
- *
- * Clínica com intervalo de almoço tem dois turnos — 08:00–12:00 e 13:00–18:00 —
- * e este formato não os representa. Modelar turnos partidos dobra a interface, e
- * a fatia que vai CONSUMIR o horário (A-02, bloqueio de agendamento fora do
- * expediente) ainda não existe para dizer de quanta precisão ela precisa.
- *
- * A tela declara a limitação em vez de deixar a pessoa descobrir que o intervalo
- * sumiu depois de salvar.
- */
-export interface BusinessDay {
-  weekday: Weekday
-  /** Quando true, `opensAt` e `closesAt` são ignorados. */
-  closed: boolean
-  /** 'HH:mm' no relógio local da clínica. */
-  opensAt: string
-  /** 'HH:mm'. Sempre depois de `opensAt` — o schema recusa o contrário. */
-  closesAt: string
-}
-
-/** Os sete dias, sempre completos e sempre em ordem. */
-export type BusinessHours = readonly BusinessDay[]
+export type { BusinessDay, BusinessHours, BusinessHoursSource, Weekday }
 
 /**
  * Padrões que a agenda assume quando ninguém escolhe nada.
  *
- * Diferente do horário de funcionamento, isto **já é consumido hoje**: o
- * formulário de novo agendamento (A-01) abre com esta duração selecionada.
+ * Diferente do horário de funcionamento, isto **já é consumido**: o formulário
+ * de novo agendamento (A-01) abre com esta duração selecionada.
  */
 export interface AppointmentDefaults {
   durationMinutes: number
@@ -82,22 +68,6 @@ export interface ClinicProfileInput {
   legalName: string | null
   cnpj: string | null
 }
-
-/**
- * De onde veio o horário que está na tela.
- *
- * Existe por causa de um risco concreto: `clinic_settings.business_hours` é uma
- * coluna `jsonb` livre, que um seed, uma migration futura ou outra ferramenta
- * podem ter preenchido num formato que este código não entende. Se nesse caso a
- * tela simplesmente mostrasse o padrão, a primeira pessoa a clicar em "Salvar"
- * apagaria uma configuração que nunca chegou a ver.
- *
- *  - `stored` — lido do banco e reconhecido.
- *  - `default` — não há configuração salva ainda.
- *  - `unrecognized` — há algo salvo que este código não sabe ler. A tela avisa
- *    ANTES de deixar salvar.
- */
-export type BusinessHoursSource = 'stored' | 'default' | 'unrecognized'
 
 export interface ClinicSettings {
   profile: ClinicProfile

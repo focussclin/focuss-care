@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_BUSINESS_HOURS } from '../domain/settingsDefaults'
+import { DEFAULT_BUSINESS_HOURS } from '@/lib/clinic/business-hours'
 import { SupabaseClinicSettingsRepository } from './SupabaseClinicSettingsRepository'
 
 /**

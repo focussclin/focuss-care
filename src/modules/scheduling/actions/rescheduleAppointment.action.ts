@@ -68,12 +68,14 @@ const runRescheduleAppointment = createAction<
         input.appointmentId,
         input.startsAt,
         input.endsAt,
+        { allowOutsideBusinessHours: input.confirmOutsideBusinessHours },
       )
 
       return ok<AppointmentDto>(toAppointmentDto(appointment))
     } catch (cause) {
       return toScheduleFailure('appointment.reschedule', cause, {
         conflict: scheduleMessages.conflict,
+        outsideBusinessHours: scheduleMessages.outsideBusinessHours,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,
@@ -82,13 +84,15 @@ const runRescheduleAppointment = createAction<
     }
   },
 
-  audit: (output) => ({
+  audit: (output, input) => ({
     action: 'appointment.rescheduled',
     entityType: 'appointment',
     entityId: output.id,
     after: {
       starts_at: output.startsAt,
       duration_minutes: output.durationMinutes,
+      /** Ver `createAppointment.action.ts`: a exceção fica registrada (A-02). */
+      outside_business_hours: input.confirmOutsideBusinessHours,
     },
   }),
 })

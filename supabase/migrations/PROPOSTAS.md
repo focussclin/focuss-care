@@ -51,7 +51,36 @@ confirmar que o vínculo aparece em `memberships` com `status = 'active'`.
 
 ---
 
-## 3. Índices de `patients` — P-02b
+## 3. `20260808_appointments_no_overlap.sql`
+
+**Problema.** A detecção de sobreposição de A-02 lê e depois escreve, em duas
+idas ao banco — o PostgREST não expõe transação. Duas recepcionistas clicando no
+mesmo instante podem passar as duas pela leitura e gravar as duas.
+
+**Por que só o banco resolve.** A janela é de milissegundos e não se fecha na
+aplicação: qualquer verificação prévia é, por definição, anterior à escrita. A
+constraint de exclusão avalia a sobreposição no momento do `INSERT`, com o
+bloqueio da própria transação.
+
+**Consequência hoje:** o caso real está coberto (pessoas diferentes marcando em
+momentos diferentes recebem a recusa correta). O que fica exposto é a corrida
+simultânea, que produziria dois atendimentos no mesmo horário do mesmo
+profissional.
+
+**Não exige mudança de código.** `toWriteError` já traduz `23P01` para "horário
+ocupado" — a mensagem que o usuário vê é a mesma, venha a recusa da consulta
+prévia ou da constraint.
+
+**Antes de aplicar:** rodar a consulta de diagnóstico do fim do arquivo. Dados já
+sobrepostos impedem a criação da constraint.
+
+**Verificar depois:** dois `INSERT` simultâneos no mesmo intervalo (o segundo
+falha), 10:00–10:30 seguido de 10:30–11:00 (funciona), e remarcar em cima de um
+cancelado (funciona).
+
+---
+
+## 4. Índices de `patients` — P-02b
 
 Ainda **não escritos**, porque dependem de saber o que já existe: sem acesso SQL
 não dá para verificar quais índices e extensões o banco tem, e criar um índice

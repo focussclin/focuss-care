@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import type { Weekday } from '../domain/ClinicSettings'
+import {
+  businessDaySchema,
+  weekdayLabels,
+  type Weekday,
+} from '@/lib/clinic/business-hours'
 
 export const settingsMessages = {
   invalidFields: 'Revise os campos destacados e tente novamente.',
@@ -35,18 +39,12 @@ export const settingsMessages = {
     'Há um horário de funcionamento salvo em um formato que esta tela não reconhece. Os valores abaixo são os padrões — salvar vai substituir o que está no banco.',
 } as const
 
-/** Nomes por extenso, na ordem ISO (1 = segunda). Usados na tela e nos erros. */
-export const weekdayLabels: Record<Weekday, string> = {
-  1: 'Segunda-feira',
-  2: 'Terça-feira',
-  3: 'Quarta-feira',
-  4: 'Quinta-feira',
-  5: 'Sexta-feira',
-  6: 'Sábado',
-  7: 'Domingo',
-}
-
-export const WEEKDAYS: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 7]
+/*
+ * `weekdayLabels`, `WEEKDAYS` e o formato do dia vêm de `lib/clinic`: a agenda
+ * (A-02) nomeia os mesmos dias ao recusar um horário fora do expediente, e duas
+ * listas separadas divergiriam na primeira mudança.
+ */
+export { WEEKDAYS, weekdayLabels } from '@/lib/clinic/business-hours'
 
 /**
  * Durações que a tela oferece.
@@ -66,9 +64,6 @@ export const durationChoices = [
 ] as const
 
 const durationValues = durationChoices.map((choice) => choice.value)
-
-/** 'HH:mm' em relógio de 24 horas. */
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 
 /** O nome precisa ter ao menos um caractere alfanumérico de verdade. */
 const ALPHANUMERIC = /[\p{L}\p{N}]/u
@@ -167,21 +162,6 @@ export const updateClinicProfileSchema = z.object({
 
 export type UpdateClinicProfileInput = z.infer<typeof updateClinicProfileSchema>
 
-const businessDaySchema = z.object({
-  weekday: z.union([
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-    z.literal(5),
-    z.literal(6),
-    z.literal(7),
-  ]),
-  closed: z.boolean(),
-  opensAt: z.string().regex(TIME_PATTERN),
-  closesAt: z.string().regex(TIME_PATTERN),
-})
-
 /**
  * A semana inteira, sempre.
  *
@@ -240,21 +220,6 @@ export const updateAppointmentDefaultsSchema = z.object({
 export type UpdateAppointmentDefaultsInput = z.infer<
   typeof updateAppointmentDefaultsSchema
 >
-
-/**
- * O formato guardado em `clinic_settings.business_hours`.
- *
- * É o MESMO schema que valida o formulário, de propósito: coluna `jsonb` não tem
- * forma garantida pelo banco, então a única defesa contra o que está lá dentro é
- * reler com o mesmo contrato com que se escreveu. Duas definições separadas
- * divergiriam na primeira mudança.
- *
- * Um objeto, e não um array puro, porque é o que permite acrescentar chave nova
- * depois (turnos partidos, feriados) sem que a leitura antiga quebre.
- */
-export const storedBusinessHoursSchema = z.object({
-  days: z.array(businessDaySchema).length(7),
-})
 
 export const storedAppointmentDefaultsSchema = z.object({
   durationMinutes: z.number().int().positive(),

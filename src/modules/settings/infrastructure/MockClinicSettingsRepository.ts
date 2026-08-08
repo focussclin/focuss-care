@@ -5,10 +5,9 @@ import type {
 } from '../domain/ClinicSettings'
 import type { ClinicSettingsRepository } from '../domain/ClinicSettingsRepository'
 import { ClinicSettingsError } from '../domain/ClinicSettingsError'
-import {
-  DEFAULT_APPOINTMENT_DEFAULTS,
-  DEFAULT_BUSINESS_HOURS,
-} from '../domain/settingsDefaults'
+import { DEFAULT_BUSINESS_HOURS } from '@/lib/clinic/business-hours'
+
+import { DEFAULT_APPOINTMENT_DEFAULTS } from '../domain/settingsDefaults'
 
 /**
  * Fallback usado enquanto o Supabase não está configurado.

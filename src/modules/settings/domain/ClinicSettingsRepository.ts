@@ -44,6 +44,9 @@ export interface ClinicSettingsRepository {
   /**
    * Horário de funcionamento.
    *
+   * Desde **A-02** isto tem efeito na agenda: atendimento fora do horário salvo
+   * pede confirmação antes de ser gravado.
+   *
    * Recebe os **sete** dias, sempre. Um PATCH por dia pareceria mais econômico e
    * seria mais frágil: duas pessoas editando dias diferentes na mesma tela
    * gravariam a partir de leituras diferentes, e o último a salvar decidiria o

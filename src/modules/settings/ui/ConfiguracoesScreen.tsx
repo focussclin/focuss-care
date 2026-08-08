@@ -25,9 +25,8 @@ export interface ConfiguracoesScreenProps {
  * # O critério que decidiu o que entra
  *
  * Uma configuração só aparece aqui se for **fato** (a identidade da empresa) ou
- * se **algo a consome** (a duração padrão da agenda). O horário de funcionamento
- * é o caso de fronteira: é fato declarado, mas ninguém o impõe ainda, e por isso
- * carrega a ressalva explícita no próprio formulário.
+ * se **algo a consome** (a duração padrão da agenda e, desde A-02, o horário de
+ * funcionamento — a agenda pede confirmação para atendimento fora dele).
  *
  * As colunas `notification_prefs`, `branding` e `ai_enabled` existem em
  * `clinic_settings` e **não** ganharam controle. Um botão que grava preferência

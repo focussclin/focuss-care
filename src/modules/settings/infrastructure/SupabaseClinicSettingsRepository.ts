@@ -2,26 +2,24 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import {
+  businessHoursToJson,
+  DEFAULT_BUSINESS_HOURS,
+  parseStoredBusinessHours,
+} from '@/lib/clinic/business-hours'
 import type { Database, Json } from '@/lib/supabase/database.types'
 
 import type {
   AppointmentDefaults,
   BusinessHours,
-  BusinessHoursSource,
   ClinicProfile,
   ClinicProfileInput,
   ClinicSettings,
 } from '../domain/ClinicSettings'
 import type { ClinicSettingsRepository } from '../domain/ClinicSettingsRepository'
 import { ClinicSettingsError } from '../domain/ClinicSettingsError'
-import {
-  DEFAULT_APPOINTMENT_DEFAULTS,
-  DEFAULT_BUSINESS_HOURS,
-} from '../domain/settingsDefaults'
-import {
-  storedAppointmentDefaultsSchema,
-  storedBusinessHoursSchema,
-} from '../schemas/settings.schema'
+import { DEFAULT_APPOINTMENT_DEFAULTS } from '../domain/settingsDefaults'
+import { storedAppointmentDefaultsSchema } from '../schemas/settings.schema'
 
 type Client = SupabaseClient<Database>
 
@@ -74,7 +72,7 @@ export class SupabaseClinicSettingsRepository
       })
     }
 
-    const hours = parseBusinessHours(settingsResult.data?.business_hours)
+    const hours = readBusinessHours(settingsResult.data?.business_hours)
 
     return {
       profile: toProfile(clinicResult.data),
@@ -115,7 +113,7 @@ export class SupabaseClinicSettingsRepository
     hours: BusinessHours,
   ): Promise<BusinessHours> {
     const row = await this.upsertSettings(clinicId, {
-      business_hours: hoursToJson(hours),
+      business_hours: businessHoursToJson(hours),
     })
 
     /*
@@ -124,7 +122,7 @@ export class SupabaseClinicSettingsRepository
      * transformação em vez de exibir o que a pessoa digitou e divergir na
      * próxima visita.
      */
-    return parseBusinessHours(row.business_hours).value
+    return readBusinessHours(row.business_hours).value
   }
 
   async updateAppointmentDefaults(
@@ -180,7 +178,7 @@ export class SupabaseClinicSettingsRepository
       .insert({
         clinic_id: clinicId,
         business_hours:
-          patch.business_hours ?? hoursToJson(DEFAULT_BUSINESS_HOURS),
+          patch.business_hours ?? businessHoursToJson(DEFAULT_BUSINESS_HOURS),
         appointment_defaults: patch.appointment_defaults ?? {
           durationMinutes: DEFAULT_APPOINTMENT_DEFAULTS.durationMinutes,
         },
@@ -227,48 +225,20 @@ function toProfile(row: ClinicRow): ClinicProfile {
   }
 }
 
-function hoursToJson(hours: BusinessHours): Json {
-  return {
-    days: hours.map((day) => ({
-      weekday: day.weekday,
-      closed: day.closed,
-      opensAt: day.opensAt,
-      closesAt: day.closesAt,
-    })),
-  }
-}
-
 /**
- * Lê a coluna `jsonb` com o mesmo contrato com que ela foi escrita.
+ * Interpreta a coluna `jsonb` e registra quando ela não foi entendida.
  *
- * O terceiro estado — `unrecognized` — é o que impede uma perda silenciosa:
- * quando há algo salvo que este código não entende, quem abrir a tela precisa
- * saber ANTES de clicar em salvar, senão substitui uma configuração que nunca
- * chegou a ver.
+ * A leitura em si é de `lib/clinic/business-hours`, compartilhada com a agenda
+ * (A-02) — o que sobra aqui é o log, que é preocupação de infraestrutura.
  */
-function parseBusinessHours(value: Json | null | undefined): {
-  value: BusinessHours
-  source: BusinessHoursSource
-} {
-  /*
-   * Vazio NÃO é formato desconhecido — é ausência de configuração.
-   *
-   * A distinção importa: `clinic_settings` é NOT NULL em `business_hours`, então
-   * uma clínica recém-criada tem `{}` gravado ali. Tratar isso como
-   * 'unrecognized' faria TODA clínica nova abrir a tela com um aviso de perda
-   * iminente de dados — e aviso que aparece sempre é aviso que ninguém lê.
-   */
-  if (isEmptyJson(value)) {
-    return { value: DEFAULT_BUSINESS_HOURS, source: 'default' }
-  }
+function readBusinessHours(value: Json | null | undefined) {
+  const parsed = parseStoredBusinessHours(value)
 
-  const parsed = storedBusinessHoursSchema.safeParse(value)
-  if (!parsed.success) {
+  if (parsed.source === 'unrecognized') {
     console.error('[settings] business_hours em formato desconhecido')
-    return { value: DEFAULT_BUSINESS_HOURS, source: 'unrecognized' }
   }
 
-  return { value: parsed.data.days, source: 'stored' }
+  return parsed
 }
 
 /**
@@ -286,14 +256,6 @@ function parseAppointmentDefaults(
   return parsed.success
     ? { durationMinutes: parsed.data.durationMinutes }
     : DEFAULT_APPOINTMENT_DEFAULTS
-}
-
-/** `null`, `{}` ou `[]` — as três formas de "nada foi configurado". */
-function isEmptyJson(value: Json | null | undefined): boolean {
-  if (value === null || value === undefined) return true
-  if (Array.isArray(value)) return value.length === 0
-
-  return typeof value === 'object' && Object.keys(value).length === 0
 }
 
 function notFound(clinicId: string): ClinicSettingsError {

@@ -2,6 +2,11 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import {
+  describeOutsideHours,
+  findOutsideBusinessHours,
+  parseStoredBusinessHours,
+} from '@/lib/clinic/business-hours'
 import type { Database } from '@/lib/supabase/database.types'
 import type {
   Appointment,
@@ -12,10 +17,20 @@ import type {
 import type {
   AppointmentRepository,
   NewAppointmentData,
+  ScheduleWriteOptions,
 } from '../domain/AppointmentRepository'
 import { AppointmentRepositoryError } from '../domain/AppointmentRepositoryError'
 
 type Client = SupabaseClient<Database>
+
+/**
+ * Status que NÃO ocupam horário.
+ *
+ * Um atendimento cancelado ou com falta registrada deixou a agenda livre — a
+ * recepção precisa poder remarcar exatamente naquele horário, que é o caso mais
+ * comum de todos.
+ */
+const RELEASES_SLOT = '("canceled","no_show")'
 
 /**
  * Linha do join usado nas consultas de agenda.
@@ -148,7 +163,25 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     clinicId: string,
     data: NewAppointmentData,
     createdBy: string,
+    options: ScheduleWriteOptions = {},
   ): Promise<Appointment> {
+    // A ordem importa para a mensagem: horário ocupado é recusa definitiva e
+    // fora de expediente é pergunta. Perguntar primeiro faria a pessoa confirmar
+    // um encaixe que seria recusado logo em seguida por já estar ocupado.
+    await this.assertNoConflict(
+      clinicId,
+      data.professionalId,
+      data.startsAt,
+      data.endsAt,
+    )
+
+    await this.assertWithinBusinessHours(
+      clinicId,
+      data.startsAt,
+      data.endsAt,
+      options,
+    )
+
     const { data: row, error } = await this.client
       .from('appointments')
       .insert({
@@ -196,7 +229,37 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     appointmentId: string,
     startsAt: Date,
     endsAt: Date,
+    options: ScheduleWriteOptions = {},
   ): Promise<Appointment> {
+    /*
+     * O profissional sai do BANCO, não da entrada.
+     *
+     * Remarcar não troca de profissional, então perguntar qual é ao cliente
+     * abriria uma porta para verificar o conflito de um profissional e gravar o
+     * horário de outro. Uma leitura a mais é o preço de a checagem ser sobre a
+     * linha que realmente vai mudar.
+     */
+    const { data: target, error: targetError } = await this.client
+      .from('appointments')
+      .select('professional_id')
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .not('status', 'in', RELEASES_SLOT)
+      .maybeSingle()
+
+    if (targetError) throw toWriteError(targetError)
+    if (!target) throw notFound(appointmentId)
+
+    await this.assertNoConflict(
+      clinicId,
+      target.professional_id,
+      startsAt,
+      endsAt,
+      appointmentId,
+    )
+
+    await this.assertWithinBusinessHours(clinicId, startsAt, endsAt, options)
+
     const { data: row, error } = await this.client
       .from('appointments')
       .update({
@@ -208,7 +271,7 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       .eq('id', appointmentId)
       // Remarcar um atendimento cancelado seria ressuscita-lo pela porta dos
       // fundos, sem passar por nenhuma decisao de quem cancelou.
-      .not('status', 'in', '("canceled","no_show")')
+      .not('status', 'in', RELEASES_SLOT)
       .select(SELECT_WITH_NAMES)
       .maybeSingle()
 
@@ -267,6 +330,119 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     })
 
     return appointment
+  }
+
+  /**
+   * O profissional já tem atendimento neste intervalo? — feature **A-02**.
+   *
+   * # A condição de sobreposição
+   *
+   * `existente.starts_at < novo.ends_at AND existente.ends_at > novo.starts_at`.
+   * Os sinais são estritos porque o intervalo é semiaberto: um atendimento das
+   * 10:00 às 10:30 e outro das 10:30 às 11:00 se encostam e **não** conflitam —
+   * é exatamente como uma agenda de 30 em 30 minutos funciona.
+   *
+   * # O que esta checagem NÃO garante
+   *
+   * Ela lê e depois escreve, em duas idas ao banco, sem transação — o PostgREST
+   * não expõe uma. Duas recepcionistas clicando no mesmo instante podem passar
+   * as duas pela leitura e gravar as duas. A janela é de milissegundos, e a
+   * correção definitiva é uma constraint de exclusão no Postgres, que recusa a
+   * segunda escrita independentemente de quem leu o quê. A migration está
+   * proposta em `supabase/migrations/20260808_appointments_no_overlap.sql` e
+   * **não foi aplicada** (bloqueio B1).
+   *
+   * Enquanto isso: esta verificação cobre o caso real (pessoas diferentes
+   * marcando em momentos diferentes) e `toWriteError` já traduz `23P01`/`23505`
+   * para a mesma recusa — se a constraint existir, a corrida também é barrada,
+   * e a mensagem que chega ao usuário é a mesma.
+   */
+  private async assertNoConflict(
+    clinicId: string,
+    professionalId: string,
+    startsAt: Date,
+    endsAt: Date,
+    excludeAppointmentId?: string,
+  ): Promise<void> {
+    let query = this.client
+      .from('appointments')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('professional_id', professionalId)
+      .lt('starts_at', endsAt.toISOString())
+      .gt('ends_at', startsAt.toISOString())
+      .not('status', 'in', RELEASES_SLOT)
+      .limit(1)
+
+    // Remarcar para o MESMO horário não pode conflitar consigo mesmo.
+    if (excludeAppointmentId) query = query.neq('id', excludeAppointmentId)
+
+    const { data, error } = await query
+
+    if (error) throw toWriteError(error)
+
+    if (data && data.length > 0) {
+      throw new AppointmentRepositoryError(
+        'conflict',
+        `sobreposicao com atendimento existente do profissional ${professionalId}`,
+      )
+    }
+  }
+
+  /**
+   * O horário cabe no expediente declarado? — feature **A-02**.
+   *
+   * # Só o que a clínica configurou é imposto
+   *
+   * `parseStoredBusinessHours` devolve `source`, e apenas `'stored'` bloqueia.
+   * Clínica que nunca abriu a tela de configurações continua marcando a qualquer
+   * hora — o padrão de segunda a sexta, 08h às 18h, é sugestão de tela, e impor
+   * uma sugestão recusaria o agendamento de domingo de uma clínica que atende
+   * domingo e nunca disse o contrário.
+   *
+   * # E a recusa é reversível
+   *
+   * Fora do expediente NÃO é erro: é exceção. Encaixe às 19h acontece, e barrá-lo
+   * de vez faria a recepção registrar 17h para conseguir marcar — o que destrói
+   * a informação que a agenda existe para guardar. Quem confirma segue adiante,
+   * e a confirmação vai para a auditoria.
+   *
+   * Falha de leitura da configuração **libera**: preferência indisponível não
+   * pode virar clínica que não consegue agendar.
+   */
+  private async assertWithinBusinessHours(
+    clinicId: string,
+    startsAt: Date,
+    endsAt: Date,
+    options: ScheduleWriteOptions,
+  ): Promise<void> {
+    if (options.allowOutsideBusinessHours) return
+
+    const { data, error } = await this.client
+      .from('clinic_settings')
+      .select('business_hours')
+      .eq('clinic_id', clinicId)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[scheduling] horario de funcionamento indisponivel', {
+        code: error.code ?? null,
+      })
+      return
+    }
+
+    const hours = parseStoredBusinessHours(data?.business_hours)
+    if (hours.source !== 'stored') return
+
+    const verdict = findOutsideBusinessHours(hours.value, startsAt, endsAt)
+    if (!verdict) return
+
+    throw new AppointmentRepositoryError(
+      'outside-business-hours',
+      `fora do expediente (${verdict.reason})`,
+      undefined,
+      describeOutsideHours(verdict),
+    )
   }
 
   /**
@@ -344,11 +520,11 @@ function toWriteError(error: {
   const code = error.code ?? undefined
   const message = error.message ?? 'sem mensagem'
 
-  // 23P01 = exclusion_violation, 23505 = unique_violation. Os dois significam
-  // "ja existe atendimento nesse intervalo" SE houver constraint de exclusao no
-  // banco. Nao foi possivel verificar se ha (bloqueio B1) — a deteccao de
-  // conflito de verdade e A-02. Se a constraint existir, o usuario ja recebe a
-  // mensagem certa; se nao existir, este caminho simplesmente nao ocorre.
+  // 23P01 = exclusion_violation, 23505 = unique_violation. Desde A-02 a
+  // sobreposicao e detectada ANTES da escrita, por consulta; este caminho e a
+  // ultima linha, para a corrida entre duas escritas simultaneas. So dispara se
+  // a constraint de exclusao existir no banco — a migration esta proposta e nao
+  // aplicada (B1). Se nao existir, este ramo simplesmente nao ocorre.
   if (code === '23P01' || code === '23505') {
     return new AppointmentRepositoryError('conflict', message, code)
   }

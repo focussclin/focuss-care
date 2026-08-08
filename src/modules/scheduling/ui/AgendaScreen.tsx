@@ -37,6 +37,7 @@ import { ListView } from './ListView'
 import {
   NewAppointmentModal,
   type AppointmentSubmitFailure,
+  type AppointmentSubmitOptions,
 } from './NewAppointmentModal'
 import { WeekView } from './WeekView'
 
@@ -191,10 +192,11 @@ export function AgendaScreen({
    */
   async function handleCreate(
     values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
   ): Promise<AppointmentSubmitFailure | null> {
     // Remarcar move a MESMA linha; criar faz outra. Um formulário, duas actions.
     if (reschedulingId !== null) {
-      return handleRescheduleSubmit(reschedulingId, values)
+      return handleRescheduleSubmit(reschedulingId, values, options)
     }
 
     if (!isLive) {
@@ -234,6 +236,8 @@ export function AgendaScreen({
         durationMinutes: values.durationMinutes,
         status: values.status,
         notes: values.notes,
+        confirmOutsideBusinessHours:
+          options?.confirmOutsideBusinessHours ?? false,
       })
 
       if (!result.ok) {
@@ -250,6 +254,9 @@ export function AgendaScreen({
         return {
           message: result.error.message,
           fieldErrors: result.error.fieldErrors,
+          // 'needs-confirmation' não é recusa: o formulário precisa oferecer o
+          // caminho de seguir mesmo assim (A-02).
+          needsConfirmation: result.error.code === 'needs-confirmation',
         }
       }
 
@@ -318,6 +325,7 @@ export function AgendaScreen({
   async function handleRescheduleSubmit(
     appointmentId: string,
     values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
   ): Promise<AppointmentSubmitFailure | null> {
     if (!isLive) {
       const [year, month, day] = values.date.split('-').map(Number)
@@ -344,12 +352,15 @@ export function AgendaScreen({
         date: values.date,
         time: values.time,
         durationMinutes: values.durationMinutes,
+        confirmOutsideBusinessHours:
+          options?.confirmOutsideBusinessHours ?? false,
       })
 
       if (!result.ok) {
         return {
           message: result.error.message,
           fieldErrors: result.error.fieldErrors,
+          needsConfirmation: result.error.code === 'needs-confirmation',
         }
       }
 

@@ -42,7 +42,16 @@ export interface NewAppointmentModalProps {
    * O modal **só fecha depois que o servidor confirma** — fechar antes daria
    * "agendado" para algo que pode ter sido recusado.
    */
-  onSubmit: (values: NewAppointmentInput) => Promise<AppointmentSubmitFailure | null>
+  onSubmit: (
+    values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
+  ) => Promise<AppointmentSubmitFailure | null>
+}
+
+/** Decisões que acompanham o envio, e não são campos do formulário (A-02). */
+export interface AppointmentSubmitOptions {
+  /** A pessoa viu o aviso de horário fora do expediente e confirmou. */
+  confirmOutsideBusinessHours?: boolean
 }
 
 export interface AppointmentSubmitFailure {
@@ -50,6 +59,15 @@ export interface AppointmentSubmitFailure {
   message: string
   /** Erro por campo, quando o servidor sabe qual recusou. */
   fieldErrors?: Partial<Record<keyof NewAppointmentInput, string>>
+  /**
+   * A operação é possível e depende de confirmação — feature **A-02**.
+   *
+   * Quando verdadeiro, a mensagem NÃO é uma recusa: o formulário precisa
+   * oferecer o caminho de seguir mesmo assim. Tratá-la como erro comum faria a
+   * recepção mudar a hora do agendamento para conseguir salvar, que é
+   * exatamente o dado que a agenda não pode perder.
+   */
+  needsConfirmation?: boolean
 }
 
 /** Sobreposicao real de intervalos para o mesmo profissional. */
@@ -128,37 +146,36 @@ export function NewAppointmentModal({
 
   const [isSubmitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  /**
+   * Aviso de horário fora do expediente aguardando decisão (A-02).
+   *
+   * Guarda a mensagem E os valores enviados: confirmar precisa reenviar
+   * exatamente o que o servidor avaliou, não o que estiver no formulário no
+   * momento do clique.
+   */
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    message: string
+    values: NewAppointmentInput
+  } | null>(null)
 
-  async function handleValidSubmit(values: NewAppointmentInput) {
-    /*
-     * Checagem LOCAL de conflito — feedback imediato, não garantia.
-     *
-     * Ela só enxerga os atendimentos que a tela carregou: o período visível,
-     * do profissional que o usuário está vendo. Duas recepcionistas marcando
-     * o mesmo horário ao mesmo tempo passam por aqui sem se ver.
-     *
-     * A garantia de verdade é uma constraint de exclusão no banco, e é A-02.
-     * Enquanto ela não existe, o adapter já traduz `23P01`/`23505` em
-     * "horário ocupado" — se a constraint estiver lá, o usuário recebe a
-     * mensagem certa mesmo neste caminho.
-     */
-    const conflict = findConflict(values, existingAppointments)
-
-    if (conflict) {
-      setError('time', {
-        type: 'conflict',
-        message: appointmentMessages.conflict,
-      })
-      return
-    }
-
+  async function submitTo(
+    values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
+  ): Promise<void> {
     setSubmitting(true)
     setFormError(null)
 
     try {
-      const failure = await onSubmit(values)
+      const failure = await onSubmit(values, options)
 
       if (failure) {
+        if (failure.needsConfirmation) {
+          // Não é erro: é pergunta. Fica em estado próprio para que o rodapé
+          // troque o botão "Salvar" pela decisão.
+          setPendingConfirmation({ message: failure.message, values })
+          return
+        }
+
         setFormError(failure.message)
 
         for (const [field, message] of Object.entries(
@@ -174,38 +191,99 @@ export function NewAppointmentModal({
       }
 
       reset()
+      setPendingConfirmation(null)
       onOpenChange(false)
     } finally {
       setSubmitting(false)
     }
   }
 
+  async function handleValidSubmit(values: NewAppointmentInput) {
+    /*
+     * Checagem LOCAL de conflito — feedback imediato, não garantia.
+     *
+     * Ela só enxerga os atendimentos que a tela carregou: o período visível,
+     * do profissional que o usuário está vendo. Duas recepcionistas marcando
+     * o mesmo horário ao mesmo tempo passam por aqui sem se ver.
+     *
+     * Continua valendo depois de **A-02**, e agora como o que sempre foi: um
+     * atalho de interface. A verificação que decide é a do servidor, que
+     * consulta o banco antes de escrever — esta só evita a ida até lá quando o
+     * choque já é visível na tela.
+     */
+    const conflict = findConflict(values, existingAppointments)
+
+    if (conflict) {
+      setError('time', {
+        type: 'conflict',
+        message: appointmentMessages.conflict,
+      })
+      return
+    }
+
+    setPendingConfirmation(null)
+    await submitTo(values)
+  }
+
   return (
     <Modal
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset()
+        if (!next) {
+          reset()
+          setPendingConfirmation(null)
+        }
         onOpenChange(next)
       }}
       title="Novo atendimento"
       description="Preencha os dados para agendar."
       footer={
-        <>
-          <Button
-            variant="secondary"
-            onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            form="new-appointment-form"
-            isLoading={isSubmitting}
-          >
-            {isSubmitting ? 'Salvando...' : 'Salvar atendimento'}
-          </Button>
-        </>
+        pendingConfirmation ? (
+          /*
+           * O rodapé muda quando há decisão pendente (A-02).
+           *
+           * "Salvar" continuar ali, ao lado de um aviso, faria a pessoa clicar
+           * de novo sem entender por que o primeiro clique não bastou. Aqui as
+           * duas saídas são explícitas, e a que volta ao formulário é a
+           * primária: mudar o horário é o desfecho mais provável.
+           */
+          <>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                submitTo(pendingConfirmation.values, {
+                  confirmOutsideBusinessHours: true,
+                })
+              }
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Salvando...' : 'Agendar mesmo assim'}
+            </Button>
+            <Button
+              onClick={() => setPendingConfirmation(null)}
+              disabled={isSubmitting}
+            >
+              Escolher outro horário
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              form="new-appointment-form"
+              isLoading={isSubmitting}
+            >
+              {isSubmitting ? 'Salvando...' : 'Salvar atendimento'}
+            </Button>
+          </>
+        )
       }
     >
       <form
@@ -214,6 +292,20 @@ export function NewAppointmentModal({
         onSubmit={handleSubmit(handleValidSubmit)}
         className="flex flex-col gap-4"
       >
+        {/*
+          Aviso que espera decisão (A-02) — em tom de atenção, não de erro.
+          Vermelho diria "você errou"; o horário fora do expediente é uma
+          escolha legítima, e quem agenda é quem sabe se cabe.
+        */}
+        {pendingConfirmation ? (
+          <p
+            role="alert"
+            className="rounded-card border border-border-card bg-background px-3.5 py-2.5 text-aux text-foreground"
+          >
+            {pendingConfirmation.message}
+          </p>
+        ) : null}
+
         {/* Recusa do servidor: anunciada, não só pintada de vermelho */}
         {formError ? (
           <p

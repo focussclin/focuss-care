@@ -66,6 +66,9 @@ const runCancelAppointment = createAction<
     } catch (cause) {
       return toScheduleFailure('appointment.cancel', cause, {
         conflict: scheduleMessages.conflict,
+        // Cancelar nunca cai neste caso — não há horário novo a verificar. A
+        // mensagem existe porque o tradutor é um só para as três actions.
+        outsideBusinessHours: scheduleMessages.outsideBusinessHours,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,

@@ -24,6 +24,24 @@ export interface NewAppointmentData {
   notes: string | null
 }
 
+/**
+ * Ajustes da escrita que NÃO são dados do atendimento — feature **A-02**.
+ *
+ * Vive separado de `NewAppointmentData` de propósito: uma confirmação é sobre a
+ * decisão de quem agenda, não sobre a consulta. Misturá-la com os campos
+ * gravados faria parecer que "fora do expediente" é atributo da linha.
+ */
+export interface ScheduleWriteOptions {
+  /**
+   * Quem agenda já foi avisado de que o horário está fora do expediente e
+   * confirmou mesmo assim.
+   *
+   * **Não é permissão** — quem chega aqui já passou por `appointment.write`. É
+   * o registro de uma exceção deliberada, e por isso vai para a auditoria.
+   */
+  allowOutsideBusinessHours?: boolean
+}
+
 /** PORTA do modulo de agenda. */
 export interface AppointmentRepository {
   /** Atendimentos de um intervalo [from, to). */
@@ -38,11 +56,16 @@ export interface AppointmentRepository {
    *
    * Falha esperada (horário ocupado, recusa de policy) sai como
    * `AppointmentRepositoryError` — a action a traduz em `Result`.
+   *
+   * Desde **A-02**, duas verificações acontecem ANTES da escrita: sobreposição
+   * com outro atendimento do mesmo profissional (recusa dura) e horário fora do
+   * expediente declarado (recusa que `options` reverte).
    */
   create(
     clinicId: string,
     data: NewAppointmentData,
     createdBy: string,
+    options?: ScheduleWriteOptions,
   ): Promise<Appointment>
 
   /**
@@ -57,6 +80,7 @@ export interface AppointmentRepository {
     appointmentId: string,
     startsAt: Date,
     endsAt: Date,
+    options?: ScheduleWriteOptions,
   ): Promise<Appointment>
 
   /**

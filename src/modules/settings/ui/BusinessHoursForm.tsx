@@ -25,13 +25,17 @@ export interface BusinessHoursFormProps {
 /**
  * Horário de funcionamento da clínica.
  *
- * # A ressalva não é decoração
+ * # O que salvar aqui passa a fazer
  *
- * Este horário ainda **não bloqueia** agendamento fora do expediente — isso é
- * A-02. Sem o aviso, alguém configuraria "fecha às 18h" e concluiria que o
- * sistema passou a recusar as 20h, o que não acontece. Configuração que promete
- * comportamento inexistente é pior que configuração ausente, porque a pessoa
- * para de conferir.
+ * Desde **A-02**, a agenda usa este horário: um atendimento fora dele pede
+ * confirmação antes de ser gravado, e a confirmação vai para a auditoria. Não é
+ * bloqueio — encaixe às 19h acontece, e proibi-lo faria a recepção registrar
+ * hora falsa para conseguir marcar.
+ *
+ * **Só o que foi salvo vale.** Os valores exibidos por uma clínica que nunca
+ * configurou nada são sugestão de tela, e a agenda não os impõe: impor um
+ * palpite recusaria o domingo de quem atende domingo e nunca disse o contrário.
+ * Por isso o texto do formulário fala em "depois de salvo".
  */
 export function BusinessHoursForm({
   days,
@@ -152,11 +156,11 @@ export function BusinessHoursForm({
 
         <p className="mt-4 flex items-start gap-2.5 text-label text-muted">
           <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          Este horário registra quando a clínica atende. Ele ainda{' '}
-          <strong className="font-semibold">não impede</strong> que um
-          agendamento seja marcado fora do expediente — esse bloqueio vem junto
-          com a disponibilidade por profissional. Turnos partidos (com intervalo
-          no meio do dia) também ainda não são representados aqui.
+          Depois de salvo, a agenda <strong className="font-semibold">avisa</strong>{' '}
+          quando um atendimento cai fora deste horário e pede confirmação — o
+          encaixe continua possível, e fica registrado como exceção. Enquanto
+          nada for salvo aqui, a agenda não questiona horário nenhum. Turnos
+          partidos (com intervalo no meio do dia) ainda não são representados.
         </p>
 
         {error ? (

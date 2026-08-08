@@ -50,6 +50,15 @@ export const scheduleMessages = {
   durationInvalid: 'A duração precisa estar entre 5 minutos e 8 horas.',
   tooFarInPast: 'Não é possível agendar tão longe no passado.',
   conflict: 'Este profissional já possui um atendimento nesse horário.',
+  /**
+   * Segunda metade da mensagem de horário fora do expediente (A-02).
+   *
+   * A primeira metade é dinâmica e vem do adapter, com o dia e a janela reais
+   * da clínica. Aqui fica só o convite a decidir — e ele **precisa** existir,
+   * porque o código devolvido é 'needs-confirmation': sem o caminho de volta, a
+   * tela mostraria uma recusa educada para algo que é permitido.
+   */
+  outsideBusinessHours: 'Deseja agendar mesmo assim?',
   forbidden: 'Você não tem permissão para alterar a agenda.',
   notFound: 'Este atendimento não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
@@ -126,6 +135,15 @@ export const createAppointmentSchema = z
       .optional()
       .transform((value) => value?.trim() ?? '')
       .transform((value) => (value === '' ? null : value)),
+    /**
+     * Quem agenda já viu o aviso de horário fora do expediente e confirmou.
+     *
+     * Ausente = não confirmado, que é o padrão seguro: a primeira tentativa
+     * sempre passa pela verificação. **Não é permissão** — o papel já foi
+     * autorizado antes; é o registro de uma exceção deliberada, e por isso
+     * aparece na auditoria.
+     */
+    confirmOutsideBusinessHours: z.boolean().optional().default(false),
   })
   .transform((value, ctx) => {
     const startsAt = parseLocalDateTime(value.date, value.time)
@@ -157,6 +175,7 @@ export const createAppointmentSchema = z
       reason: value.type,
       status: value.status,
       notes: value.notes,
+      confirmOutsideBusinessHours: value.confirmOutsideBusinessHours,
       startsAt,
       endsAt: new Date(startsAt.getTime() + value.durationMinutes * 60_000),
     }
@@ -181,6 +200,8 @@ export const rescheduleAppointmentSchema = z
       .int()
       .min(MIN_DURATION_MINUTES, scheduleMessages.durationInvalid)
       .max(MAX_DURATION_MINUTES, scheduleMessages.durationInvalid),
+    /** Ver o campo homônimo em `createAppointmentSchema`. */
+    confirmOutsideBusinessHours: z.boolean().optional().default(false),
   })
   .transform((value, ctx) => {
     const startsAt = parseLocalDateTime(value.date, value.time)
@@ -196,6 +217,7 @@ export const rescheduleAppointmentSchema = z
 
     return {
       appointmentId: value.appointmentId,
+      confirmOutsideBusinessHours: value.confirmOutsideBusinessHours,
       startsAt,
       endsAt: new Date(startsAt.getTime() + value.durationMinutes * 60_000),
     }

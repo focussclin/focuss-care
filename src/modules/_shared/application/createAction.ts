@@ -150,6 +150,9 @@ const defaultMessages: Record<AppErrorCode, string> = {
   forbidden: 'Você não tem permissão para executar esta ação.',
   validation: 'Revise os campos destacados e tente novamente.',
   conflict: 'Esta operação conflita com um dado já existente.',
+  // Texto de último recurso: quem devolve este código quase sempre substitui a
+  // mensagem por uma que diz O QUE precisa ser confirmado.
+  'needs-confirmation': 'Esta operação precisa de confirmação para continuar.',
   'not-found': 'Não encontramos o registro solicitado.',
   unavailable: 'O serviço está indisponível agora. Tente novamente em instantes.',
   unexpected: 'Não foi possível concluir a operação agora. Tente novamente.',

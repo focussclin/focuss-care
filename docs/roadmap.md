@@ -421,7 +421,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
 | **P-03** | **Pacientes — consentimento LGPD** | Claude | **Review** |
 | **A-01** | **Agenda — criar/remarcar/cancelar persistindo** | Claude | **Review** |
-| A-02 | Agenda — conflito e disponibilidade reais | Claude | Backlog |
+| **A-02** | **Agenda — conflito real e horário de funcionamento** | Claude | **Review** |
 | **E-01** | **Atendimentos — check-in, fila, encerramento** | Claude | **Review** |
 | **R-01** | **Prontuário versionado append-only** | Claude | **Review** |
 | **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
@@ -523,15 +523,45 @@ que **alguém consome** (a duração padrão da agenda). O resto de
 | `clinics.timezone` e `locale` | Somente leitura: datas e horas são renderizadas pelo relógio do dispositivo. Um seletor gravaria o fuso sem mudar nada do que a agenda mostra |
 | `clinics.slug` | Somente leitura: trocá-lo quebra todo link já compartilhado, e não há redirecionamento do endereço antigo |
 
-**O horário de funcionamento é o caso de fronteira.** Ele persiste de verdade,
-mas ainda **não bloqueia** agendamento fora do expediente — isso é **A-02**, que
-também precisará de `availability_rules` por profissional. O formulário declara
-a ressalva em vez de deixar a pessoa descobrir sozinha, e o formato guarda um
-turno por dia: intervalo de almoço ainda não é representável.
+**O horário de funcionamento passou a valer com A-02.** Ele persiste aqui e a
+agenda o consulta: atendimento fora do expediente pede confirmação antes de ser
+gravado, e a confirmação vira evento de auditoria. O formato guarda **um turno
+por dia** — intervalo de almoço ainda não é representável.
 
 **Perfil pessoal não entra aqui.** Nome e telefone de quem usa moram em
 `profiles`, e são do módulo `identity`, não de `settings` — a tela diz que não
 se alteram por ali em vez de repetir o formulário falso da vitrine.
+
+### O que A-02 entregou, e o que ficou de fora
+
+| Verificação | Estado |
+|---|---|
+| **Sobreposição de horário do mesmo profissional** | **Entregue.** Consulta de intervalo semiaberto antes de criar e de remarcar, com `clinic_id` e `professional_id` no filtro. Recusa dura |
+| **Horário de funcionamento da clínica** | **Entregue.** Só o que foi salvo em C-01 vale; padrão de tela não é imposto. Recusa reversível por confirmação explícita, auditada |
+| **Atomicidade da recusa de sobreposição** | **Bloqueado (B1).** Constraint proposta em `20260808_appointments_no_overlap.sql`, não aplicada |
+| **Disponibilidade por profissional (`availability_rules`)** | **Bloqueado (B1).** Ver abaixo |
+| **Exceções de agenda (`availability_exceptions`)** | **Fora de escopo.** Depende de `availability_rules` estar interpretável |
+
+**Por que `availability_rules` não foi implementada.** A coluna `weekday` é um
+`number` e o schema não diz qual convenção usa: `extract(dow …)` do Postgres é
+0–6 com domingo em zero, `isodow` é 1–7 com domingo em sete. As duas produzem
+tabelas plausíveis, e a diferença desloca a semana inteira em um dia.
+
+Detectar a convenção pelos dados não resolve: uma clínica com regras só de
+segunda a sexta tem valores 1–5 nas duas convenções. **Adivinhar errado recusaria
+agendamento legítimo** — o pior modo de falha possível para uma clínica, porque
+o sintoma é "o sistema não deixa marcar" e a causa é invisível.
+
+Resolver com uma consulta, e então implementar:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.availability_rules'::regclass;
+```
+
+Enquanto isso, a ausência não degrada nada: sem interpretação, não há regra
+imposta, que é exatamente o comportamento de hoje.
 
 ---
 

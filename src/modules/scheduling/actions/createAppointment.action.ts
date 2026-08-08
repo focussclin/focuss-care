@@ -73,12 +73,16 @@ const runCreateAppointment = createAction<
           notes: input.notes,
         },
         context.userId,
+        {
+          allowOutsideBusinessHours: input.confirmOutsideBusinessHours,
+        },
       )
 
       return ok<AppointmentDto>(toAppointmentDto(appointment))
     } catch (cause) {
       return toScheduleFailure('appointment.create', cause, {
         conflict: scheduleMessages.conflict,
+        outsideBusinessHours: scheduleMessages.outsideBusinessHours,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,
@@ -96,7 +100,7 @@ const runCreateAppointment = createAction<
    * por toda a operação — o que entra aqui não sai mais. Os valores continuam em
    * `appointments`, alcançáveis por `entity_id`.
    */
-  audit: (output) => ({
+  audit: (output, input) => ({
     action: 'appointment.created',
     entityType: 'appointment',
     entityId: output.id,
@@ -104,6 +108,16 @@ const runCreateAppointment = createAction<
       status: output.status,
       starts_at: output.startsAt,
       duration_minutes: output.durationMinutes,
+      /*
+       * A exceção fica registrada (A-02).
+       *
+       * Agendar fora do expediente é permitido e é decisão consciente de quem
+       * marcou. Justamente por isso entra no log: se a clínica quiser saber
+       * quantos encaixes fora de hora aconteceram no mês, ou por que um
+       * profissional atendeu num domingo, a resposta precisa existir. É dado
+       * operacional, não clínico.
+       */
+      outside_business_hours: input.confirmOutsideBusinessHours,
     },
   }),
 })
