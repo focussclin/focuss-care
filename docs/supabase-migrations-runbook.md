@@ -1,0 +1,418 @@
+# Runbook — aplicar as migrations pendentes
+
+> **Nada aqui foi executado.** Este ambiente não tem `DATABASE_URL`, senha do
+> banco nem `SUPABASE_ACCESS_TOKEN` (bloqueio **B1**), então as migrations
+> existem como proposta revisável, não como mudança feita.
+>
+> Este documento é para quem TEM acesso ao projeto Supabase. Ele não contém
+> segredo nenhum — só nomes de variável, comandos e consultas.
+>
+> Comandos verificados contra a CLI `supabase@2.112.0`, que já é dependência de
+> desenvolvimento do repositório (`npx supabase …` funciona sem instalar nada).
+
+---
+
+## 0. O que está pendente, e o que cada coisa custa hoje
+
+| # | Arquivo | Estado | Custo de não aplicar |
+|---|---|---|---|
+| 1 | `20260807_audit_log_insert_policy.sql` | Escrita | **Nenhum evento de auditoria é gravado.** Para dado de saúde, trilha é requisito legal |
+| 2 | `20260808_insurance_claim_denials.sql` | Escrita | Glosas não têm onde ser registradas |
+| 3 | `20260808_appointments_no_overlap.sql` | Escrita | Duas pessoas marcando ao mesmo tempo gravam horários sobrepostos |
+| 4 | `20260807_create_invitation_rpc.sql` | Escrita, **com decisão pendente** | Convites só nascem direto no banco |
+| 5 | Índices de `patients` (P-02b) | **Não escrita** | Filtro "Última visita" fica desabilitado |
+
+A #5 não existe como arquivo de propósito: escrevê-la exige saber quais índices
+e extensões o banco já tem, e criar índice duplicado é custo sem ganho. As
+consultas de diagnóstico estão em [`07-cadastro-de-pacientes.md`](./07-cadastro-de-pacientes.md) §8.11.
+
+---
+
+## 1. Pré-requisitos
+
+Quem for aplicar precisa de:
+
+- **Acesso de owner ou admin** ao projeto Supabase (para o SQL editor e para
+  gerar o token da CLI).
+- **A senha do banco**, se for usar a CLI. Ela aparece uma vez na criação do
+  projeto e pode ser redefinida no painel — Project Settings → Database.
+- **Node 20+**, para usar a CLI do repositório sem instalação global.
+
+```bash
+npx supabase --version   # deve responder 2.112.0
+npx supabase login       # abre o navegador; grava o token NA MÁQUINA, não no repo
+npx supabase link --project-ref <ref-do-projeto>
+```
+
+> **Nunca** cole a senha nem o token em arquivo do repositório, em variável de
+> exemplo ou em mensagem de commit. `.env.local` não é versionado; use-o, ou os
+> prompts interativos da CLI.
+
+---
+
+## 2. Antes de tocar em qualquer coisa: backup
+
+O passo que não se pula. Uma migration que falha no meio deixa a transação
+desfeita, mas uma que **passa** e estava errada não se desfaz sozinha.
+
+```bash
+# Schema (estrutura). Guarde fora do repositório.
+npx supabase db dump --linked -f ./backup-schema-$(date +%Y%m%d).sql
+
+# Dados. Pode ser grande; é o que permite reconstruir se algo for perdido.
+npx supabase db dump --linked --data-only -f ./backup-dados-$(date +%Y%m%d).sql
+```
+
+Se o projeto estiver em um plano com **branches de preview**, prefira aplicar
+primeiro lá:
+
+```bash
+npx supabase branches create migracoes-agosto
+npx supabase branches list
+```
+
+Uma branch dá o ensaio completo — inclusive os testes da §7 — sem tocar em dado
+de clínica real. Sem branch disponível, o backup acima é o que resta.
+
+---
+
+## 3. Inspeção e dry-run
+
+### 3.1 O histórico de migrations está divergente, e isso é esperado
+
+O `supabase/README.md` registra que as migrations locais antigas foram
+**removidas** porque descreviam um schema diferente do remoto. Consequência
+prática: o remoto tem histórico que o repositório não tem.
+
+```bash
+npx supabase migration list --linked
+```
+
+A saída vai mostrar migrations no remoto sem par local. **Isso não é erro** — é
+o estado documentado do projeto.
+
+### 3.2 Por que NÃO usar `db push` aqui
+
+```bash
+# Só para VER o que a CLI faria. Não aplica nada.
+npx supabase db push --linked --dry-run
+```
+
+Por causa da divergência acima, um `db push` real provavelmente exigiria
+`--include-all` — e é justamente esse o flag que aplica tudo o que não está no
+histórico remoto, sem você escolher o quê. Com quatro arquivos, cada um exigindo
+revisão humana, **o caminho seguro é o SQL editor do painel, um arquivo por
+vez**, dentro da transação que cada um já traz (`begin; … commit;`).
+
+Use o dry-run como leitura, não como etapa.
+
+---
+
+## 4. Revisão obrigatória antes de cada arquivo
+
+Nenhum dos quatro deve ser colado sem antes responder às perguntas abaixo. Duas
+delas **bloqueiam** a aplicação se a resposta for inesperada.
+
+### 4.1 As funções de autorização cobrem os papéis certos?
+
+```sql
+select proname, prosrc
+  from pg_proc
+ where proname in ('can_access_financial', 'can_access_clinical', 'can_handle_billing');
+```
+
+Confira que `can_access_financial()` alcança o papel `finance`. **Se não
+alcançar, a migration #2 cria uma tabela que a própria equipe financeira não
+enxerga** — a tela de glosas nasceria vazia para quem trabalha com glosa.
+
+### 4.2 As RPCs financeiras — o que elas realmente recebem?
+
+```sql
+select proname, pg_get_function_arguments(oid), pg_get_function_result(oid)
+  from pg_proc
+ where proname in ('issue_invoice', 'close_cash_session', 'preview_professional_payout');
+```
+
+Não bloqueia nenhuma migration, mas é o que destrava emissão fiscal numerada e
+repasse a profissional (**P-RPC**). Registre a resposta no roadmap.
+
+### 4.3 A convenção do dia da semana
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid in ('public.availability_rules'::regclass,
+                    'public.work_schedules'::regclass);
+```
+
+Destrava disponibilidade por profissional (A-02) e escalas de trabalho (S-02).
+Sem isso, os dois continuam ausentes — e é a resposta certa, porque errar entre
+`0–6` e `1–7` desloca a semana em um dia.
+
+### 4.4 A sequência fiscal
+
+```sql
+select distinct kind from public.document_sequences;
+```
+
+Diz qual valor `next_document_number(p_kind)` espera.
+
+### 4.5 **Bloqueante:** o algoritmo de hash do convite
+
+```sql
+select prosrc from pg_proc where proname = 'accept_invitation';
+```
+
+A migration #4 gera o token e grava o hash. **Se o algoritmo dela não for
+idêntico ao que `accept_invitation` usa para comparar, todo convite emitido será
+recusado no aceite** — e o defeito só aparece quando uma pessoa real tenta
+entrar. Leia o corpo, ajuste a linha `digest(…)` do arquivo se necessário, e só
+então aplique.
+
+---
+
+## 5. Ordem de aplicação
+
+A ordem é por **risco crescente**, não por data do nome. Aplique uma, verifique,
+e só então siga para a próxima.
+
+### 5.1 Primeiro: `20260807_audit_log_insert_policy.sql`
+
+Puramente aditiva — cria uma policy de `INSERT`, não toca em dado. É a de maior
+valor e menor risco, e deve vir antes das outras para que o que acontecer depois
+já tenha rastro.
+
+**Verificação:**
+
+```sql
+select polname, polcmd, pg_get_expr(polwithcheck, polrelid) as with_check
+  from pg_policy
+ where polrelid = 'public.audit_log'::regclass;
+```
+
+Espere ver `audit_log_insert_own_clinic` com `polcmd = 'a'` (INSERT) e um
+`with_check` que exige `clinic_id = current_clinic_id()` **e**
+`actor_user_id = auth.uid()`. Confirme também que **não** existe policy de
+`UPDATE` nem de `DELETE`: trilha que pode ser editada não é trilha.
+
+### 5.2 Segundo: `20260808_insurance_claim_denials.sql`
+
+Também aditiva: cria um enum, uma tabela nova e as policies dela. Nada existente
+depende dessa tabela, então não há como quebrar comportamento atual.
+
+Gate: a resposta da §4.1.
+
+**Verificação:**
+
+```sql
+select tablename, rowsecurity
+  from pg_tables
+ where tablename = 'insurance_claim_denials';
+
+select polname, polcmd from pg_policy
+ where polrelid = 'public.insurance_claim_denials'::regclass;
+```
+
+Espere `rowsecurity = true` e três policies (select, insert, update) — e
+**nenhuma de delete**.
+
+### 5.3 Terceiro: `20260808_appointments_no_overlap.sql`
+
+A primeira que **altera tabela existente e pode falhar**. Dois motivos:
+`btree_gist` pode não ser criável no projeto, e dados já sobrepostos impedem a
+constraint.
+
+**Rode o diagnóstico ANTES** — ele está no rodapé do próprio arquivo:
+
+```sql
+select a.id, b.id, a.professional_id, a.starts_at, b.starts_at
+  from public.appointments a
+  join public.appointments b
+    on a.clinic_id = b.clinic_id
+   and a.professional_id = b.professional_id
+   and a.id < b.id
+   and tstzrange(a.starts_at, a.ends_at, '[)')
+    && tstzrange(b.starts_at, b.ends_at, '[)')
+ where a.status not in ('canceled', 'no_show')
+   and b.status not in ('canceled', 'no_show');
+```
+
+Linha nenhuma → pode aplicar. Alguma linha → **resolva antes**, cancelando ou
+remarcando um dos atendimentos. Aplicar com sobreposição existente faz o
+`alter table` falhar e a transação inteira voltar.
+
+**Verificação:**
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.appointments'::regclass
+   and conname = 'appointments_no_overlap';
+```
+
+Confira no texto devolvido: o range precisa ser `'[)'` (semiaberto) e o `WHERE`
+precisa excluir `canceled` e `no_show`. Se vier `'[]'`, a agenda de 30 em 30
+minutos passa a recusar o horário seguinte.
+
+### 5.4 Quarto: `20260807_create_invitation_rpc.sql`
+
+**Só depois da §4.5.** É a única cuja aplicação exige uma decisão humana sobre o
+conteúdo, não só sobre o momento.
+
+**Verificação:**
+
+```sql
+select proname, pg_get_function_arguments(oid), prosecdef
+  from pg_proc
+ where proname = 'create_invitation';
+```
+
+`prosecdef = true` (SECURITY DEFINER) é esperado. E confirme que a função
+devolve o token **em texto puro uma única vez** — se ela devolver o hash, a
+aplicação não tem como montar o link.
+
+### 5.5 Quinto: índices de `patients` — **continua BLOQUEADA**
+
+Não há arquivo para aplicar. Escrever um exige rodar as quatro consultas de
+diagnóstico de `07-cadastro-de-pacientes.md` §8.11 e ver o que já existe.
+
+---
+
+## 6. Depois de aplicar: regenerar os tipos
+
+```bash
+npm run db:types
+git diff src/lib/supabase/database.types.ts
+```
+
+O diff é a prova de que o schema mudou como se esperava. `insurance_claim_denials`
+e `create_invitation` devem aparecer; se não aparecerem, a migration não pegou.
+
+Rode a validação do repositório antes de commitar o arquivo gerado:
+
+```bash
+npm test && npm run lint && npm run typecheck && npm run build
+```
+
+---
+
+## 7. Testes pós-aplicação
+
+Os três primeiros exigem **duas contas em clínicas diferentes** e uma conta por
+papel. Nenhum deles é automatizável hoje — `supabase/tests/` não existe, e essa
+é a dívida **D5/R1**, que continua aberta.
+
+### 7.1 Tenancy
+
+1. Entre com a conta A (clínica 1) e crie um paciente.
+2. Entre com a conta B (clínica 2).
+3. B **não pode** ver o paciente de A em `/pacientes`, nem alcançá-lo pela URL
+   direta `/pacientes/<id-do-paciente-de-A>` — a rota deve responder "não
+   encontrado", não uma ficha vazia.
+4. Repita para uma cobrança (`/financeiro`) e uma guia (`/convenios`).
+
+### 7.2 `INSERT` e 403 por papel
+
+Com a policy da §5.1 aplicada:
+
+| Papel | Ação | Esperado |
+|---|---|---|
+| `receptionist` | Abrir `/prontuarios` | **403** (página `forbidden`) |
+| `receptionist` | Abrir `/financeiro` | **403** |
+| `finance` | Abrir `/agenda` | **403**, e o item **não aparece no menu** |
+| `finance` | Criar cobrança em `/financeiro` | Sucesso |
+| `professional` | Escrever no prontuário | Sucesso |
+| `admin` | Abrir `/prontuarios` | **403** — administrar não é cuidar |
+
+O menu esconder o item e a rota recusar são checagens **separadas**: a primeira
+é cortesia, a segunda é a fronteira. Teste as duas.
+
+### 7.3 `audit_log` — a que prova a #1
+
+```sql
+select action, entity_type, actor_role, occurred_at
+  from public.audit_log
+ where clinic_id = '<id-da-clinica-de-teste>'
+ order by occurred_at desc
+ limit 20;
+```
+
+Faça, pela interface, uma ação de cada família e confira que ela aparece:
+
+| Ação na tela | Evento esperado |
+|---|---|
+| Cadastrar paciente | `patient.created` |
+| Marcar atendimento | `appointment.created` |
+| Encerrar atendimento | `encounter.closed` |
+| Escrever no prontuário | `record.created` |
+| Registrar pagamento | `payment.registered` |
+| Trocar o papel de alguém | `membership.role_changed` |
+| Salvar o próprio perfil | `profile.updated` |
+
+**Se a tabela continuar vazia depois disso, a #1 não resolveu** — o
+`recordAuditEvent` é best-effort e não quebra a tela, então o sintoma é
+exatamente "nada acontece". Olhe o log do servidor: ele registra
+`[audit] escrita recusada` com o código do Postgres.
+
+Confirme também o que **não** deve estar lá: nenhum evento pode conter nome de
+paciente, evolução clínica, motivo de ausência ou descrição de procedimento.
+
+### 7.4 Sobreposição de horário — a que prova a #3
+
+1. Marque um atendimento das 10:00 às 10:30 para um profissional.
+2. Tente marcar outro das 10:15 às 10:45 **para o mesmo profissional** →
+   recusado com "Este profissional já possui um atendimento nesse horário."
+3. Marque das 10:30 às 11:00 → **deve funcionar** (intervalo semiaberto).
+4. Cancele o primeiro e marque das 10:00 às 10:30 → **deve funcionar**.
+
+O passo 3 é o que pega uma constraint com `'[]'` no lugar de `'[)'`.
+
+### 7.5 Convite — a que prova a #4
+
+1. Emita um convite pela tela de equipe.
+2. Aceite com **outra conta**, em outro navegador.
+3. Confirme o vínculo em `memberships` com `status = 'active'`.
+
+Falhar aqui significa que o hash da migration não bate com `accept_invitation` —
+volte à §4.5.
+
+---
+
+## 8. O que continua BLOQUEADO mesmo depois de tudo isto
+
+| Item | Por quê |
+|---|---|
+| Disponibilidade por profissional (A-02) | Depende da resposta da §4.3 |
+| Escalas de trabalho (S-02) | Mesma convenção de `weekday` |
+| Emissão fiscal numerada (B-01) | Depende da §4.2 e da §4.4 |
+| Repasse a profissional | `preview_professional_payout` sem assinatura resolvida |
+| Filtro "Última visita" (P-02b) | Migration #5 não escrita |
+| Teste de tenancy automatizado | `supabase/tests/` não existe — dívida **D5/R1** |
+| WhatsApp, IA e automações | Não é banco: falta worker, provedor e a aprovação de `04-agente-ia.md` |
+
+Cada resposta obtida na §4 deve ser registrada em
+[`roadmap.md`](./roadmap.md) e em [`../PROJECT_PROGRESS.md`](../PROJECT_PROGRESS.md)
+— é o que tira o item de "bloqueado" para "pendente".
+
+---
+
+## 9. Se algo der errado
+
+Cada arquivo está dentro de `begin; … commit;`, então uma falha **não deixa
+estado pela metade**: a transação inteira volta.
+
+O que a transação não desfaz é uma migration que passou e estava errada. Nesse
+caso:
+
+- **Policy errada (#1, #2):** `drop policy … on …;` e reaplique corrigida.
+  Nenhum dado é perdido.
+- **Constraint errada (#3):** `alter table public.appointments drop constraint
+  appointments_no_overlap;`. Nenhum dado é perdido.
+- **RPC errada (#4):** `drop function public.create_invitation(...);` com a
+  assinatura exata. **Convites já emitidos com hash errado continuam
+  inaceitáveis** — revogue-os em `invitations` e emita de novo depois.
+- **Tabela nova (#2):** só remova se ela estiver vazia. Com glosa registrada,
+  corrija a policy em vez de derrubar a tabela.
+
+O backup da §2 é o último recurso, e restaurar dado de saúde por cima de
+operação em andamento é decisão de quem responde pela clínica — não do plantão.

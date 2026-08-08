@@ -1,6 +1,7 @@
 'use client'
 
 import { CalendarPlus, CalendarX2, Plus, SearchX } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -21,12 +22,23 @@ import type {
   Professional,
 } from '@/modules/_shared/domain/types'
 
-import type { NewAppointmentInput } from '../schemas/appointment.schema'
+import { cancelAppointmentAction } from '../actions/cancelAppointment.action'
+import { createAppointmentAction } from '../actions/createAppointment.action'
+import { rescheduleAppointmentAction } from '../actions/rescheduleAppointment.action'
+import {
+  scheduleMessages,
+  type AppointmentDto,
+  type NewAppointmentInput,
+} from '../schemas/appointment.schema'
 import { AgendaControlBar, type AgendaView } from './AgendaControlBar'
 import { AppointmentDetailsModal } from './AppointmentDetailsModal'
 import { DayView } from './DayView'
 import { ListView } from './ListView'
-import { NewAppointmentModal } from './NewAppointmentModal'
+import {
+  NewAppointmentModal,
+  type AppointmentSubmitFailure,
+  type AppointmentSubmitOptions,
+} from './NewAppointmentModal'
 import { WeekView } from './WeekView'
 
 export interface AgendaScreenProps {
@@ -36,6 +48,16 @@ export interface AgendaScreenProps {
   professionals: readonly Professional[]
   /** Abre o modal de criacao ja na entrada (link "+ Novo atendimento" do dashboard). */
   openNewOnMount?: boolean
+  /** Duracao padrao configurada em /configuracoes (C-01). */
+  defaultDurationMinutes?: number
+  /**
+   * Ha banco por tras desta tela.
+   *
+   * Falso significa demonstracao local (Supabase ausente do ambiente): o
+   * atendimento vive na memoria da aba e a Server Action NAO e chamada.
+   * Verdadeiro significa clinica real — todo agendamento persiste.
+   */
+  isLive?: boolean
 }
 
 /** yyyy-mm-dd para o input[type=date], sem passar por UTC. */
@@ -51,7 +73,10 @@ export function AgendaScreen({
   patients,
   professionals,
   openNewOnMount = false,
+  defaultDurationMinutes = 30,
+  isLive = false,
 }: AgendaScreenProps) {
+  const router = useRouter()
   /*
    * AGENDA_DESIGN.md: lista e o padrao ate 767px; semanal a partir de 1024px.
    * useMediaQuery devolve false no servidor, entao o HTML inicial e mobile-first.
@@ -71,6 +96,18 @@ export function AgendaScreen({
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [isCreating, setCreating] = useState(openNewOnMount)
   const [createTime, setCreateTime] = useState('09:00')
+  /** Recusa do cancelamento — exibida no modal de detalhes, não engolida. */
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  /**
+   * Atendimento sendo REMARCADO, ou null quando o formulário está criando.
+   *
+   * O mesmo formulário serve aos dois casos, e é o que decide qual action é
+   * chamada no envio. Antes de A-01 "Remarcar" apenas reabria o formulário de
+   * criação — inofensivo enquanto nada persistia, e um atendimento DUPLICADO a
+   * partir do momento em que passou a persistir: o original ficaria no horário
+   * antigo, e o paciente apareceria duas vezes na agenda.
+   */
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null)
 
   const weekStart = useMemo(
     () => startOfWeek(referenceDate),
@@ -125,43 +162,227 @@ export function AgendaScreen({
     setReferenceDate((current) => addDays(current, direction * step))
   }
 
-  function handleCreate(values: NewAppointmentInput) {
-    const [year, month, day] = values.date.split('-').map(Number)
-    const [hours, minutes] = values.time.split(':').map(Number)
-    const patient = patients.find((item) => item.id === values.patientId)
-    const professional = professionals.find(
-      (item) => item.id === values.professionalId,
-    )
-
-    const created: Appointment = {
-      id: `apt-local-${appointments.length + 1}`,
-      patientId: values.patientId,
-      patientName: patient?.name ?? 'Paciente',
-      professionalId: values.professionalId,
-      professionalName: professional?.name ?? 'Profissional',
-      type: values.type,
-      startsAt: new Date(year, month - 1, day, hours, minutes),
-      durationMinutes: Number(values.durationMinutes),
-      status: values.status,
-      notes: values.notes || undefined,
+  /** Entidade a partir do que a Server Action devolveu (só escalares). */
+  function fromDto(dto: AppointmentDto): Appointment {
+    return {
+      id: dto.id,
+      patientId: dto.patientId,
+      patientName: dto.patientName,
+      professionalId: dto.professionalId,
+      professionalName: dto.professionalName,
+      type: dto.type,
+      startsAt: new Date(dto.startsAt),
+      durationMinutes: dto.durationMinutes,
+      status: dto.status as Appointment['status'],
+      notes: dto.notes,
     }
-
-    setAppointments((current) => [...current, created])
   }
 
-  function handleCancel(appointment: Appointment) {
+  /**
+   * Agendamento.
+   *
+   * Dois caminhos, e a diferença entre eles é a regra D8/R7 do roadmap:
+   *
+   *  - **Sem banco (`isLive` falso)** — demonstração local. A Server Action não
+   *    é chamada, o atendimento vive na memória desta aba, e o aviso na tela diz
+   *    isso. Vitrine que se parece com produto é o R11.
+   *  - **Com banco** — `createAppointmentAction`. O modal só fecha depois que o
+   *    servidor confirma, e a linha que entra na grade usa o `id` devolvido por
+   *    ele. Falha não vira sucesso otimista.
+   */
+  async function handleCreate(
+    values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
+  ): Promise<AppointmentSubmitFailure | null> {
+    // Remarcar move a MESMA linha; criar faz outra. Um formulário, duas actions.
+    if (reschedulingId !== null) {
+      return handleRescheduleSubmit(reschedulingId, values, options)
+    }
+
+    if (!isLive) {
+      const [year, month, day] = values.date.split('-').map(Number)
+      const [hours, minutes] = values.time.split(':').map(Number)
+      const patient = patients.find((item) => item.id === values.patientId)
+      const professional = professionals.find(
+        (item) => item.id === values.professionalId,
+      )
+
+      setAppointments((current) => [
+        ...current,
+        {
+          id: `apt-local-${current.length + 1}`,
+          patientId: values.patientId,
+          patientName: patient?.name ?? 'Paciente',
+          professionalId: values.professionalId,
+          professionalName: professional?.name ?? 'Profissional',
+          type: values.type,
+          startsAt: new Date(year, month - 1, day, hours, minutes),
+          durationMinutes: Number(values.durationMinutes),
+          status: values.status,
+          notes: values.notes || undefined,
+        },
+      ])
+
+      return null
+    }
+
+    try {
+      const result = await createAppointmentAction({
+        patientId: values.patientId,
+        professionalId: values.professionalId,
+        type: values.type,
+        date: values.date,
+        time: values.time,
+        durationMinutes: values.durationMinutes,
+        status: values.status,
+        notes: values.notes,
+        confirmOutsideBusinessHours:
+          options?.confirmOutsideBusinessHours ?? false,
+      })
+
+      if (!result.ok) {
+        if (result.error.code === 'unauthenticated') {
+          router.replace('/login?next=%2Fagenda')
+          return null
+        }
+
+        if (result.error.code === 'no-active-clinic') {
+          router.replace('/onboarding')
+          return null
+        }
+
+        return {
+          message: result.error.message,
+          fieldErrors: result.error.fieldErrors,
+          // 'needs-confirmation' não é recusa: o formulário precisa oferecer o
+          // caminho de seguir mesmo assim (A-02).
+          needsConfirmation: result.error.code === 'needs-confirmation',
+        }
+      }
+
+      setAppointments((current) => [...current, fromDto(result.data)])
+
+      // A grade já tem o atendimento novo. O refresh existe para o resto do
+      // servidor: dashboard, contadores e qualquer tela em cache.
+      router.refresh()
+
+      return null
+    } catch {
+      // Falha de transporte: a Server Action nem chegou a responder.
+      return { message: scheduleMessages.unavailable }
+    }
+  }
+
+  /**
+   * Cancelamento.
+   *
+   * Não remove da grade: o atendimento continua visível com o status trocado.
+   * Sumir da tela sugeriria que a linha foi apagada, e cancelar é justamente o
+   * oposto — o registro do que foi desmarcado é o que a clínica precisa ter.
+   */
+  async function handleCancel(appointment: Appointment) {
+    if (!isLive) {
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointment.id
+            ? { ...item, status: 'canceled' as const }
+            : item,
+        ),
+      )
+      setSelected(null)
+      return
+    }
+
+    setCancelError(null)
+
+    const result = await cancelAppointmentAction({
+      appointmentId: appointment.id,
+    })
+
+    if (!result.ok) {
+      setCancelError(result.error.message)
+      return
+    }
+
     setAppointments((current) =>
       current.map((item) =>
-        item.id === appointment.id
-          ? { ...item, status: 'canceled' as const }
-          : item,
+        item.id === appointment.id ? fromDto(result.data) : item,
       ),
     )
+    setSelected(null)
+    router.refresh()
+  }
+
+  /**
+   * Envio do formulário quando ele está REMARCANDO.
+   *
+   * Só data, hora e duração chegam ao servidor: remarcar não é reescrever o
+   * atendimento. Trocar paciente ou profissional aqui seria cancelar um
+   * atendimento e criar outro fingindo ser o mesmo — e o status confirmado
+   * viajaria junto, dizendo que um paciente confirmou algo que nunca lhe foi
+   * proposto.
+   */
+  async function handleRescheduleSubmit(
+    appointmentId: string,
+    values: NewAppointmentInput,
+    options?: AppointmentSubmitOptions,
+  ): Promise<AppointmentSubmitFailure | null> {
+    if (!isLive) {
+      const [year, month, day] = values.date.split('-').map(Number)
+      const [hours, minutes] = values.time.split(':').map(Number)
+
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointmentId
+            ? {
+                ...item,
+                startsAt: new Date(year, month - 1, day, hours, minutes),
+                durationMinutes: Number(values.durationMinutes),
+              }
+            : item,
+        ),
+      )
+      setReschedulingId(null)
+      return null
+    }
+
+    try {
+      const result = await rescheduleAppointmentAction({
+        appointmentId,
+        date: values.date,
+        time: values.time,
+        durationMinutes: values.durationMinutes,
+        confirmOutsideBusinessHours:
+          options?.confirmOutsideBusinessHours ?? false,
+      })
+
+      if (!result.ok) {
+        return {
+          message: result.error.message,
+          fieldErrors: result.error.fieldErrors,
+          needsConfirmation: result.error.code === 'needs-confirmation',
+        }
+      }
+
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointmentId ? fromDto(result.data) : item,
+        ),
+      )
+      setReschedulingId(null)
+      router.refresh()
+
+      return null
+    } catch {
+      return { message: scheduleMessages.unavailable }
+    }
   }
 
   function handleReschedule(appointment: Appointment) {
-    // Reagendar reabre o formulario com o horario de origem como ponto de partida.
+    // O formulario reabre no horario de origem, mas agora MOVENDO a linha —
+    // ver `reschedulingId`.
     setSelected(null)
+    setReschedulingId(appointment.id)
     setCreateTime(
       `${String(appointment.startsAt.getHours()).padStart(2, '0')}:${String(appointment.startsAt.getMinutes()).padStart(2, '0')}`,
     )
@@ -272,24 +493,33 @@ export function AgendaScreen({
         da primeira montagem e "adicionar as 14:00" abriria o modal com 09:00.
       */}
       <NewAppointmentModal
-        key={`${toDateInputValue(referenceDate)}-${createTime}`}
+        key={`${reschedulingId ?? 'new'}-${toDateInputValue(referenceDate)}-${createTime}-${defaultDurationMinutes}`}
         open={isCreating}
-        onOpenChange={setCreating}
+        onOpenChange={(open) => {
+          setCreating(open)
+          // Fechar o formulario abandona a remarcacao: reabri-lo depois cria.
+          if (!open) setReschedulingId(null)
+        }}
         patients={patients}
         professionals={professionals}
         existingAppointments={appointments}
         defaultDate={toDateInputValue(referenceDate)}
         defaultTime={createTime}
+        defaultDurationMinutes={defaultDurationMinutes}
         onSubmit={handleCreate}
       />
 
       <AppointmentDetailsModal
         appointment={selected}
         onOpenChange={(open) => {
-          if (!open) setSelected(null)
+          if (!open) {
+            setSelected(null)
+            setCancelError(null)
+          }
         }}
         onReschedule={handleReschedule}
         onCancel={handleCancel}
+        cancelError={cancelError}
       />
     </div>
   )

@@ -1,12 +1,19 @@
 import type { Metadata } from 'next'
+import { connection } from 'next/server'
 
-import { WhatsappScreen } from '@/modules/workspace/ui/OperationsScreens'
+import { getIntegrationRepository } from '@/modules/integrations/infrastructure/repository'
+import { WhatsappScreen } from '@/modules/integrations/ui/WhatsappScreen'
 
 export const metadata: Metadata = {
   title: 'WhatsApp',
-  description: 'Organize as conversas da clínica em um só lugar.',
+  description: 'Estado do canal de WhatsApp da clínica.',
 }
 
-export default function WhatsappPage() {
-  return <WhatsappScreen />
+export default async function WhatsappPage() {
+  await connection()
+
+  const source = await getIntegrationRepository()
+  const overview = await source.repository.overview(source.clinicId)
+
+  return <WhatsappScreen status={overview.whatsapp} />
 }

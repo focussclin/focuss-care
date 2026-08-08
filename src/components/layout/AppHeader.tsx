@@ -3,6 +3,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Bell, ChevronDown, Command, Menu, Search, UserRound } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
+import type { ReactNode } from 'react'
 import { useFormStatus } from 'react-dom'
 
 import { Avatar } from '@/components/ui/avatar'
@@ -16,7 +17,11 @@ interface AppHeaderProps {
   userRole: string
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  /** Seletor de clinica (I-03), quando ha mais de um vinculo. */
+  clinicSwitcher?: ReactNode
   onMenuClick: () => void
+  /** Abre a paleta de comandos — o campo de busca e o gatilho dela. */
+  onOpenCommands: () => void
 }
 
 const titles: Record<string, { title: string; description: string }> = {
@@ -35,7 +40,14 @@ const titles: Record<string, { title: string; description: string }> = {
   '/configuracoes': { title: 'Configurações', description: 'Preferências do espaço' },
 }
 
-export function AppHeader({ userName, userRole, clinicName, onMenuClick }: AppHeaderProps) {
+export function AppHeader({
+  userName,
+  userRole,
+  clinicName,
+  clinicSwitcher,
+  onMenuClick,
+  onOpenCommands,
+}: AppHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
   const context =
@@ -66,28 +78,53 @@ export function AppHeader({ userName, userRole, clinicName, onMenuClick }: AppHe
           </div>
         </div>
 
-        <div className="mx-auto hidden w-full max-w-[420px] items-center gap-2 rounded-xl border border-border-card bg-background px-3 text-muted transition-colors focus-within:border-brand/45 focus-within:bg-surface focus-within:shadow-[0_0_0_3px_rgba(37,99,166,0.1)] sm:flex">
+        {/* Troca de clinica: so aparece com mais de um vinculo (I-03) */}
+        {clinicSwitcher ? (
+          <div className="hidden min-w-0 shrink md:block">{clinicSwitcher}</div>
+        ) : null}
+
+        {/*
+          Era um `<input>` INERTE, com o texto "Buscar pacientes, agenda…".
+
+          Campo que aceita digitação e não faz nada é pior que botão
+          desabilitado: a pessoa digita, espera, e conclui que a busca não
+          encontrou o paciente. Virou um botão — que é o que ele sempre foi — e
+          abre a paleta de comandos. O texto também mudou: a paleta vai a telas
+          e ações, não procura registros, e prometer o contrário reintroduziria
+          o mesmo engano com outra roupa.
+        */}
+        <button
+          type="button"
+          onClick={onOpenCommands}
+          aria-keyshortcuts="Control+K Meta+K"
+          className="mx-auto hidden w-full max-w-[420px] items-center gap-2 rounded-xl border border-border-card bg-background px-3 text-left text-muted transition-colors hover:border-brand/45 hover:bg-surface focus-visible:border-focus focus-visible:shadow-focus focus-visible:outline-none sm:flex"
+        >
           <Search aria-hidden className="size-4 shrink-0" />
-          <input
-            aria-label="Buscar no Focuss Care"
-            placeholder="Buscar pacientes, agenda..."
-            className="h-10 min-w-0 flex-1 bg-transparent text-aux text-foreground outline-none placeholder:text-muted"
-          />
+          <span className="h-10 min-w-0 flex-1 content-center truncate text-aux">
+            Ir para uma tela ou criar…
+          </span>
           <kbd className="hidden items-center gap-1 rounded-md border border-border-card bg-surface px-1.5 py-0.5 text-[10px] text-muted lg:inline-flex">
             <Command aria-hidden className="size-3" /> K
           </kbd>
-        </div>
+        </button>
 
         <div className="ml-auto flex items-center gap-2">
+          {/*
+            O marcador de "há aviso não lido" saiu daqui.
+
+            Ele era uma bolinha fixa no CSS — aparecia sempre, em toda tela, sem
+            nenhum aviso por trás. Um indicador de alerta que nunca desliga
+            ensina a pessoa a ignorá-lo, e é o primeiro que ela vai ignorar
+            quando houver um de verdade.
+          */}
           <button
             type="button"
-            aria-label="Notificações — em breve"
-            title="Notificações — em breve"
+            aria-label="Notificações: o sistema ainda não envia avisos automáticos"
+            title="O sistema ainda não envia avisos automáticos"
             disabled
             className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
           >
             <Bell aria-hidden className="size-[18px]" />
-            <span aria-hidden className="absolute right-2.5 top-2.5 size-1.5 rounded-full bg-attention" />
           </button>
 
           <DropdownMenu.Root>

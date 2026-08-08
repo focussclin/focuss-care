@@ -34,6 +34,18 @@ export type AppErrorCode =
   | 'validation'
   /** O estado atual do dado impede a operacao (slug em uso, agenda ocupada). */
   | 'conflict'
+  /**
+   * A operacao e possivel, mas exige confirmacao explicita.
+   *
+   * Nao e erro, e a distincao e o motivo de o codigo existir: 'conflict' diz
+   * "nao da", e este diz "da, se voce confirmar". Agendar fora do horario de
+   * funcionamento da clinica (A-02) e o primeiro caso — encaixe fora do
+   * expediente acontece, e recusa-lo faria a recepcao registrar hora falsa.
+   *
+   * Quem recebe este codigo deve oferecer a confirmacao, nunca so exibir a
+   * mensagem: sem o caminho de volta, vira uma recusa com texto amigavel.
+   */
+  | 'needs-confirmation'
   /** O alvo nao existe — ou existe em outra clinica, o que da no mesmo aqui. */
   | 'not-found'
   /** Dependencia externa indisponivel (Supabase fora do ar ou nao configurado). */

@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   description: 'Configure o espaço da sua clínica no Focuss Care.',
 }
 
+/**
+ * A sessao (cookie) decide se esta tela existe ou se redireciona — nao ha shell
+ * estatico possivel antes dessa leitura. Mesma opcao documentada de `/login`,
+ * agora por `cookies()` em vez de `searchParams` (F-02).
+ */
+export const instant = false
+
 export default async function OnboardingPage() {
   const session = await getSessionState()
 

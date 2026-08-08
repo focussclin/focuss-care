@@ -63,8 +63,8 @@ rejeição em revisão):
 
 ### 2.3 Mock / read-only por design (telas de vitrine)
 
-`src/modules/workspace/ui/OperationsScreens.tsx` (407 linhas, `'use client'`) concentra
-**11 telas** com dados literais no arquivo e botões `disabled`:
+`src/modules/workspace/ui/OperationsScreens.tsx` concentrava **11 telas** com dados
+literais no arquivo e botões `disabled`:
 
 `AtendimentosScreen` · `ProntuariosScreen` · `FinanceiroScreen` · `WhatsappScreen` ·
 `ChatIaScreen` · `AutomacoesScreen` · `RelatoriosScreen` · `ConfiguracoesScreen` ·
@@ -75,20 +75,26 @@ cada tela migra para `src/modules/<módulo>/ui/` com container + view + reposit�
 e sai deste arquivo. **O arquivo desaparece quando o último módulo for implementado** —
 esse é o critério de saída dele.
 
+**Situação em 08/08/2026: o arquivo NÃO EXISTE MAIS.** As onze telas saíram —
+oito com suas fatias (I-01, E-01, R-01, S-01, C-01, T-01, B-01, V-01) e as três
+últimas com o módulo `integrations`, que trocou dados literais por estado de
+conexão lido do banco. W-01, AI-* e AU-01 continuam **Blocked**; a diferença é
+que as telas agora dizem isso em vez de simular um canal ligado.
+
 ### 2.4 Dívida técnica catalogada
 
 | # | Dívida | Severidade | Quando pagar |
 |---|---|---|---|
 | D1 | `createAction` existia como dívida; F-01 criou `modules/_shared/application/createAction.ts`. Primeiro chamador runtime ainda pendente (P-A6). | **Em Review** | P-01, primeira mutação tenant-scoped |
 | D2 | `audit_log` existia no banco sem escritas no código; F-01 criou `recordAuditEvent` e integrou `clinic.created`. Policy remota de INSERT ainda não verificada (P-A1). | **Em Review** | Confirmar RLS no Supabase e cobrir com F-04 |
-| D3 | Sem `lib/cache/tags.ts`; nenhuma chave de cache com `clinic_id`. Nenhum `use cache` em uso. | **Crítica** | Fase 1 |
+| D3 | `lib/cache/tags.ts` existe (F-02): fábrica única e tipada, toda tag com `clinic_id`, invalidação por tag ligada ao `createAction`. **Continua sem nenhum `use cache` em uso** — nenhum dado clínico foi cacheado (P-C1 de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md) §8.6). | **Em Review** | Infra paga; o uso entra com a primeira leitura cacheável tenant-scoped |
 | D4 | ESLint é só `next/core-web-vitals` + `typescript`. **`eslint-plugin-boundaries` não instalado** → as 6 regras de arquitetura da §10 de `02-estrutura-de-pastas.md` não são verificadas. | Alta | Fase 1 |
 | D5 | **Zero testes.** Nenhum runner, nenhum arquivo de teste, `supabase/tests/` não existe. | Alta | Fase 1 (harness) → contínuo |
 | D6 | Sem script `typecheck` no `package.json`; sem CI (`.github/workflows/` ausente). | Alta | Fase 1 |
 | D7 | `supabase/migrations/` **vazio** — o schema remoto não está versionado no repo. Não há como reproduzir o banco nem revisar mudança de schema em PR. | Alta | Fase 2 |
 | D8 | Modo demo (`data-source.ts` cai para mock quando falta vínculo) mascara bug de tenancy: usuário sem clínica vê dados fictícios em vez de ser levado ao onboarding. | Alta | Fase 1 (feature 01) |
 | D9 | `OperationsScreens.tsx` — 11 telas em um arquivo `'use client'`, com estilos inline longos. Ponto de conflito garantido entre agentes. | Média | Diluída por fase |
-| D10 | Sem `unauthorized.tsx` / `forbidden.tsx`; `authInterrupts` e `cacheComponents` não habilitados em `next.config.ts`. | Média | Fase 1 |
+| D10 | **Parcialmente paga:** `cacheComponents: true` habilitada por F-02 (com quatro segmentos em `instant = false` — P-C2). Faltam `unauthorized.tsx` / `forbidden.tsx` e `experimental.authInterrupts`. | Média | Restante em I-05 |
 | D11 | Sem TanStack Query instalado, embora a arquitetura o preveja para interação. | Baixa | Quando a agenda ganhar drag/filtros server-side |
 | D12 | ~~Nenhum `Result`/`Paginated` em `_shared/domain`~~ — **parcialmente paga**: `Result` (F-01) e `Paginated<T>` (P-02a) existem. Falta `Money`/centavos. | Média | `Money` antes do Financeiro |
 | D13 | Documentos `*_DESIGN.md` soltos na raiz (5 arquivos). Deveriam viver em `docs/design/`. | Baixa | Oportunístico |
@@ -238,7 +244,7 @@ declarada antes de abrir o editor.**
 | Flag | Para quê |
 |---|---|
 | `experimental.authInterrupts` | `unauthorized()` / `forbidden()` + telas 401/403 (D10) |
-| `cacheComponents` | Diretivas `use cache`, `use cache: private` (D3) |
+| ~~`cacheComponents`~~ | **Habilitada por F-02.** Substitui `dynamicIO`, `useCache` e `ppr`, removidas no Next 16 |
 | `experimental.taint` | Impedir que objeto sensível chegue a Client Component |
 | `output: 'standalone'` | Deploy em Docker/Coolify |
 
@@ -278,13 +284,13 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 - [ ] Nenhuma nova tabela sem `clinic_id NOT NULL` + RLS `ENABLE` **e** `FORCE`.
 - [ ] Toda policy tem `USING` **e** `WITH CHECK` (só `USING` permite gravar em outra clínica).
 - [ ] `clinic_id` é a **primeira coluna** de todo índice composto.
-- [ ] Toda tag/chave de cache carrega `clinic_id`, gerada por `lib/cache/tags.ts`.
-- [ ] Dado derivado de sessão usa `'use cache: private'` — nunca `'use cache'` puro.
+- [x] Toda tag/chave de cache carrega `clinic_id`, gerada por `lib/cache/tags.ts` (F-02; o tipo `CacheTag` recusa string literal em tempo de compilação).
+- [ ] Dado derivado de sessão usa `'use cache: private'` — nunca `'use cache'` puro. **Nenhum dado está cacheado hoje**; o item passa a valer quando a primeira leitura cacheável entrar.
 - [ ] Mutação passa pelo `createAction` e grava em `audit_log`.
 - [ ] Leitura de prontuário é auditada (quem, quando, qual, de qual IP).
 - [ ] Exclusão é lógica (`deleted_at`), nunca `DELETE`.
 - [ ] Dado clínico não vaza para Client Component (usar `taint`; view recebe só o necessário).
-- [ ] Novo tratamento de dado pessoal tem finalidade registrada em `consents`.
+- [ ] Novo tratamento de dado pessoal tem finalidade registrada em `consents`. **P-03 entregou o registro por finalidade do paciente** (5 propósitos do enum `consent_purpose`, conceder e revogar pelo `createAction`); o item só fecha quando a policy de escrita da tabela for confirmada — C1/C2 da §13.
 - [ ] Alteração/remoção de vínculo **revoga a sessão explicitamente** (claims do JWT ficam velhas por ~1h).
 - [ ] `SUPABASE_SECRET_KEY` não aparece em nenhum caminho alcançável pelo browser.
 
@@ -292,7 +298,7 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 
 | Requisito | Onde | Fase |
 |---|---|---|
-| Registro de consentimento por finalidade | `consents` | F2 |
+| Registro de consentimento por finalidade | `consents` | F2 — **em Review (P-03)**: painel no perfil do paciente, conceder/revogar com data e versão do documento. Falta confirmar RLS/policy da tabela e o teste de tenancy |
 | Auditoria de acesso a prontuário | `audit_log` | F5 |
 | Exportação de dados do titular | `identity` / `settings` | F6 |
 | Eliminação/anonimização respeitando prazo legal de guarda | `records` | F6 |
@@ -305,7 +311,7 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 | # | Risco | Sev. | Gate que o bloqueia |
 |---|---|---|---|
 | R1 | Clínica A enxerga dado da clínica B | Crítica | Teste de tenancy no CI para **toda** tabela nova. Sem teste, o PR não entra. |
-| R2 | Cache vazando entre tenants | Crítica | Lint proibindo tag de cache literal; toda tag sai de `cache/tags.ts`. |
+| R2 | Cache vazando entre tenants | Crítica | **Parcial (F-02):** toda tag sai de `cache/tags.ts` e o tipo `CacheTag` recusa string literal no compilador; hoje nada está cacheado. Falta a regra de lint proibindo `next/cache` fora do pipeline (F-03 — P-C4). |
 | R3 | Service role key no bundle | Crítica | `server-only` + regra de import no lint + verificação no CI. |
 | R4 | Escrita sem auditoria ou sem autorização | Crítica | Lint: Server Action que não usa `createAction` reprova. |
 | R5 | Prontuário editável | Crítica | Policy recusa `UPDATE`/`DELETE`; teste prova a recusa. |
@@ -397,7 +403,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | ID | Feature | Dono | Status | Nota |
 |---|---|---|---|---|
 | F-01 | `createAction` + `Result` + auditoria | Claude | **Review** | Implementado e exercitado por P-01; P-A1 (policy remota de `audit_log`) e cobertura automatizada seguem abertos. |
-| F-02 | `lib/cache/tags.ts` + flags do Next 16 | Claude | **Ready** | D3, D10 |
+| F-02 | `lib/cache/tags.ts` + flags do Next 16 | Claude | **Review** | D3 e parte de D10. Fábrica, `cacheComponents` e invalidação por tag no `createAction` entregues e testadas (§8 de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md)). **Nenhum dado clínico cacheado** — as tags existem sem consumidor até uma leitura cacheável tenant-scoped ser criada (P-C1). |
 | F-03 | `eslint-plugin-boundaries` com as 6 regras | Claude | **Ready** | D4 |
 | F-04 | Harness de teste + script `typecheck` + CI | Claude | **Ready** | D5, D6 |
 | F-05 | Versionar schema remoto em `supabase/migrations/` | Claude / rev. Codex | Backlog | D7 |
@@ -408,7 +414,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 |---|---|---|---|---|
 | **I-01** | **Onboarding real + sessão/tenant na casca** | Claude | **Review** | §14 · implementação e pendências em [`05-onboarding-e-sessao.md`](./05-onboarding-e-sessao.md). CA7 depende da policy de `audit_log`; CA8 e CA1 (testes) seguem abertos e dependem de verificação do banco/F-04. |
 | I-02 | Cadastro de conta funcional (`signUp`) | Claude | **Review** | Entregue junto de I-01 |
-| I-03 | Seletor de clínica (`switch_clinic`) | Claude | Backlog | Depois de I-01 |
+| **I-03** | **Seletor de clínica (`switch_clinic`)** | Claude | **Review** | Regra de produto: **uma assinatura = uma clínica**, e cada conta cria uma só. Vários vínculos existem pelo convite (I-04) — ver §13.1 |
 | I-04 | Convites (`accept_invitation`) + revogação de sessão | Claude | Backlog | R6 |
 | I-05 | Matriz papel × ação + `unauthorized`/`forbidden` | Claude / Codex | Backlog | D10 |
 
@@ -419,16 +425,17 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **P-01** | **Pacientes — cadastro real persistindo** | Claude | **Review** |
 | **P-02a** | **Pacientes — busca server-side e paginação por cursor** | Claude | **Review** |
 | P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
-| P-03 | Pacientes — consentimento LGPD | Claude | Backlog |
-| A-01 | Agenda — criar/remarcar/cancelar persistindo | Claude | Backlog |
-| A-02 | Agenda — conflito e disponibilidade reais | Claude | Backlog |
-| E-01 | Atendimentos — check-in, fila, encerramento | Claude | Backlog |
-| R-01 | Prontuário versionado append-only | Claude | Backlog |
-| S-01 | Equipe — profissionais, escalas, ausências | Claude | Backlog |
-| C-01 | Configurações da clínica | Claude | Backlog |
-| B-01 | Financeiro — fatura, pagamento, caixa | Claude | Backlog |
-| V-01 | Convênios — operadoras, guias, glosas | Claude | Backlog |
-| T-01 | Relatórios e dashboard sem mock | Claude | Backlog |
+| **P-03** | **Pacientes — consentimento LGPD** | Claude | **Review** |
+| **A-01** | **Agenda — criar/remarcar/cancelar persistindo** | Claude | **Review** |
+| **A-02** | **Agenda — conflito real e horário de funcionamento** | Claude | **Review** |
+| **E-01** | **Atendimentos — check-in, fila, encerramento** | Claude | **Review** |
+| **R-01** | **Prontuário versionado append-only** | Claude | **Review** |
+| **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
+| **S-02** | **Equipe — funcionários e ausências** | Claude | **Review** |
+| **C-01** | **Configurações da clínica** | Claude | **Review** |
+| **B-01** | **Financeiro — cobrança, pagamento, caixa** | Claude | **Review** |
+| **V-01** | **Convênios — operadoras, planos, guias** | Claude | **Review** |
+| **T-01** | **Relatórios e dashboard sem mock** | Claude | **Review** |
 
 ### Diferenciação
 
@@ -443,14 +450,35 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Tela | Vira feature | Status |
 |---|---|---|
 | Onboarding | I-01 | **Ready** |
-| Equipe | S-01 | Backlog |
-| Configurações | C-01 | Backlog |
-| Atendimentos | E-01 | Backlog |
-| Prontuários | R-01 | Backlog |
-| Financeiro | B-01 | Backlog |
-| Convênios | V-01 | Backlog |
-| Relatórios | T-01 | Backlog |
+| Equipe | S-01 | **Removida** |
+| Configurações | C-01 | **Removida** |
+| Atendimentos | E-01 | **Removida** |
+| Prontuários | R-01 | **Removida** |
+| Financeiro | B-01 | **Removida** |
+| Convênios | V-01 | **Removida** |
+| Relatórios | T-01 | **Removida** |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
+
+### 13.1 Uma assinatura, uma clínica — e o que isso NÃO significa
+
+Decisão de produto de **07/08/2026**. São duas cardinalidades diferentes, e
+confundi-las custa caro nos dois sentidos:
+
+| Relação | Cardinalidade | Onde vive |
+|---|---|---|
+| Assinatura → clínica | **1:1** | `subscriptions.clinic_id` |
+| Conta → clínica que ela **cria** | **1:1** | Guard em `createClinicAction` |
+| Usuário → clínica de que ele **participa** | **N:N** | `memberships` |
+
+A regra proíbe **plano multi-unidade** (uma assinatura cobrindo uma rede) e
+**uma conta responsável por duas clínicas**. Ela **não** proíbe o profissional
+que atende em dois consultórios: ele é convidado para o segundo, que tem
+assinatura própria, paga por outro dono.
+
+**Consequência que já valeu uma correção:** o guard do `createClinicAction`
+recusava quem tivesse *qualquer* vínculo ativo. Isso significava que aceitar um
+convite tirava da pessoa, para sempre, o direito de abrir a própria clínica — e
+ninguém desconfiaria disso ao aceitar. O filtro passou a ser por `role = 'owner'`.
 
 ### O que trava P-02b
 
@@ -462,9 +490,217 @@ no banco**. O resto depende de coisas que não são código de aplicação:
 | B1 | Sem acesso SQL ao banco remoto (não há `DATABASE_URL` nem access token; `supabase/migrations/` está vazio — D7) | Índices, extensões e **colação de `patients.full_name`** não são verificáveis. Se a colação for não determinística, o keyset precisa mudar para `(created_at, id)` |
 | B2 | Migration exige aprovação do Codex e PR isolado (§7.4) | `pg_trgm` + `unaccent` e o índice `(clinic_id, full_name, id) where deleted_at is null`. Sem eles a busca infixa é **correta e O(n) por clínica** |
 | B3 | Filtro "Última visita (30/90 dias)" deriva de `appointments` | Não é expressável em keyset sobre `patients` via PostgREST — "mais de 90 dias" é anti-join. Exige `last_visit_at` denormalizado ou RPC. **O controle está desabilitado na tela, não fingindo funcionar** |
-| B4 | F-02 (cache tags com `clinic_id`) não existe — D3 | A listagem não pode ser cacheada: `use cache` sem tag por clínica é o R2 |
+| B4 | **Destravado como infraestrutura, ainda aberto como decisão.** F-02 entregou `lib/cache/tags.ts`, `cacheComponents: true` e a invalidação por tag no `createAction` — a tag por clínica existe e é testada. O que falta não é mais o R2: é o **contrato de cache do dado clínico**. A listagem lê sessão em cookie, `searchParams` e `connection()`, e as três são proibidas em `use cache`; o caminho é `'use cache: private'` com `cacheLife` e decisão de LGPD explícitas | A listagem continua **sem cache**. P-02b decide o contrato ou entrega só índice e filtro |
 
 **P-02 não está Done.** P-02a está em Review; P-02b continua Blocked.
+
+### O que falta para P-03 sair de Review
+
+P-03 entregou o consentimento LGPD ponta a ponta — porta, adapter, Zod, duas
+Server Actions pelo `createAction`, painel no perfil e 4 arquivos de teste — **sem
+tocar no banco remoto**. `lint`, `typecheck`, `build` e `npm test` estão verdes.
+
+O que impede `Done` é o outro lado da fronteira, e nada disso é código de
+aplicação (detalhe em [`07-cadastro-de-pacientes.md`](./07-cadastro-de-pacientes.md) §9.8):
+
+| # | Bloqueio | Consequência |
+|---|---|---|
+| C1 | **RLS e policies de `consents` não verificadas.** Nenhuma sonda foi executada contra a tabela; o que se sabe é o levantamento geral da §2 de [`03-banco-de-dados.md`](./03-banco-de-dados.md) | Sem B1 resolvido (acesso SQL), continua não verificável |
+| C2 | **`INSERT`/`UPDATE` de `consents` pelo membro autenticado não confirmados.** Mesmo tipo de achado do `audit_log` (P-A1): policy com `USING` e sem `WITH CHECK` recusa a escrita com `42501` | O botão traduziria a recusa para "você não tem permissão" — correto, e inútil |
+| C3 | `patient.consent.granted` / `.revoked` **não chegam a `audit_log`**, pelo mesmo bloqueio de policy | Escrita acontece, evento vira log de servidor |
+| C4 | **Teste de tenancy pgTAP de `consents`** — R1 exige o teste para toda tabela nova | `supabase/tests/` não existe (D5/D7) |
+| C5 | Sem unique parcial em `(clinic_id, subject_type, subject_id, purpose) where revoked_at is null`, duas concessões simultâneas deixam duas linhas vigentes | Degradação escolhida: o painel mostra a mais recente, a revogação fecha **todas**, e `revoked_count > 1` no evento é a evidência da corrida. A correção é migration (§7.4) |
+| C6 | Persistência não verificada por usuário real (DoD da §11) | Depende de C1 e C2 |
+
+**A tabela `consents` também não tem FK de `subject_id` para `patients` nem
+`created_by`.** A aplicação compensa lendo o paciente antes de gravar e validando
+o formato uuid no adapter; o ator do registro fica em `audit_log`, não na linha.
+
+### O que C-01 deliberadamente NÃO configura
+
+A tela de configurações entrega o que é **fato** (a identidade da empresa) e o
+que **alguém consome** (a duração padrão da agenda). O resto de
+`clinic_settings` ficou sem controle, e a ausência está escrita na própria tela:
+
+| Coluna / campo | Por que não tem ajuste ainda |
+|---|---|
+| `notification_prefs` | Nenhum caminho do produto envia notificação. Gravar a preferência faria a pessoa parar de conferir se o aviso chegou |
+| `branding` e `clinics.logo_url` | Upload exige bucket de Storage cuja configuração não é verificável daqui (B1) |
+| `ai_enabled` | O módulo de IA está **Blocked** (W-01/AI-*). Ligar uma coluna não liga um agente |
+| `clinics.timezone` e `locale` | Somente leitura: datas e horas são renderizadas pelo relógio do dispositivo. Um seletor gravaria o fuso sem mudar nada do que a agenda mostra |
+| `clinics.slug` | Somente leitura: trocá-lo quebra todo link já compartilhado, e não há redirecionamento do endereço antigo |
+
+**O horário de funcionamento passou a valer com A-02.** Ele persiste aqui e a
+agenda o consulta: atendimento fora do expediente pede confirmação antes de ser
+gravado, e a confirmação vira evento de auditoria. O formato guarda **um turno
+por dia** — intervalo de almoço ainda não é representável.
+
+**Perfil pessoal ENTROU depois**, e não como parte de `settings`. Nome e
+telefone moram em `profiles` e são do módulo `identity`; o card chega a
+`/configuracoes` como slot, composto na rota — a mesma solução do seletor de
+clínicas na casca. É para lá que o menu da pessoa aponta desde sempre, com o
+rótulo "Perfil e configurações", e até então entregava só a segunda metade.
+
+### O que A-02 entregou, e o que ficou de fora
+
+| Verificação | Estado |
+|---|---|
+| **Sobreposição de horário do mesmo profissional** | **Entregue.** Consulta de intervalo semiaberto antes de criar e de remarcar, com `clinic_id` e `professional_id` no filtro. Recusa dura |
+| **Horário de funcionamento da clínica** | **Entregue.** Só o que foi salvo em C-01 vale; padrão de tela não é imposto. Recusa reversível por confirmação explícita, auditada |
+| **Atomicidade da recusa de sobreposição** | **Bloqueado (B1).** Constraint proposta em `20260808_appointments_no_overlap.sql`, não aplicada |
+| **Disponibilidade por profissional (`availability_rules`)** | **Bloqueado (B1).** Ver abaixo |
+| **Exceções de agenda (`availability_exceptions`)** | **Fora de escopo.** Depende de `availability_rules` estar interpretável |
+
+**Por que `availability_rules` não foi implementada.** A coluna `weekday` é um
+`number` e o schema não diz qual convenção usa: `extract(dow …)` do Postgres é
+0–6 com domingo em zero, `isodow` é 1–7 com domingo em sete. As duas produzem
+tabelas plausíveis, e a diferença desloca a semana inteira em um dia.
+
+Detectar a convenção pelos dados não resolve: uma clínica com regras só de
+segunda a sexta tem valores 1–5 nas duas convenções. **Adivinhar errado recusaria
+agendamento legítimo** — o pior modo de falha possível para uma clínica, porque
+o sintoma é "o sistema não deixa marcar" e a causa é invisível.
+
+Resolver com uma consulta, e então implementar:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.availability_rules'::regclass;
+```
+
+Enquanto isso, a ausência não degrada nada: sem interpretação, não há regra
+imposta, que é exatamente o comportamento de hoje.
+
+### O que T-01 mede, e o que se recusa a medir
+
+O painel e os relatórios passaram a contar linhas do banco. `dashboardMetrics`
+— 24 atendimentos, 92% de comparecimento, "+12%" — saiu de
+`src/lib/mocks/clinic-data.ts`.
+
+| Indicador | Fonte | Fatia que a criou |
+|---|---|---|
+| Atendimentos hoje / no período | `appointments`, exceto cancelados | A-01 |
+| Desfechos (realizados, cancelados, faltas, por acontecer) | `appointments.status` | A-01 |
+| Pacientes aguardando | `waiting_queue` com `status = 'waiting'`, chegados hoje | E-01 |
+| Novos pacientes (mês e período) | `patients.created_at` | P-01 |
+| Base ativa | `patients.is_active` | P-01 |
+| Comparecimento | `completed` sobre `completed + no_show` | A-01 |
+| Volume por profissional | `appointments` agrupados, sem cancelados | A-01 |
+| Atividade recente | `appointments`, `patients` e `encounters` recentes | A-01, P-01, E-01 |
+
+**Faturamento, recebimentos e glosas não entram.** `invoices`, `payments` e
+`cash_entries` existem no schema, e **nenhuma tela do produto grava neles**. Ler
+agora devolveria R$ 0,00 para toda clínica: verdadeiro como consulta e falso como
+informação — "a clínica não faturou" e "o sistema ainda não registra
+faturamento" são coisas diferentes, e o painel diria a primeira. Entram com
+**B-01** e **V-01**.
+
+**A atividade recente não vem de `audit_log`.** A policy de `INSERT` daquela
+tabela recusa o membro autenticado (**P-P6**), o que a mantém vazia: um feed lido
+de lá ficaria permanentemente em branco e pareceria defeito. Vem das próprias
+operações — e **nenhuma descrição cita o paciente**, porque o painel não tem
+recorte por papel e "encerrou o atendimento de Fulano" é informação de saúde.
+
+**Três decisões sobre ausência de dado**, que valem para os relatórios que vierem:
+
+- **Comparecimento sem base é `null`, não 0%.** Zero por cento diz que ninguém
+  compareceu; numa clínica que ainda não fechou um atendimento, é acusação falsa.
+  A tela mostra "—" e explica quando o número aparece.
+- **Variação percentual só com base declarada.** O painel exibe uma única — novos
+  pacientes, mês contra mês — e a omite quando o mês anterior é zero: crescer do
+  nada não é percentual, e todo primeiro mês cairia nesse caso.
+- **Relatório truncado avisa.** A leitura tem teto de 5.000 linhas; atingi-lo
+  troca o número por uma amostra, e a tela diz isso. Truncar em silêncio é o pior
+  erro possível num painel — o número parece completo e a decisão é tomada.
+
+### O que B-01 entregou, e as três RPCs que não pôde chamar
+
+| Operação | Estado |
+|---|---|
+| **Cobrança** com itens, desconto e vencimento | **Entregue.** Nasce em `draft`; totais recalculados no servidor |
+| **Cancelamento** de cobrança | **Entregue.** Preserva a linha; recusa se já houve pagamento |
+| **Pagamento**, total ou parcial, em sete formas | **Entregue.** Recusa valor acima do saldo; `paid_cents` recalculado da soma |
+| **Caixa**: abrir, lançar entrada/saída, fechar com contagem | **Entregue.** Pagamento em espécie vira lançamento automático |
+| **Emissão fiscal numerada** | **Bloqueado.** Ver abaixo |
+| **Contas a pagar / despesas** (`payables`) | **Fora de escopo.** Nenhuma tela grava; despesa zero diria que a clínica não tem custo |
+| **Repasse a profissional** (`professional_payouts`) | **Bloqueado.** `preview_professional_payout` tem a mesma limitação |
+
+**Três RPCs financeiras aparecem em `database.types.ts` como
+`Args: Record<string, unknown>`** — ou seja, o gerador **não resolveu a
+assinatura**: `issue_invoice`, `close_cash_session` e
+`preview_professional_payout`. Chamá-las seria adivinhar nomes de parâmetro em
+operações que mexem em dinheiro.
+
+Consequências, uma a uma:
+
+- **`issue_invoice`** — a fatia entrega COBRANÇA, não documento fiscal. A
+  cobrança nasce em `draft` e sem `number`, e a tela diz isso onde estaria o
+  botão de emitir. Marcar `issued` sem numerar alegaria uma emissão que não
+  aconteceu, e numeração fiscal que pula ou repete é problema com a prefeitura.
+- **`next_document_number(p_kind)`** é tipada, mas `document_sequences.kind` é
+  texto livre e o valor válido não é legível daqui — o mesmo bloqueio, por outro
+  caminho.
+- **`close_cash_session`** — o adapter calcula e grava direto, com
+  `eq('status','open')` no `where` para que dois fechamentos concorrentes não
+  gravem valores diferentes. O desvio está documentado no método.
+
+Reconciliar com:
+
+```sql
+select proname, pg_get_function_arguments(oid)
+  from pg_proc
+ where proname in ('issue_invoice','close_cash_session','preview_professional_payout');
+
+select distinct kind from public.document_sequences;
+```
+
+**Duas regras de dinheiro que o adapter impõe**, e que valem para V-01:
+
+- **Nenhum total vem do cliente.** O formulário envia quantidade e preço
+  unitário; subtotal e total são recalculados no servidor. Quem controla o total
+  controla quanto o paciente deve, e o formulário roda no navegador dele.
+- **`paid_cents` é recalculado da soma dos pagamentos, nunca incrementado.**
+  Somar sobre o valor anterior transforma uma requisição repetida em dinheiro
+  duplicado; recalcular faz a repetição ser inócua e conserta divergência
+  deixada por falha anterior.
+
+### O que V-01 entregou, e as duas ausências que a tela declara
+
+| Operação | Estado |
+|---|---|
+| **Operadoras**: cadastrar, ativar, desativar | **Entregue.** Desativar não mexe nos planos |
+| **Planos** com coparticipação e prazo de pagamento | **Entregue.** Exige operadora antes — a dependência aparece na interface |
+| **Guias**: abrir solicitação com procedimentos | **Entregue.** Nasce em `requested`, sem número |
+| **Resposta da operadora**: autorizada com número, ou negada com motivo | **Entregue.** Só guia pendente aceita resposta |
+| **Glosas** | **Ausente.** Não há onde guardar — ver abaixo |
+| **Elegibilidade junto à operadora** | **Ausente.** Exige integração externa (TISS/portal) |
+
+**Glosa não tem tabela, e não é a mesma coisa que guia negada.**
+`insurance_authorizations.status = 'denied'` é negativa de autorização **prévia**:
+decidida antes do atendimento, e a consequência é o atendimento não acontecer.
+Glosa é recusa de **pagamento**: a operadora autorizou, o atendimento foi
+prestado, a fatura foi enviada — e o dinheiro não vem. Modelar a segunda em cima
+da primeira somaria dois fatos com efeitos financeiros opostos e esconderia
+justamente o número que a clínica precisa acompanhar. A migration está em
+`supabase/migrations/20260808_insurance_claim_denials.sql`, **não aplicada**.
+
+**Elegibilidade não é a validade cadastrada.** `patient_insurances.valid_until` é
+uma data que a clínica digitou. Consultar a operadora exige integração externa
+que este ambiente não tem, e chamar o campo local de "elegível" faria a recepção
+confiar num dado que ninguém confirmou. A tela usa o termo "validade cadastrada"
+e avisa quando ela já passou — como aviso, não como bloqueio: impedir a guia por
+causa de um cadastro possivelmente desatualizado seria confiar mais nele do que
+em quem está com o paciente na frente.
+
+**Duas recusas do adapter**, pelas mesmas razões de sempre:
+
+- **Guia já respondida não aceita nova resposta.** Reescrever apagaria o motivo
+  da negativa — o texto que sustenta o recurso. O filtro no `where` também
+  impede que duas pessoas respondendo ao mesmo tempo sobrescrevam uma à outra.
+- **O paciente sai da carteirinha, não da entrada.** Recebê-los separados
+  permitiria montar guia do paciente A com a carteirinha de B, e a operadora só
+  recusaria depois do atendimento marcado.
 
 ---
 
@@ -504,9 +740,10 @@ recuperação de senha, marca/tema por clínica.
 
 ### Pré-requisitos
 
-F-01 (`createAction` + auditoria) entrou em Review; F-02 (cache tags) precisa entrar antes
-ou junto da primeira mutação tenant-scoped. F-03 e F-04 entram em paralelo, sem bloquear
-o bootstrap, mas F-04 é necessário para assinar os critérios automatizados.
+F-01 (`createAction` + auditoria) e F-02 (cache tags + `cacheComponents`) entraram em
+Review; as duas já cobrem a primeira mutação tenant-scoped. F-03 e F-04 entram em
+paralelo, sem bloquear o bootstrap, mas F-04 é necessário para assinar os critérios
+automatizados.
 
 ### Critérios de aceite
 

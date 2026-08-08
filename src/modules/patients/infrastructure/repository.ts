@@ -7,8 +7,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveDataSource } from '@/lib/data-source'
 import type { Database } from '@/lib/supabase/database.types'
 
+import type { PatientConsentRepository } from '../domain/PatientConsentRepository'
 import type { PatientRepository } from '../domain/PatientRepository'
 import { MockPatientRepository } from './MockPatientRepository'
+import { SupabasePatientConsentRepository } from './SupabasePatientConsentRepository'
 import { SupabasePatientRepository } from './SupabasePatientRepository'
 
 /**
@@ -59,4 +61,55 @@ export function patientRepositoryFor(
   client: SupabaseClient<Database>,
 ): PatientRepository {
   return new SupabasePatientRepository(client)
+}
+
+// ---------------------------------------------------------------------------
+// Consentimentos LGPD (P-03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Composicao de LEITURA dos consentimentos.
+ *
+ * Nao ha adapter de demonstracao, e a ausencia e a decisao: um consentimento
+ * ficticio e a unica coisa pior que consentimento nenhum. No modo demo esta
+ * funcao devolve `isLive: false` e **nenhum** repositorio, e o painel se anuncia
+ * como demonstracao em vez de exibir estados inventados (R11 do roadmap).
+ *
+ * O redirecionamento para `/onboarding` repete o de `getPatientRepository` pelo
+ * mesmo motivo: usuario autenticado sem clinica nunca pode cair no caminho de
+ * demonstracao — ele veria uma clinica que nao e dele (D8/R7).
+ */
+export async function getPatientConsentSource(): Promise<
+  | { repository: PatientConsentRepository; clinicId: string; isLive: true }
+  | { repository: null; clinicId: null; isLive: false }
+> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabasePatientConsentRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return { repository: null, clinicId: null, isLive: false }
+}
+
+/**
+ * Composicao de ESCRITA.
+ *
+ * Mesma razao de `patientRepositoryFor`: a action ja recebeu do `createAction` um
+ * cliente COM A SESSAO DO USUARIO e a clinica resolvida pelo banco. Resolver a
+ * fonte de dados de novo ali abriria a porta para a escrita cair em um caminho de
+ * demonstracao — que, em consentimento, seria registrar uma escolha do paciente
+ * que nunca chegou ao banco.
+ */
+export function patientConsentRepositoryFor(
+  client: SupabaseClient<Database>,
+): PatientConsentRepository {
+  return new SupabasePatientConsentRepository(client)
 }

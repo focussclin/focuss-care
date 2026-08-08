@@ -1,0 +1,267 @@
+import { z } from 'zod'
+
+import { parseCents } from '@/lib/utils/money'
+import type { PaymentMethod } from '@/lib/supabase/database.types'
+
+export const billingMessages = {
+  invalidFields: 'Revise os campos destacados e tente novamente.',
+  patientRequired: 'Selecione o paciente da cobrança.',
+  itemsRequired: 'Inclua pelo menos um item na cobrança.',
+  descriptionRequired: 'Descreva o que está sendo cobrado.',
+  quantityInvalid: 'A quantidade precisa ser um número inteiro de 1 a 999.',
+  amountInvalid: 'Informe um valor válido, como 150,00.',
+  amountPositive: 'O valor precisa ser maior que zero.',
+  discountTooBig: 'O desconto não pode ser maior que o valor dos itens.',
+  /**
+   * Recusa de pagamento acima do saldo.
+   *
+   * Quase sempre é erro de digitação. A mensagem diz o que fazer — conferir o
+   * valor — em vez de só negar, porque a pessoa está com o paciente na frente.
+   */
+  overpayment:
+    'O valor é maior que o saldo desta cobrança. Confira o quanto ainda falta pagar.',
+  invoicePaid:
+    'Esta cobrança já recebeu pagamento e não pode ser cancelada. Registre um estorno com o responsável financeiro.',
+  cashSessionOpen: 'Já existe um caixa aberto nesta clínica.',
+  cashSessionClosed: 'Este caixa não está mais aberto.',
+  notFound: 'Este registro não está mais disponível nesta clínica.',
+  forbidden: 'Você não tem permissão para movimentar o financeiro.',
+  unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
+  unexpected: 'Não foi possível concluir a operação agora. Tente novamente.',
+  /**
+   * Emissão fiscal indisponível.
+   *
+   * Texto exibido no lugar do botão. Diz o que falta e que não é falha de quem
+   * está usando — a cobrança funciona, o documento numerado é que não sai.
+   */
+  issueUnavailable:
+    'A emissão de documento fiscal numerado ainda não está disponível: depende de uma função do banco de dados cuja assinatura não pôde ser verificada. As cobranças abaixo são registro interno e continuam valendo para controle e recebimento.',
+} as const
+
+/** Formas de pagamento que a tela oferece, com o nome que a recepção usa. */
+export const paymentMethodOptions = [
+  { value: 'cash', label: 'Dinheiro' },
+  { value: 'pix', label: 'Pix' },
+  { value: 'debit_card', label: 'Cartão de débito' },
+  { value: 'credit_card', label: 'Cartão de crédito' },
+  { value: 'bank_transfer', label: 'Transferência' },
+  { value: 'check', label: 'Cheque' },
+  { value: 'other', label: 'Outro' },
+] as const satisfies readonly { value: PaymentMethod; label: string }[]
+
+const methodValues = paymentMethodOptions.map((option) => option.value)
+
+/**
+ * Texto de dinheiro -> centavos, no schema.
+ *
+ * A conversão acontece no SERVIDOR, e não no formulário: o que chega aqui é
+ * texto não confiável, e `parseCents` devolvendo `null` precisa virar erro de
+ * validação — não zero. Aceitar ilegível como zero registraria um pagamento de
+ * nada como se fosse um pagamento.
+ */
+function moneyField(options: { min?: number } = {}) {
+  return z
+    .string()
+    .transform((value, ctx) => {
+      const cents = parseCents(value)
+
+      if (cents === null) {
+        ctx.addIssue({ code: 'custom', message: billingMessages.amountInvalid })
+        return z.NEVER
+      }
+
+      if (cents < 0) {
+        ctx.addIssue({ code: 'custom', message: billingMessages.amountInvalid })
+        return z.NEVER
+      }
+
+      if (options.min !== undefined && cents < options.min) {
+        ctx.addIssue({ code: 'custom', message: billingMessages.amountPositive })
+        return z.NEVER
+      }
+
+      return cents
+    })
+}
+
+const invoiceItemSchema = z.object({
+  description: z
+    .string()
+    .trim()
+    .min(1, billingMessages.descriptionRequired)
+    .max(200, billingMessages.invalidFields),
+  quantity: z.coerce
+    .number()
+    .int(billingMessages.quantityInvalid)
+    .min(1, billingMessages.quantityInvalid)
+    .max(999, billingMessages.quantityInvalid),
+  unitPrice: moneyField({ min: 1 }),
+  discount: moneyField(),
+})
+
+export const createInvoiceSchema = z
+  .object({
+    patientId: z.uuid(billingMessages.patientRequired),
+    items: z.array(invoiceItemSchema).min(1, billingMessages.itemsRequired),
+    discount: moneyField(),
+    dueDate: z.string().optional(),
+    notes: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() ?? '')
+      .transform((value) => (value === '' ? null : value)),
+  })
+  .transform((value, ctx) => {
+    /*
+     * O subtotal é calculado AQUI, e não recebido.
+     *
+     * Quem controla o total controla quanto o paciente deve. O formulário mostra
+     * uma soma para conferência; o número que vale é este, refeito no servidor a
+     * partir de quantidade e preço unitário.
+     */
+    const subtotalCents = value.items.reduce(
+      (total, item) =>
+        total + Math.max(item.quantity * item.unitPrice - item.discount, 0),
+      0,
+    )
+
+    if (value.discount > subtotalCents) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['discount'],
+        message: billingMessages.discountTooBig,
+      })
+      return z.NEVER
+    }
+
+    const dueDate = parseDateOnly(value.dueDate)
+
+    return {
+      patientId: value.patientId,
+      discountCents: value.discount,
+      dueDate,
+      notes: value.notes,
+      items: value.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPrice,
+        discountCents: item.discount,
+      })),
+    }
+  })
+
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>
+
+export const cancelInvoiceSchema = z.object({
+  invoiceId: z.uuid(billingMessages.unexpected),
+  reason: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value)),
+})
+
+export type CancelInvoiceInput = z.infer<typeof cancelInvoiceSchema>
+
+export const registerPaymentSchema = z.object({
+  invoiceId: z.uuid(billingMessages.unexpected),
+  amount: moneyField({ min: 1 }),
+  method: z.enum(methodValues),
+  notes: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value)),
+})
+
+export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>
+
+export const openCashSessionSchema = z.object({
+  /** Troco inicial. Zero é legítimo: caixa pode abrir vazio. */
+  openingAmount: moneyField(),
+})
+
+export type OpenCashSessionInput = z.infer<typeof openCashSessionSchema>
+
+export const cashEntrySchema = z.object({
+  sessionId: z.uuid(billingMessages.unexpected),
+  kind: z.enum(['in', 'out']),
+  amount: moneyField({ min: 1 }),
+  description: z
+    .string()
+    .trim()
+    .min(1, billingMessages.descriptionRequired)
+    .max(200, billingMessages.invalidFields),
+})
+
+export type CashEntryInput = z.infer<typeof cashEntrySchema>
+
+export const closeCashSessionSchema = z.object({
+  sessionId: z.uuid(billingMessages.unexpected),
+  /** O que foi contado na gaveta. Zero é legítimo. */
+  countedAmount: moneyField(),
+})
+
+export type CloseCashSessionInput = z.infer<typeof closeCashSessionSchema>
+
+/** 'YYYY-MM-DD' -> Date local, ou null. Data impossível vira null, não erro. */
+function parseDateOnly(value: string | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+
+  return parsed.getMonth() === month - 1 && parsed.getDate() === day
+    ? parsed
+    : null
+}
+
+// ---------------------------------------------------------------------------
+// O que atravessa a fronteira da Server Action
+// ---------------------------------------------------------------------------
+
+export interface InvoiceItemDto {
+  id: string
+  description: string
+  quantity: number
+  unitPriceCents: number
+  totalCents: number
+}
+
+export interface InvoiceDto {
+  id: string
+  patientName: string
+  number: number | null
+  status: string
+  totalCents: number
+  paidCents: number
+  /** `total − pago`, já calculado: a tela não recalcula dinheiro. */
+  remainingCents: number
+  dueDate: string | null
+  createdAt: string
+  items: readonly InvoiceItemDto[]
+}
+
+export interface CashEntryDto {
+  id: string
+  kind: 'in' | 'out'
+  amountCents: number
+  description: string
+  createdAt: string
+}
+
+export interface CashSessionDto {
+  id: string
+  openedAt: string
+  openedByName: string
+  openingAmountCents: number
+  expectedCents: number
+  entries: readonly CashEntryDto[]
+}
+
+export interface FinanceSummaryDto {
+  receivedCents: number
+  openCents: number
+  openInvoices: number
+  issuedInvoices: number
+}

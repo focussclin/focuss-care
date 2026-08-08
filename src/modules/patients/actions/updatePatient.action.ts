@@ -1,5 +1,7 @@
 'use server'
 
+import { cacheTags } from '@/lib/cache/tags'
+import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -69,7 +71,22 @@ const runUpdatePatient = createAction<
     unexpected: createPatientMessages.unexpectedEdit,
     'not-found': createPatientMessages.notFound,
   },
-  revalidatePaths: ['/pacientes'],
+  /**
+   * `output.id`, e nao `input.patientId`: os dois valem o mesmo aqui, mas so um
+   * deles e o id que o banco confirmou depois da RLS. Montar tag a partir da
+   * entrada seria deixar o navegador escolher qual recorte de cache expirar
+   * (F-02 — ver o JSDoc de `cacheTags` em `createAction`).
+   */
+  cacheTags: ({ clinicId }, output) => [
+    cacheTags.patients(clinicId),
+    cacheTags.patient(clinicId, output.id),
+  ],
+  /*
+   * A ficha e o historico do paciente mostram nome, telefone e observacao — os
+   * campos que esta escrita muda. O caminho e LITERAL, montado a partir do id
+   * que o repositorio devolveu: ver `patientPaths`.
+   */
+  revalidatePaths: (_scope, output) => ['/pacientes', ...patientPaths(output.id)],
 
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)

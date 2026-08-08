@@ -5,16 +5,24 @@ import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import type { MembershipRole } from '@/lib/supabase/database.types'
+
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils/cn'
 import { signOutAction } from '@/modules/identity/actions/signOut.action'
 
 import { BrandMark } from './BrandMark'
-import { navItems, navSections, type NavItem } from './navigation'
+import { navSections, visibleNavItems, type NavItem } from './navigation'
 
 export interface SidebarNavProps {
   userName: string
   userRole: string
+  /**
+   * Papel na clínica ativa, para esconder o que ele não alcança.
+   *
+   * `undefined` mostra tudo — é o modo de demonstração, onde não há vínculo.
+   */
+  role?: MembershipRole | null
   variant: 'full' | 'rail' | 'drawer'
   onNavigate?: () => void
   onToggleCollapse?: () => void
@@ -23,11 +31,13 @@ export interface SidebarNavProps {
 export function SidebarNav({
   userName,
   userRole,
+  role,
   variant,
   onNavigate,
   onToggleCollapse,
 }: SidebarNavProps) {
   const pathname = usePathname()
+  const items = visibleNavItems(role)
   const collapsed = variant === 'rail'
 
   function renderItem(item: NavItem) {
@@ -69,7 +79,7 @@ export function SidebarNav({
         <span
           key={item.href}
           aria-disabled="true"
-          title={`${item.label} — em breve`}
+          title={`${item.label} — não faz parte desta versão`}
           className={className}
         >
           {content}
@@ -142,7 +152,7 @@ export function SidebarNav({
                 </p>
               ) : null}
               <ul className="flex flex-col gap-1">
-                {navItems
+                {items
                   .filter((item) => item.section === section.key)
                   .map((item) => (
                     <li key={item.href}>
@@ -157,7 +167,9 @@ export function SidebarNav({
                               sideOffset={10}
                               className="z-50 rounded-lg bg-foreground px-2.5 py-1.5 text-label font-medium text-white shadow-raised"
                             >
-                              {item.disabled ? `${item.label} — em breve` : item.label}
+                              {item.disabled
+                                ? `${item.label} — não faz parte desta versão`
+                                : item.label}
                             </TooltipPrimitive.Content>
                           </TooltipPrimitive.Portal>
                         </TooltipPrimitive.Root>

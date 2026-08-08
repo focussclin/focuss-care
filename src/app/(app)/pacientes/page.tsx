@@ -21,9 +21,15 @@ export const metadata: Metadata = {
  * o link reproduz e o botao voltar funciona. Antes de P-02a tudo isso era
  * `useState`, e nada disso valia.
  *
- * `await connection()` continua correto aqui (existe por causa do `new Date()`),
- * mas e proibido dentro de `use cache` — se F-02 ligar `cacheComponents`, este
- * ponto vira `io()` ou o "hoje" sai do escopo cacheado.
+ * `await connection()` continua correto aqui (existe por causa do `new Date()`).
+ *
+ * F-02 ligou `cacheComponents`, e **esta leitura continua sem `use cache`** — por
+ * tres motivos somados, nao por omissao: le sessao em cookie, le `searchParams` e
+ * devolve dado de paciente. `use cache` proibe as duas primeiras e `connection()`
+ * e proibido nos dois sabores de cache. O caminho eventual e `use cache: private`
+ * (resultado nunca armazenado no servidor) com `cacheTag(cacheTags.patients(clinicId))`
+ * — contrato que precisa ser escrito com o dado clinico em mente, nao herdado de
+ * uma fatia de infraestrutura. Ver docs/06-acoes-e-auditoria.md §8.
  */
 export default async function PacientesPage({
   searchParams,

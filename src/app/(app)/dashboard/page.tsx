@@ -7,12 +7,9 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { getSessionState } from '@/lib/auth/session'
-import {
-  currentUser,
-  dashboardMetrics,
-  getRecentActivity,
-} from '@/lib/mocks/clinic-data'
+import { currentUser } from '@/lib/mocks/clinic-data'
 import { addDays, formatEyebrowDate, getGreeting, startOfDay } from '@/lib/utils/date'
+import { getReportingRepository } from '@/modules/reporting/infrastructure/repository'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { NotificationBell } from '@/modules/dashboard/ui/NotificationBell'
 import { QuickActionsCard } from '@/modules/dashboard/ui/QuickActionsCard'
@@ -25,6 +22,12 @@ export const metadata: Metadata = {
   description: 'Resumo do dia da sua clínica no Focuss Care.',
 }
 
+/** Variacao percentual com sinal, no formato que o `StatCard` exibe. */
+function formatTrend(current: number, previous: number): string {
+  const delta = Math.round(((current - previous) / previous) * 100)
+  return `${delta >= 0 ? '+' : ''}${delta}%`
+}
+
 export default async function DashboardPage() {
   /*
    * connection() impede que a pagina seja pre-renderizada no build: sem ela, a
@@ -35,19 +38,48 @@ export default async function DashboardPage() {
   const now = new Date()
   const today = startOfDay(now)
 
-  const { repository, clinicId } = await getAppointmentRepository(today)
-  const todayAppointments = await repository.listByRange(
-    clinicId,
-    today,
-    addDays(today, 1),
-  )
+  const [appointmentSource, reportingSource] = await Promise.all([
+    getAppointmentRepository(today),
+    getReportingRepository(),
+  ])
 
-  const activity = getRecentActivity(now)
+  /*
+   * Composicao entre modulos acontece na ROTA (regra 4): `reporting` conta, e
+   * `scheduling` entrega a agenda do dia. Nenhum dos dois alcanca o interior do
+   * outro.
+   */
+  const [todayAppointments, snapshot, activity] = await Promise.all([
+    appointmentSource.repository.listByRange(
+      appointmentSource.clinicId,
+      today,
+      addDays(today, 1),
+    ),
+    reportingSource.repository.dailySnapshot(reportingSource.clinicId, now),
+    reportingSource.repository.recentActivity(reportingSource.clinicId, 5),
+  ])
+
+  /*
+   * Variacao de novos pacientes — mes corrente contra o anterior.
+   *
+   * E a UNICA variacao exibida no painel, e tem base declarada. Os outros cards
+   * ficam sem: "+12%" sem dizer em relacao a que e decoracao, e num painel de
+   * gestao decoracao vira decisao.
+   *
+   * Mes anterior em zero devolve null em vez de "+100%": crescer do nada nao e
+   * percentual, e o primeiro mes de qualquer clinica cairia nesse caso.
+   */
+  const newPatientsTrend =
+    snapshot.newPatientsPreviousMonth > 0
+      ? formatTrend(
+          snapshot.newPatientsThisMonth,
+          snapshot.newPatientsPreviousMonth,
+        )
+      : undefined
 
   /*
    * A saudacao e o avatar sao identidade, nao metrica: saem da sessao. O nome do
    * mock so aparece quando o Supabase nao esta configurado — ai a aplicacao
-   * inteira e demonstracao local. As metricas abaixo continuam mockadas ate T-01.
+   * inteira e demonstracao local.
    */
   const session = await getSessionState()
   const displayName =
@@ -61,7 +93,7 @@ export default async function DashboardPage() {
         description="Aqui está o resumo da sua clínica hoje."
         actions={
           <>
-            <NotificationBell count={dashboardMetrics.waitingPatients} />
+            <NotificationBell />
 
             <span className="inline-flex size-11 items-center justify-center">
               <Avatar name={displayName} size="md" />
@@ -83,25 +115,31 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-4 nav:grid-cols-4">
           <StatCard
             label="Atendimentos hoje"
-            value={String(dashboardMetrics.appointmentsToday)}
-            trend={dashboardMetrics.appointmentsTrend}
+            value={String(snapshot.appointmentsToday)}
             icon={CalendarCheck}
           />
           <StatCard
             label="Pacientes aguardando"
-            value={String(dashboardMetrics.waitingPatients).padStart(2, '0')}
+            value={String(snapshot.waitingNow).padStart(2, '0')}
             icon={Clock3}
             tone="attention"
           />
           <StatCard
-            label="Novos pacientes"
-            value={String(dashboardMetrics.newPatients).padStart(2, '0')}
-            trend={dashboardMetrics.newPatientsTrend}
+            label="Novos pacientes no mês"
+            value={String(snapshot.newPatientsThisMonth).padStart(2, '0')}
+            trend={newPatientsTrend}
             icon={UserPlus}
           />
+          {/*
+            Sem base, o card diz "—" e não "0%".
+            Zero por cento significaria que ninguém compareceu; numa clínica que
+            ainda não fechou nenhum atendimento, isso é uma acusação falsa.
+          */}
           <StatCard
-            label="Taxa de comparecimento"
-            value={`${dashboardMetrics.attendanceRate}%`}
+            label="Comparecimento (30 dias)"
+            value={
+              snapshot.attendance ? `${snapshot.attendance.percentage}%` : '—'
+            }
             icon={TrendingUp}
           />
         </div>

@@ -124,7 +124,7 @@ export async function recordAuditEvent(
       actor_role: role ?? null,
       action: event.action,
       entity_type: event.entityType,
-      entity_id: event.entityId ?? null,
+      entity_id: toEntityId(event),
       before: sanitizeMetadata(event.before, event, 'before'),
       after: sanitizeMetadata(event.after, event, 'after'),
       ip,
@@ -272,6 +272,44 @@ const forbiddenKeyPatterns: readonly RegExp[] = [
 ]
 
 /** Limites que impedem o log de virar deposito de payload. */
+/** `audit_log.entity_id` é `uuid` no banco — qualquer outra coisa é recusada. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** `true` quando o valor pode ir para a coluna `uuid` sem o Postgres recusar. */
+export function isAuditEntityId(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value)
+}
+
+/**
+ * O id da entidade, ou `null` — nunca uma string que o banco vai recusar.
+ *
+ * # O defeito que isto conserta
+ *
+ * `/prontuarios` chamava `logAccess(clinicId, 'all')` para dizer "leu a lista,
+ * não um paciente". Aquele `'all'` ia para `entity_id`, que é `uuid`, e o
+ * Postgres recusava **a linha inteira** com `22P02`. Como a auditoria é
+ * best-effort, o evento sumia sem quebrar tela nenhuma: a leitura do prontuário
+ * simplesmente não era registrada, e ninguém saberia até alguém perguntar quem
+ * abriu o prontuário de um paciente.
+ *
+ * A chamada foi corrigida para `null`. Esta função é a rede: um id malformado
+ * passa a gravar o evento **sem** o id, em vez de perder o evento. Para uma
+ * trilha exigida por lei, "quem, o quê e quando" vale mais que o id do alvo — e
+ * o log do servidor diz o que foi descartado, para o defeito não voltar a ser
+ * silencioso.
+ */
+function toEntityId(event: AuditEvent): string | null {
+  if (event.entityId === null || event.entityId === undefined) return null
+  if (isAuditEntityId(event.entityId)) return event.entityId
+
+  console.error('[audit] entity_id ignorado por nao ser uuid', {
+    action: event.action,
+    entityType: event.entityType,
+  })
+
+  return null
+}
+
 const maxKeys = 20
 const maxStringLength = 160
 

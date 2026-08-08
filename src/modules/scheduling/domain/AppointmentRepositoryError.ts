@@ -1,0 +1,75 @@
+/**
+ * Falha de escrita da agenda, traduzida para o domínio.
+ *
+ * Mesmo desenho de `PatientRepositoryError`, e pelo mesmo motivo: a action
+ * precisa distinguir "horário ocupado" de "recusado pela RLS" de "erro
+ * inesperado" para escolher a mensagem em pt-BR — e não pode fazer isso lendo
+ * `PostgrestError`, senão o formato do Supabase atravessa a porta e o adapter
+ * deixa de ser trocável.
+ *
+ * `code` é diagnóstico opaco (o SQLSTATE, quando existe) e serve para o LOG DO
+ * SERVIDOR. Nunca para a tela: mensagem de banco cita coluna e constraint.
+ */
+
+export type AppointmentWriteFailure =
+  /**
+   * Já existe atendimento do mesmo profissional no intervalo.
+   *
+   * Desde **A-02** isto é detectado pela própria aplicação, com uma consulta de
+   * sobreposição antes da escrita — não depende mais de haver constraint no
+   * banco. A constraint continua sendo o que fecharia a janela de corrida, e a
+   * proposta está em `supabase/migrations/`.
+   */
+  | 'conflict'
+  /**
+   * O horário está fora do expediente que a clínica declarou.
+   *
+   * **Não é recusa definitiva.** Encaixe fora do horário acontece em clínica
+   * pequena, e proibi-lo faria a recepção registrar hora falsa para conseguir
+   * marcar — o que estraga a agenda de verdade. A action devolve
+   * 'needs-confirmation' e a operação segue se quem agenda confirmar.
+   */
+  | 'outside-business-hours'
+  /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
+  | 'not-found'
+  /** A policy de RLS recusou. Sessão sem direito sobre esta clínica. */
+  | 'forbidden'
+  /** O banco não respondeu, ou respondeu erro de transporte. */
+  | 'unavailable'
+  /** Qualquer outra recusa. */
+  | 'unexpected'
+
+export class AppointmentRepositoryError extends Error {
+  readonly reason: AppointmentWriteFailure
+  /** SQLSTATE ou código do driver. Log do servidor apenas. */
+  readonly code?: string
+  /**
+   * Explicação exibível, quando existe.
+   *
+   * Só é preenchida quando o texto foi montado por ESTE código a partir de
+   * configuração da clínica — "Sábado: a clínica atende das 08:00 às 12:00". A
+   * regra que proíbe mostrar `message` continua valendo e não é contornada
+   * aqui: `message` pode ecoar valores enviados ao Postgres, `userDetail`
+   * nunca passou perto do banco.
+   */
+  readonly userDetail?: string
+
+  constructor(
+    reason: AppointmentWriteFailure,
+    message: string,
+    code?: string,
+    userDetail?: string,
+  ) {
+    super(message)
+    this.name = 'AppointmentRepositoryError'
+    this.reason = reason
+    this.code = code
+    this.userDetail = userDetail
+  }
+}
+
+export function isAppointmentRepositoryError(
+  cause: unknown,
+): cause is AppointmentRepositoryError {
+  return cause instanceof AppointmentRepositoryError
+}
