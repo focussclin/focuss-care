@@ -1,13 +1,11 @@
 import {
   Archive,
   BarChart3,
-  BellRing,
   Building2,
   CalendarDays,
   CheckSquare2,
   ClipboardList,
   ContactRound,
-  CreditCard,
   FileBarChart,
   FilePenLine,
   FileSignature,
@@ -20,14 +18,12 @@ import {
   MonitorPlay,
   Package,
   PanelTop,
-  ReceiptText,
   ScanLine,
   Settings,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
   Stethoscope,
-  Tags,
   UserRoundCog,
   UserSearch,
   Users,
@@ -36,6 +32,9 @@ import {
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
+
+import { can, type Permission } from '@/lib/auth/permissions'
+import type { MembershipRole } from '@/lib/supabase/database.types'
 
 export const navSections = [
   { key: 'workspace', label: 'Visão geral' },
@@ -56,16 +55,26 @@ export interface NavItem {
   section: NavSection
   /** Rotas ainda não liberadas ficam visíveis, mas nunca parecem clicáveis. */
   disabled?: boolean
+  /**
+   * Permissão exigida pela ROTA para renderizar.
+   *
+   * Quando presente, o item some do menu de quem não a tem. Não é a fronteira de
+   * segurança — a rota chama `forbidden()` de qualquer forma —, é o princípio de
+   * I-05: **não oferecer o que não funciona**. Um `finance` que clica em
+   * "Agenda" e recebe 403 aprendeu, na pior hora, algo que o menu podia ter dito
+   * antes.
+   */
+  permission?: Permission
 }
 
 export const navItems: readonly NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutGrid, section: 'workspace' },
   { label: 'Indicadores e BI', href: '/indicadores', icon: Gauge, section: 'workspace', disabled: true },
 
-  { label: 'Agenda', href: '/agenda', icon: CalendarDays, section: 'care' },
-  { label: 'Pacientes 360', href: '/pacientes', icon: Users, section: 'care' },
-  { label: 'Atendimentos', href: '/atendimentos', icon: Stethoscope, section: 'care' },
-  { label: 'Prontuários', href: '/prontuarios', icon: ClipboardList, section: 'care' },
+  { label: 'Agenda', href: '/agenda', icon: CalendarDays, section: 'care', permission: 'appointment.read' },
+  { label: 'Pacientes 360', href: '/pacientes', icon: Users, section: 'care', permission: 'patient.read' },
+  { label: 'Atendimentos', href: '/atendimentos', icon: Stethoscope, section: 'care', permission: 'encounter.read' },
+  { label: 'Prontuários', href: '/prontuarios', icon: ClipboardList, section: 'care', permission: 'record.read' },
   { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', disabled: true },
   { label: 'Fila e senhas', href: '/fila', icon: PanelTop, section: 'care', disabled: true },
   { label: 'Check-in digital', href: '/check-in', icon: ScanLine, section: 'care', disabled: true },
@@ -84,24 +93,57 @@ export const navItems: readonly NavItem[] = [
   { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', disabled: true },
   { label: 'Tarefas inteligentes', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
 
-  { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance' },
-  { label: 'Pagamentos', href: '/pagamentos', icon: CreditCard, section: 'finance', disabled: true },
-  { label: 'Caixa', href: '/caixa', icon: ReceiptText, section: 'finance', disabled: true },
+  /*
+   * "Pagamentos" e "Caixa" foram REMOVIDOS daqui, e não adiados.
+   *
+   * B-01 entregou os dois dentro de `/financeiro`. Mantê-los como itens
+   * separados marcados "em breve" diria que a clínica ainda não pode receber
+   * nem fechar o caixa — sobre um recurso que está funcionando uma tela ao lado.
+   */
+  { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'invoice.read' },
   { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', disabled: true },
-  { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance' },
+  { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance', permission: 'insurance.manage' },
   { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', disabled: true },
   { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', disabled: true },
 
-  { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management' },
-  { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management' },
+  { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management', permission: 'team.read' },
+  { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management', permission: 'report.read' },
   { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', disabled: true },
   { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', disabled: true },
   { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', disabled: true },
   { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', disabled: true },
-  { label: 'Convites e tags', href: '/configuracoes?tab=workspace', icon: Tags, section: 'management', disabled: true },
 
+  /*
+   * Quatro itens `?tab=…` foram REMOVIDOS: "Convites e tags", "Integrações",
+   * "Google e Outlook Calendar" e "Notificações".
+   *
+   * Todos apontavam para `/configuracoes` com um parâmetro que a rota **não
+   * lê**. Mesmo desabilitados, eram quatro endereços que não existem — e a
+   * própria tela de configurações já declara, em texto, o que ela não configura
+   * e por quê. Duas declarações da mesma ausência, uma delas errada, é pior que
+   * uma só.
+   */
   { label: 'Configurações', href: '/configuracoes', icon: Settings, section: 'settings' },
-  { label: 'Integrações', href: '/configuracoes?tab=integracoes', icon: Workflow, section: 'settings', disabled: true },
-  { label: 'Google e Outlook Calendar', href: '/configuracoes?tab=calendarios', icon: CalendarDays, section: 'settings', disabled: true },
-  { label: 'Notificações', href: '/configuracoes?tab=notificacoes', icon: BellRing, section: 'settings', disabled: true },
 ] as const
+
+/**
+ * O menu que ESTE papel enxerga.
+ *
+ * `role` ausente devolve tudo, e isso é deliberado: acontece no modo de
+ * demonstração, onde não há vínculo nem papel para consultar, e a demonstração
+ * existe justamente para mostrar a interface inteira.
+ *
+ * Filtrar aqui não substitui a autorização da rota — `/prontuarios`,
+ * `/financeiro` e `/convenios` continuam chamando `forbidden()`. As duas
+ * existem porque protegem coisas diferentes: a rota impede o acesso, o menu
+ * evita oferecer o caminho.
+ */
+export function visibleNavItems(
+  role: MembershipRole | null | undefined,
+): readonly NavItem[] {
+  if (role === undefined) return navItems
+
+  return navItems.filter(
+    (item) => !item.permission || can(role, item.permission),
+  )
+}

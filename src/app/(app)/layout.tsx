@@ -82,6 +82,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <AppShell
       userName={identity.name}
       userRole={identity.role}
+      /*
+       * O papel filtra o menu (I-05: nao oferecer o que nao funciona).
+       *
+       * `undefined` no modo de demonstracao — la nao ha vinculo, e a
+       * demonstracao existe para mostrar a interface inteira. Nas rotas, a
+       * autorizacao continua sendo feita por `forbidden()`.
+       */
+      role={session.status === 'active' ? session.role : undefined}
       clinicName={identity.clinicName}
       clinicSwitcher={clinicSwitcher}
     >

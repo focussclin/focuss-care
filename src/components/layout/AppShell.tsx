@@ -4,6 +4,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
+import type { MembershipRole } from '@/lib/supabase/database.types'
 import { cn } from '@/lib/utils/cn'
 
 import { AppHeader } from './AppHeader'
@@ -12,6 +13,11 @@ import { SidebarNav } from './SidebarNav'
 export interface AppShellProps {
   userName: string
   userRole: string
+  /**
+   * Papel na clinica ativa (I-05), para o menu nao oferecer o que o papel nao
+   * alcanca. `undefined` no modo de demonstracao, onde nao ha vinculo.
+   */
+  role?: MembershipRole | null
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
   /**
@@ -28,6 +34,7 @@ export interface AppShellProps {
 export function AppShell({
   userName,
   userRole,
+  role,
   clinicName,
   clinicSwitcher,
   children,
@@ -47,6 +54,7 @@ export function AppShell({
           <SidebarNav
             userName={userName}
             userRole={userRole}
+            role={role}
             variant={sidebarCollapsed ? 'rail' : 'full'}
             onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
           />
@@ -89,6 +97,7 @@ export function AppShell({
             <SidebarNav
               userName={userName}
               userRole={userRole}
+              role={role}
               variant="drawer"
               onNavigate={() => setDrawerOpen(false)}
             />
