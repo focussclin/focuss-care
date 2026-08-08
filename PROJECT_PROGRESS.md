@@ -110,6 +110,13 @@ confiaria que o lembrete de consulta estava saindo.
 `SUPABASE_ACCESS_TOKEN` neste ambiente. Consequência: nenhuma migration é
 aplicada, nenhum corpo de RPC é legível, nenhuma policy é verificável.
 
+**O roteiro para sair daqui está pronto e documentado:**
+[`docs/supabase-migrations-runbook.md`](./docs/supabase-migrations-runbook.md).
+Pré-requisitos, backup, dry-run, ordem por risco crescente, as consultas que
+**bloqueiam** cada arquivo, e os testes de tenancy, papel e auditoria depois de
+aplicar. Escrevê-lo não desbloqueia nada — quem aplica precisa de acesso ao
+projeto Supabase.
+
 | # | Bloqueio | Custo hoje | Como sair |
 |---|---|---|---|
 | **P-P6** | Policy de `INSERT` de `audit_log` recusa o membro autenticado | **Nenhum dos ~20 eventos de auditoria está sendo gravado.** Para dado de saúde, trilha de auditoria é requisito legal | Aplicar `20260807_audit_log_insert_policy.sql` |
