@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Uma execucao por branch: push seguido de push cancela a anterior em vez de
+# empilhar build de codigo que ja foi substituido.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      # Sem variaveis do Supabase de proposito: o build precisa passar com o
+      # ambiente vazio, que e o modo de demonstracao. Se algum dia ele exigir
+      # banco para compilar, e porque uma tela passou a ler dados em build time —
+      # e e isso que este passo pega.
+      - name: Build
+        run: npm run build

@@ -1,0 +1,389 @@
+'use client'
+
+import Image from 'next/image'
+import Link from 'next/link'
+import {
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  BellRing,
+  Building2,
+  Bot,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileCheck2,
+  FileText,
+  Filter,
+  Info,
+  LockKeyhole,
+  Mail,
+  MessageCircle,
+  MoreHorizontal,
+  Paperclip,
+  Palette,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Stethoscope,
+  UserRound,
+  UsersRound,
+  WalletCards,
+  Workflow,
+} from 'lucide-react'
+import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+
+import { PageHeader } from '@/components/layout/PageHeader'
+import { Avatar } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { SearchField } from '@/components/ui/search-field'
+import { SelectField } from '@/components/ui/select-field'
+import { StatCard } from '@/components/ui/stat-card'
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
+import { cn } from '@/lib/utils/cn'
+
+type Tab = { id: string; label: string }
+
+function Tabs({ tabs, active, onChange }: { tabs: readonly Tab[]; active: string; onChange: (id: string) => void }) {
+  return (
+    <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border-card bg-background p-1" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          onClick={() => onChange(tab.id)}
+          className={cn(
+            'min-h-9 shrink-0 rounded-[9px] px-3 text-label font-semibold transition-colors',
+            active === tab.id
+              ? 'bg-surface text-foreground shadow-card'
+              : 'text-muted hover:bg-surface/70 hover:text-foreground',
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Notice({ children, tone = 'info' }: { children: string; tone?: 'info' | 'success' | 'warning' }) {
+  const classes = {
+    info: 'border-brand/15 bg-brand-subtle text-link',
+    success: 'border-status-positive/15 bg-status-positive-surface text-status-positive',
+    warning: 'border-attention/20 bg-attention-surface text-attention',
+  }
+
+  return (
+    <div className={cn('flex items-start gap-2.5 rounded-xl border px-4 py-3 text-aux', classes[tone])}>
+      <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+type CareStatus = 'waiting' | 'in_progress' | 'completed' | 'no_show'
+
+const careStatusMeta: Record<CareStatus, { label: string; tone: StatusTone }> = {
+  waiting: { label: 'Aguardando', tone: 'pending' },
+  in_progress: { label: 'Em atendimento', tone: 'positive' },
+  completed: { label: 'Concluído', tone: 'neutral' },
+  no_show: { label: 'Não compareceu', tone: 'negative' },
+}
+
+const initialCareRows = [
+  { id: 'care-1', time: '09:00', patient: 'Marina Costa', professional: 'Dra. Ana Ribeiro', type: 'Consulta de rotina', wait: 'Concluído', status: 'completed' as CareStatus, patientId: 'pat-1' },
+  { id: 'care-2', time: '11:00', patient: 'Luiza Prado', professional: 'Dra. Helena Souza', type: 'Avaliação nutricional', wait: 'há 8 min', status: 'waiting' as CareStatus, patientId: 'pat-7' },
+  { id: 'care-3', time: '15:30', patient: 'João Almeida', professional: 'Dr. Paulo Freitas', type: 'Retorno', wait: 'Confirmado', status: 'waiting' as CareStatus, patientId: 'pat-2' },
+  { id: 'care-4', time: '17:00', patient: 'Gustavo Peixoto', professional: 'Dra. Ana Ribeiro', type: 'Primeira consulta', wait: 'Confirmado', status: 'waiting' as CareStatus, patientId: 'pat-12' },
+]
+
+export function AtendimentosScreen() {
+  const [tab, setTab] = useState('today')
+  const [query, setQuery] = useState('')
+  const [rows, setRows] = useState(initialCareRows)
+  const [notice, setNotice] = useState('')
+
+  const visibleRows = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    return rows.filter((row) => {
+      const matchesQuery = !term || `${row.patient} ${row.professional} ${row.type}`.toLowerCase().includes(term)
+      if (tab === 'waiting') return matchesQuery && row.status === 'waiting'
+      if (tab === 'history') return matchesQuery && (row.status === 'completed' || row.status === 'no_show')
+      return matchesQuery
+    })
+  }, [query, rows, tab])
+
+  function updateStatus(id: string, status: CareStatus, message: string) {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, status, wait: status === 'in_progress' ? 'Iniciado agora' : row.wait } : row)))
+    setNotice(message)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Operação da clínica"
+        title="Atendimentos"
+        description="Acompanhe o que está acontecendo agora e mantenha a fila organizada."
+        actions={<Button disabled title="A criação de atendimento acontece pela Agenda."><Plus aria-hidden className="size-4" /> Novo atendimento</Button>}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Na fila hoje" value="03" icon={Clock3} tone="attention" />
+        <StatCard label="Em atendimento" value="01" icon={Stethoscope} />
+        <StatCard label="Concluídos" value="18" icon={CheckCircle2} trend="+8%" />
+      </div>
+
+      {notice ? <Notice tone="success">{notice}</Notice> : null}
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-border-card px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <Tabs tabs={[{ id: 'today', label: 'Hoje' }, { id: 'waiting', label: 'Fila de espera' }, { id: 'history', label: 'Histórico' }]} active={tab} onChange={setTab} />
+          <div className="flex w-full gap-2 lg:w-auto">
+            <SearchField label="Buscar atendimento" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Paciente ou profissional" className="lg:w-64" />
+            <Button variant="secondary" className="mt-auto shrink-0" title="Filtros avançados serão habilitados com os dados reais"><Filter aria-hidden className="size-4" /><span className="hidden sm:inline">Filtros</span></Button>
+          </div>
+        </div>
+
+        {visibleRows.length === 0 ? (
+          <EmptyState icon={Search} title="Nenhum atendimento encontrado" description="Ajuste a busca ou selecione outra aba para continuar." />
+        ) : (
+          <>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-left">
+                <thead className="border-b border-border-card bg-background text-label font-semibold text-muted">
+                  <tr><th className="px-5 py-3">Horário</th><th className="px-5 py-3">Paciente</th><th className="px-5 py-3">Profissional</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Ações</th></tr>
+                </thead>
+                <tbody className="divide-y divide-border-card">
+                  {visibleRows.map((row) => {
+                    const meta = careStatusMeta[row.status]
+                    return <tr key={row.id} className="text-aux transition-colors hover:bg-row-hover"><td className="px-5 py-4 font-semibold text-foreground">{row.time}<span className="mt-0.5 block text-label font-normal text-muted">{row.wait}</span></td><td className="px-5 py-4"><Link href={`/pacientes/${row.patientId}`} className="font-semibold text-foreground hover:text-link">{row.patient}</Link></td><td className="px-5 py-4 text-muted">{row.professional}</td><td className="px-5 py-4 text-muted">{row.type}</td><td className="px-5 py-4"><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></td><td className="px-5 py-4"><div className="flex justify-end gap-2">{row.status === 'waiting' ? <Button size="md" variant="secondary" onClick={() => updateStatus(row.id, 'in_progress', `${row.patient} foi chamado para atendimento.`)}>Iniciar</Button> : null}<Button size="md" variant="ghost" asChild><Link href={`/pacientes/${row.patientId}`}>Ver paciente</Link></Button><button type="button" title="Mais ações em breve" disabled className="inline-flex size-11 items-center justify-center rounded-field text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></td></tr>
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="grid gap-3 p-4 md:hidden">
+              {visibleRows.map((row) => { const meta = careStatusMeta[row.status]; return <article key={row.id} className="rounded-xl border border-border-card p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-label font-semibold text-muted">{row.time} · {row.wait}</p><Link href={`/pacientes/${row.patientId}`} className="mt-1 block text-control font-semibold text-foreground">{row.patient}</Link><p className="mt-1 text-label text-muted">{row.type} · {row.professional}</p></div><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></div><div className="mt-4 flex gap-2">{row.status === 'waiting' ? <Button size="md" fullWidth onClick={() => updateStatus(row.id, 'in_progress', `${row.patient} foi chamado para atendimento.`)}>Iniciar</Button> : null}<Button size="md" variant="secondary" fullWidth asChild><Link href={`/pacientes/${row.patientId}`}>Ver paciente</Link></Button></div></article> })}
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+const recordItems = [
+  { id: 'record-1', patientId: 'pat-1', patient: 'Marina Costa', type: 'Evolução clínica', professional: 'Dra. Ana Ribeiro', date: 'Hoje, 09:32', summary: 'Paciente relatou melhora após ajuste da medicação. Manter acompanhamento mensal.' },
+  { id: 'record-2', patientId: 'pat-7', patient: 'Luiza Prado', type: 'Avaliação nutricional', professional: 'Dra. Helena Souza', date: 'Ontem, 16:10', summary: 'Plano alimentar revisado e orientações registradas para o próximo retorno.' },
+  { id: 'record-3', patientId: 'pat-2', patient: 'João Almeida', type: 'Retorno', professional: 'Dr. Paulo Freitas', date: '05 ago, 15:48', summary: 'Acompanhamento pós-consulta com indicação de novo exame.' },
+]
+
+export function ProntuariosScreen() {
+  const [tab, setTab] = useState('evolutions')
+  const [query, setQuery] = useState('')
+  const filtered = recordItems.filter((record) => record.patient.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Cuidado contínuo" title="Prontuários" description="Acesse evoluções e documentos com rastreabilidade e segurança." actions={<Button disabled title="A criação de evoluções será habilitada na próxima etapa"><Plus aria-hidden className="size-4" /> Nova evolução</Button>} />
+      <Notice>Informações protegidas. O acesso a esta área é registrado para sua segurança.</Notice>
+      <Card className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-border-card p-5 lg:flex-row lg:items-center lg:justify-between"><Tabs tabs={[{ id: 'evolutions', label: 'Evoluções recentes' }, { id: 'documents', label: 'Documentos' }, { id: 'access', label: 'Histórico de acesso' }]} active={tab} onChange={setTab} /><SearchField label="Buscar prontuário" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por paciente" className="lg:w-64" /></div>
+        {tab === 'evolutions' ? <div className="divide-y divide-border-card">{filtered.map((record) => <article key={record.id} className="flex gap-4 p-5 transition-colors hover:bg-row-hover"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-link"><FileText aria-hidden className="size-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><Link href={`/pacientes/${record.patientId}`} className="font-semibold text-foreground hover:text-link">{record.patient}</Link><span className="mx-2 hidden text-muted sm:inline">·</span><span className="text-label text-muted">{record.type}</span></div><span className="text-label text-muted">{record.date}</span></div><p className="mt-2 max-w-3xl text-aux leading-6 text-muted">{record.summary}</p><p className="mt-2 text-label text-muted">Assinado por <span className="font-semibold text-foreground">{record.professional}</span></p></div><ChevronRight aria-hidden className="mt-1 hidden size-4 shrink-0 text-muted sm:block" /></article>)}{filtered.length === 0 ? <EmptyState icon={Search} title="Nenhum prontuário encontrado" /> : null}</div> : tab === 'documents' ? <EmptyState icon={FileCheck2} title="Nenhum documento recente" description="Documentos anexados aos atendimentos aparecerão aqui." /> : <div className="divide-y divide-border-card">{['Dra. Ana Ribeiro acessou Marina Costa · Hoje, 09:32', 'Recepção acessou João Almeida · Ontem, 16:10'].map((item) => <div key={item} className="flex items-center gap-3 p-5 text-aux text-muted"><LockKeyhole aria-hidden className="size-4 text-link" />{item}</div>)}</div>}
+      </Card>
+    </div>
+  )
+}
+
+const transactions = [
+  { date: '07 ago', description: 'Consulta · Marina Costa', category: 'Atendimentos', value: 'R$ 280,00', kind: 'income' },
+  { date: '06 ago', description: 'Assinatura de software', category: 'Operação', value: 'R$ 189,90', kind: 'expense' },
+  { date: '05 ago', description: 'Consulta · João Almeida', category: 'Atendimentos', value: 'R$ 320,00', kind: 'income' },
+  { date: '04 ago', description: 'Materiais clínicos', category: 'Insumos', value: 'R$ 460,00', kind: 'expense' },
+]
+
+export function FinanceiroScreen() {
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Gestão da clínica" title="Financeiro" description="Tenha clareza sobre receitas, despesas e recebimentos pendentes." actions={<Button disabled title="O registro financeiro será habilitado com a integração do módulo"><Plus aria-hidden className="size-4" /> Nova movimentação</Button>} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-aux text-muted">Visão de agosto de 2026</p><SelectField label="Período" hideLabel options={[{ value: 'month', label: 'Este mês' }, { value: 'quarter', label: 'Este trimestre' }, { value: 'year', label: 'Este ano' }]} className="sm:w-44" /></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Receitas" value="R$ 18.420" icon={ArrowUpRight} trend="+12%" /><StatCard label="A receber" value="R$ 4.860" icon={Clock3} tone="attention" /><StatCard label="Despesas" value="R$ 6.280" icon={ArrowDownLeft} /><StatCard label="Saldo do período" value="R$ 12.140" icon={WalletCards} trend="+9%" /></div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]"><Card className="overflow-hidden"><CardHeader title="Fluxo do período" description="Receitas e despesas por semana" /><div className="px-5 pb-6"><div className="flex h-56 items-end gap-2 border-b border-l border-border-card px-2 pb-0 pt-5 sm:gap-4">{[['01', 48, 20], ['08', 70, 28], ['15', 58, 34], ['22', 82, 38], ['29', 65, 30]].map(([label, income, expense]) => <div key={String(label)} className="relative flex h-full flex-1 items-end justify-center gap-1.5"><div className="h-[var(--bar)] w-3 rounded-t-md bg-brand" style={{ '--bar': `${income}%` } as CSSProperties} title={`Receitas na semana ${label}`} /><div className="h-[var(--bar)] w-3 rounded-t-md bg-brand-accent/70" style={{ '--bar': `${expense}%` } as CSSProperties} title={`Despesas na semana ${label}`} /><span className="absolute -bottom-7 text-label text-muted">{label}</span></div>)}</div><div className="mt-8 flex items-center gap-5 text-label text-muted"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-brand" />Receitas</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-brand-accent" />Despesas</span></div></div></Card><Card><CardHeader title="Recebimentos pendentes" action={<span className="text-label font-semibold text-attention">12 em aberto</span>} /><div className="space-y-4 px-5 pb-5"><div className="flex items-center justify-between gap-3"><div><p className="text-aux font-semibold text-foreground">Consultas particulares</p><p className="text-label text-muted">8 cobranças</p></div><span className="text-aux font-semibold text-foreground">R$ 3.240</span></div><div className="flex items-center justify-between gap-3"><div><p className="text-aux font-semibold text-foreground">Convênios</p><p className="text-label text-muted">4 guias aguardando</p></div><span className="text-aux font-semibold text-foreground">R$ 1.620</span></div><div className="rounded-xl bg-attention-surface p-3 text-label leading-5 text-attention">Revise os recebimentos com vencimento nesta semana.</div></div></Card></div>
+      <Card className="overflow-hidden"><CardHeader title="Últimas movimentações" action={<Button size="md" variant="ghost" disabled title="Filtros financeiros em breve">Ver todas</Button>} /><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left"><thead className="border-y border-border-card bg-background text-label font-semibold text-muted"><tr><th className="px-5 py-3">Data</th><th className="px-5 py-3">Descrição</th><th className="px-5 py-3">Categoria</th><th className="px-5 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-border-card">{transactions.map((item) => <tr key={item.description} className="text-aux hover:bg-row-hover"><td className="px-5 py-4 text-muted">{item.date}</td><td className="px-5 py-4 font-semibold text-foreground">{item.description}</td><td className="px-5 py-4 text-muted">{item.category}</td><td className={cn('px-5 py-4 text-right font-semibold', item.kind === 'income' ? 'text-status-positive' : 'text-danger')}>{item.kind === 'income' ? '+' : '-'} {item.value}</td></tr>)}</tbody></table></div><div className="divide-y divide-border-card md:hidden">{transactions.map((item) => <div key={item.description} className="flex items-center justify-between gap-3 p-4"><div><p className="text-aux font-semibold text-foreground">{item.description}</p><p className="mt-1 text-label text-muted">{item.date} · {item.category}</p></div><span className={cn('text-aux font-semibold', item.kind === 'income' ? 'text-status-positive' : 'text-danger')}>{item.kind === 'income' ? '+' : '-'} {item.value}</span></div>)}</div></Card>
+    </div>
+  )
+}
+
+const conversations = [
+  { id: 'conv-1', name: 'Marina Costa', preview: 'Confirmado para hoje às 09:00', time: '09:12', unread: 2, patientId: 'pat-1' },
+  { id: 'conv-2', name: 'João Almeida', preview: 'Posso remarcar meu retorno?', time: 'Ontem', unread: 0, patientId: 'pat-2' },
+  { id: 'conv-3', name: 'Beatriz Nogueira', preview: 'Obrigada pelo atendimento!', time: 'Ter', unread: 0, patientId: 'pat-3' },
+]
+
+export function WhatsappScreen() {
+  const [selectedId, setSelectedId] = useState('conv-1')
+  const [query, setQuery] = useState('')
+  const selected = conversations.find((item) => item.id === selectedId) ?? conversations[0]
+  const visible = conversations.filter((item) => item.name.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Relacionamento" title="WhatsApp" description="Organize as conversas da clínica em um só lugar." actions={<Button disabled title="Conecte uma conta do WhatsApp Business para habilitar o canal"><MessageCircle aria-hidden className="size-4" /> Conectar WhatsApp</Button>} />
+      <Notice tone="warning">O WhatsApp ainda não está conectado. A caixa de entrada abaixo é uma prévia visual e não envia mensagens.</Notice>
+      <Card className="overflow-hidden"><div className="grid min-h-[540px] lg:grid-cols-[260px_minmax(0,1fr)_250px]">
+        <aside className="border-b border-border-card lg:border-r lg:border-b-0"><div className="border-b border-border-card p-4"><SearchField label="Buscar conversa" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar conversa" /></div><div className="flex gap-1 overflow-x-auto border-b border-border-card p-3 lg:block lg:space-y-1 lg:border-0"><button type="button" className="shrink-0 rounded-lg bg-brand-subtle px-3 py-2 text-left text-label font-semibold text-link">Todas <span className="ml-1 text-muted">3</span></button><button type="button" disabled title="Filtro em breve" className="shrink-0 rounded-lg px-3 py-2 text-left text-label text-muted opacity-70">Não lidas</button><button type="button" disabled title="Filtro em breve" className="shrink-0 rounded-lg px-3 py-2 text-left text-label text-muted opacity-70">Agendamentos</button></div><div className="hidden lg:block">{visible.map((conversation) => <button key={conversation.id} type="button" onClick={() => setSelectedId(conversation.id)} className={cn('flex w-full items-start gap-3 border-t border-border-card px-4 py-3 text-left transition-colors hover:bg-row-hover', selected.id === conversation.id && 'bg-brand-subtle/60')}><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-label font-semibold text-link">{conversation.name.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-aux font-semibold text-foreground">{conversation.name}</span><span className="text-[11px] text-muted">{conversation.time}</span></span><span className="mt-1 block truncate text-label text-muted">{conversation.preview}</span></span>{conversation.unread ? <span className="flex size-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">{conversation.unread}</span> : null}</button>)}</div></aside>
+        <section className="flex min-w-0 flex-col border-b border-border-card lg:border-r lg:border-b-0"><div className="flex items-center justify-between border-b border-border-card p-4"><div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-full bg-brand-subtle text-label font-semibold text-link">MC</span><div><p className="text-aux font-semibold text-foreground">{selected.name}</p><p className="text-label text-muted">WhatsApp · prévia</p></div></div><button type="button" disabled title="Mais ações em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div><div className="flex flex-1 flex-col justify-end gap-3 bg-background p-4"><div className="max-w-[80%] self-start rounded-2xl rounded-bl-md border border-border-card bg-surface px-4 py-3 text-aux text-foreground shadow-card">Olá! Gostaria de confirmar meu atendimento de hoje.</div><span className="self-start text-label text-muted">09:08</span><div className="max-w-[80%] self-end rounded-2xl rounded-br-md bg-brand px-4 py-3 text-aux text-white">Olá, Marina! Seu atendimento com a Dra. Ana está confirmado para as 09:00.</div><span className="self-end text-label text-muted">09:12 · visualizado</span></div><div className="border-t border-border-card p-4"><div className="flex items-center gap-2 rounded-xl border border-border-card bg-background p-1.5"><button type="button" disabled title="Anexos em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><Paperclip aria-hidden className="size-4" /></button><input disabled aria-label="Mensagem" placeholder="Conecte o WhatsApp para responder" className="min-w-0 flex-1 bg-transparent px-2 text-aux text-foreground outline-none placeholder:text-muted" /><button type="button" disabled title="Conecte o WhatsApp para enviar" className="inline-flex size-9 items-center justify-center rounded-lg bg-brand text-white opacity-50"><Send aria-hidden className="size-4" /></button></div></div></section>
+        <aside className="hidden p-5 lg:block"><div className="flex items-center gap-2 text-label font-semibold text-muted"><UserRound aria-hidden className="size-4" /> Contexto do paciente</div><div className="mt-5 flex size-14 items-center justify-center rounded-2xl bg-brand-subtle text-xl font-semibold text-link">MC</div><h2 className="mt-3 text-control font-semibold text-foreground">{selected.name}</h2><p className="mt-1 text-label text-muted">Paciente ativo</p><div className="mt-6 space-y-4 border-t border-border-card pt-5"><div><p className="text-label text-muted">Próximo atendimento</p><p className="mt-1 text-aux font-semibold text-foreground">Hoje · 09:00</p></div><div><p className="text-label text-muted">Preferência</p><p className="mt-1 text-aux font-semibold text-foreground">WhatsApp</p></div></div><Button variant="secondary" fullWidth className="mt-6" asChild><Link href={`/pacientes/${selected.patientId}`}>Ver perfil</Link></Button></aside>
+      </div></Card>
+    </div>
+  )
+}
+
+type ChatMessage = { id: number; role: 'assistant' | 'user'; text: string }
+const aiAnswers: Record<string, string> = {
+  'Quais são os atendimentos de hoje?': 'Hoje a clínica tem 24 atendimentos previstos. Há 3 pessoas aguardando e o próximo horário é às 11:00 com a Dra. Helena Souza.',
+  'Mostre pacientes sem retorno': 'Encontrei 8 pacientes sem novo atendimento nos últimos 90 dias. Posso ajudar a organizar uma lista para revisão da equipe.',
+  'Resuma a agenda da semana': 'A agenda concentra 54 atendimentos nesta semana, com maior movimento na quarta-feira. A taxa média de comparecimento está em 92%.',
+}
+
+export function ChatIaScreen() {
+  const [input, setInput] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([{ id: 1, role: 'assistant', text: 'Olá! Sou o Assistente Focuss. Posso ajudar a encontrar informações da clínica e organizar o próximo passo.' }])
+
+  function sendMessage(event?: FormEvent) {
+    event?.preventDefault()
+    const value = input.trim()
+    if (!value) return
+    const answer = aiAnswers[value] ?? 'Esta é uma prévia visual do Assistente Focuss. Quando a integração estiver conectada, vou consultar os dados autorizados da sua clínica para responder com contexto.'
+    setMessages((current) => [...current, { id: Date.now(), role: 'user', text: value }, { id: Date.now() + 1, role: 'assistant', text: answer }])
+    setInput('')
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Inteligência aplicada" title="Assistente Focuss" description="Use seus dados para encontrar informações e organizar tarefas." />
+      <Notice>A IA sugere. Você revisa e confirma. Nenhuma ação é executada automaticamente.</Notice>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]"><Card className="flex min-h-[620px] flex-col overflow-hidden"><div className="flex items-center gap-3 border-b border-border-card p-5"><span className="flex size-10 items-center justify-center rounded-xl bg-brand text-white"><Bot aria-hidden className="size-5" /></span><div><p className="text-control font-semibold text-foreground">Conversa com sua clínica</p><p className="text-label text-muted">Prévia local · sem conexão com dados reais</p></div><span className="ml-auto flex items-center gap-1.5 text-label text-muted"><span className="size-2 rounded-full bg-attention" />Prévia</span></div><div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-background p-5">{messages.map((message) => <div key={message.id} className={cn('max-w-[86%] rounded-2xl px-4 py-3 text-aux leading-6', message.role === 'assistant' ? 'self-start border border-border-card bg-surface text-foreground shadow-card' : 'self-end bg-brand text-white')}>{message.text}</div>)}</div><div className="border-t border-border-card p-4"><div className="mb-3 flex flex-wrap gap-2">{Object.keys(aiAnswers).map((prompt) => <button key={prompt} type="button" onClick={() => setInput(prompt)} className="rounded-full border border-border-card bg-surface px-3 py-2 text-label text-muted transition-colors hover:border-brand/40 hover:text-link">{prompt}</button>)}</div><form onSubmit={sendMessage} className="flex items-center gap-2 rounded-xl border border-border-default bg-surface p-1.5 focus-within:border-focus focus-within:shadow-focus"><input value={input} onChange={(event) => setInput(event.target.value)} aria-label="Pergunte algo sobre sua clínica" placeholder="Pergunte algo sobre sua clínica..." className="min-w-0 flex-1 bg-transparent px-3 text-aux text-foreground outline-none placeholder:text-muted" /><Button type="submit" className="size-10 shrink-0 p-0" aria-label="Enviar pergunta"><Send aria-hidden className="size-4" /></Button></form></div></Card><div className="space-y-6"><div className="relative aspect-[4/3] overflow-hidden rounded-card"><Image src="/images/login-clinic.png" alt="Profissional de saúde organizando informações da clínica" fill sizes="(max-width: 1280px) 100vw, 320px" className="object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-brand/90 via-brand/20 to-transparent" /><div className="absolute right-4 bottom-4 left-4 text-white"><Sparkles aria-hidden className="mb-2 size-5" /><p className="text-control font-semibold">Mais clareza para decisões melhores.</p><p className="mt-1 text-label text-white/75">Insights com contexto, sempre sob sua revisão.</p></div></div><Card className="p-5"><div className="flex items-start gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-brand-subtle text-link"><LockKeyhole aria-hidden className="size-4" /></span><div><p className="text-aux font-semibold text-foreground">Privacidade em primeiro lugar</p><p className="mt-1 text-label leading-5 text-muted">O acesso deve respeitar as permissões da equipe e fica registrado.</p></div></div></Card></div></div>
+    </div>
+  )
+}
+
+const automationSeed = [
+  { id: 'auto-1', name: 'Lembrete 24h antes', trigger: 'Atendimento confirmado', lastRun: 'Hoje, 08:40', enabled: true, tone: 'positive' as StatusTone, status: 'Ativa' },
+  { id: 'auto-2', name: 'Retorno após consulta', trigger: 'Atendimento concluído', lastRun: 'Ontem, 17:20', enabled: true, tone: 'positive' as StatusTone, status: 'Ativa' },
+  { id: 'auto-3', name: 'Aniversários do mês', trigger: 'Primeiro dia do mês', lastRun: '01 ago, 09:00', enabled: false, tone: 'neutral' as StatusTone, status: 'Pausada' },
+]
+
+export function AutomacoesScreen() {
+  const [items, setItems] = useState(automationSeed)
+  const [notice, setNotice] = useState('')
+
+  function toggle(id: string) {
+    setItems((current) => current.map((item) => item.id === id ? { ...item, enabled: !item.enabled, status: item.enabled ? 'Pausada' : 'Ativa', tone: item.enabled ? 'neutral' : 'positive' } : item))
+    setNotice('O estado foi alterado apenas nesta prévia local. A automação real será conectada ao módulo de regras.')
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Produtividade" title="Automações" description="Crie lembretes e ações para sua equipe trabalhar com mais tranquilidade." actions={<Button disabled title="O construtor de automações será habilitado na próxima etapa"><Plus aria-hidden className="size-4" /> Nova automação</Button>} />
+      {notice ? <Notice tone="success">{notice}</Notice> : null}
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Automações ativas" value="02" icon={Workflow} /><StatCard label="Execuções este mês" value="184" icon={RefreshCw} trend="+16%" /><StatCard label="Horas economizadas" value="12h" icon={Clock3} /></div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]"><Card className="overflow-hidden"><CardHeader title="Regras da clínica" description="Acompanhe o que está automatizado e sob controle." /><div className="divide-y divide-border-card">{items.map((item) => <div key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className={cn('mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl', item.enabled ? 'bg-brand-subtle text-link' : 'bg-background text-muted')}><Workflow aria-hidden className="size-4" /></span><div className="min-w-0"><p className="truncate text-aux font-semibold text-foreground">{item.name}</p><p className="mt-1 text-label text-muted">Quando: {item.trigger} · Última execução: {item.lastRun}</p></div></div><div className="flex items-center justify-between gap-3 sm:justify-end"><StatusBadge tone={item.tone}>{item.status}</StatusBadge><button type="button" aria-pressed={item.enabled} onClick={() => toggle(item.id)} className={cn('relative h-7 w-12 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2', item.enabled ? 'bg-brand' : 'bg-border-default')}><span className={cn('absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform', item.enabled ? 'left-6' : 'left-1')} /><span className="sr-only">{item.enabled ? 'Pausar' : 'Ativar'} {item.name}</span></button><button type="button" disabled title="Mais ações em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></div>)}</div></Card><Card className="p-5"><div className="flex items-center gap-2 text-label font-semibold uppercase tracking-[0.08em] text-muted"><Sparkles aria-hidden className="size-4 text-link" /> Exemplo de fluxo</div><h2 className="mt-3 text-control font-semibold text-foreground">Lembrete de atendimento</h2><p className="mt-1 text-aux leading-6 text-muted">Uma prévia de como uma regra pode ser configurada.</p><div className="mt-5 space-y-2"><div className="rounded-xl border border-border-card bg-background p-3"><p className="text-label font-semibold text-muted">QUANDO ISSO ACONTECER</p><p className="mt-1 text-aux font-semibold text-foreground">Atendimento confirmado</p></div><ArrowRight aria-hidden className="mx-auto size-4 rotate-90 text-muted" /><div className="rounded-xl border border-border-card bg-background p-3"><p className="text-label font-semibold text-muted">FAÇA ISTO</p><p className="mt-1 text-aux font-semibold text-foreground">Enviar lembrete 24h antes</p></div></div><Notice tone="info">Toda regra exige revisão antes de ser ativada.</Notice></Card></div>
+    </div>
+  )
+}
+
+const reportCards = [
+  { id: 'care', title: 'Atendimentos', description: 'Volume, status e taxa de comparecimento.', value: '124', detail: '+12% vs. período anterior', icon: Stethoscope },
+  { id: 'patients', title: 'Pacientes', description: 'Novos cadastros, retornos e evolução da base.', value: '36', detail: '+4% neste mês', icon: UsersRound },
+  { id: 'finance', title: 'Financeiro', description: 'Receitas, despesas e recebimentos pendentes.', value: 'R$ 12,1k', detail: 'Saldo do período', icon: WalletCards },
+  { id: 'team', title: 'Desempenho da equipe', description: 'Agenda, comparecimento e ocupação por profissional.', value: '92%', detail: 'Comparecimento médio', icon: UserRound },
+]
+
+export function RelatoriosScreen() {
+  const [selected, setSelected] = useState<string | null>(null)
+  const selectedReport = reportCards.find((report) => report.id === selected)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Gestão da clínica" title="Relatórios" description="Acompanhe os indicadores que ajudam sua clínica a tomar decisões melhores." actions={<SelectField label="Período" hideLabel options={[{ value: 'month', label: 'Este mês' }, { value: 'quarter', label: 'Último trimestre' }]} className="sm:w-44" />} />
+      {selectedReport ? <Card className="overflow-hidden"><div className="flex flex-col gap-4 border-b border-border-card p-5 sm:flex-row sm:items-center sm:justify-between"><div><button type="button" onClick={() => setSelected(null)} className="mb-3 flex items-center gap-1 text-label font-semibold text-link hover:underline"><ArrowRight aria-hidden className="size-3 rotate-180" /> Todos os relatórios</button><h2 className="text-display-sm font-semibold tracking-[-0.02em] text-foreground">Relatório de {selectedReport.title.toLowerCase()}</h2><p className="mt-1 text-aux text-muted">Agosto de 2026 · prévia com dados de demonstração</p></div><Button disabled title="Exportação será habilitada com o módulo de relatórios"><ArrowUpRight aria-hidden className="size-4" /> Exportar</Button></div><div className="grid gap-4 p-5 sm:grid-cols-3"><div className="rounded-xl bg-background p-4"><p className="text-label text-muted">Indicador principal</p><p className="mt-2 text-metric font-semibold text-foreground">{selectedReport.value}</p></div><div className="rounded-xl bg-background p-4"><p className="text-label text-muted">Comparativo</p><p className="mt-2 text-aux font-semibold text-status-positive">{selectedReport.detail}</p></div><div className="rounded-xl bg-background p-4"><p className="text-label text-muted">Atualizado</p><p className="mt-2 text-aux font-semibold text-foreground">Hoje, 09:40</p></div></div><div className="p-5 pt-0"><Notice>Este relatório usa dados de demonstração. A exportação e os filtros avançados serão conectados ao banco na próxima etapa.</Notice></div></Card> : <><div className="grid gap-4 md:grid-cols-2">{reportCards.map((report) => { const Icon = report.icon; return <Card key={report.id} className="group p-5 transition-[border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-raised"><div className="flex items-start justify-between gap-4"><span className="flex size-10 items-center justify-center rounded-xl bg-brand-subtle text-link"><Icon aria-hidden className="size-5" /></span><span className="text-metric font-semibold text-foreground">{report.value}</span></div><h2 className="mt-5 text-control font-semibold text-foreground">{report.title}</h2><p className="mt-1 max-w-sm text-aux leading-6 text-muted">{report.description}</p><div className="mt-5 flex items-center justify-between gap-3 border-t border-border-card pt-4"><span className="text-label font-semibold text-status-positive">{report.detail}</span><Button variant="ghost" size="md" onClick={() => setSelected(report.id)}>Abrir relatório <ArrowRight aria-hidden className="size-4 transition-transform group-hover:translate-x-0.5" /></Button></div></Card> })}</div><Card className="p-5"><div className="flex items-start gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-brand-subtle text-link"><FileCheck2 aria-hidden className="size-4" /></span><div><h2 className="text-control font-semibold text-foreground">Relatórios claros, sem excesso de gráficos</h2><p className="mt-1 max-w-2xl text-aux leading-6 text-muted">Escolha um indicador para aprofundar. A visão detalhada mantém contexto, período e fonte dos dados visíveis.</p></div></div></Card></>}
+    </div>
+  )
+}
+
+const settingsSections = [
+  { id: 'profile', label: 'Perfil pessoal', description: 'Seus dados de acesso', icon: UserRound },
+  { id: 'clinic', label: 'Clínica', description: 'Identidade e informações', icon: Building2 },
+  { id: 'notifications', label: 'Notificações', description: 'Como você recebe avisos', icon: BellRing },
+  { id: 'appearance', label: 'Aparência', description: 'Preferências visuais', icon: Palette },
+  { id: 'security', label: 'Privacidade e segurança', description: 'Proteção da sua conta', icon: ShieldCheck },
+] as const
+
+export function ConfiguracoesScreen() {
+  const [section, setSection] = useState('profile')
+  const [saved, setSaved] = useState(false)
+  const [name, setName] = useState('Tamara Vieira')
+  const activeSection = settingsSections.find((item) => item.id === section) ?? settingsSections[0]
+  const ActiveIcon = activeSection.icon
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaved(true)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Gestão da clínica" title="Configurações" description="Ajuste as preferências do seu espaço de trabalho." />
+      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <Card className="h-fit p-2"><nav aria-label="Seções de configurações" className="space-y-1">{settingsSections.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => { setSection(item.id); setSaved(false) }} className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors', section === item.id ? 'bg-brand-subtle text-link' : 'text-muted hover:bg-row-hover hover:text-foreground')}><Icon aria-hidden className="size-4 shrink-0" /><span className="min-w-0"><span className="block text-aux font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-label opacity-75">{item.description}</span></span></button> })}</nav></Card>
+        <Card className="overflow-hidden"><div className="flex items-center gap-3 border-b border-border-card p-5"><span className="flex size-10 items-center justify-center rounded-xl bg-brand-subtle text-link"><ActiveIcon aria-hidden className="size-5" /></span><div><h2 className="text-card-title font-semibold text-foreground">{activeSection.label}</h2><p className="mt-0.5 text-label text-muted">{activeSection.description}</p></div></div>{section === 'profile' ? <form onSubmit={handleSubmit} className="space-y-5 p-5"><div className="grid gap-5 sm:grid-cols-2"><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">Cargo</span><input defaultValue="Administradora" className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label></div><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">E-mail profissional</span><input defaultValue="contato@focusscare.com.br" type="email" className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label><div className="flex flex-col gap-3 border-t border-border-card pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-label text-muted">Alterações ficam disponíveis apenas nesta prévia local.</p><Button type="submit"><Save aria-hidden className="size-4" /> Salvar alterações</Button></div>{saved ? <Notice tone="success">Alterações salvas nesta prévia local, sem alterar dados do Supabase.</Notice> : null}</form> : section === 'clinic' ? <div className="space-y-4 p-5"><div className="rounded-xl border border-border-card bg-background p-4"><p className="text-label text-muted">Nome da clínica</p><p className="mt-1 text-control font-semibold text-foreground">Focuss Care Clínica Integrada</p></div><div className="rounded-xl border border-border-card bg-background p-4"><p className="text-label text-muted">Localização</p><p className="mt-1 text-aux font-semibold text-foreground">São Paulo, SP</p></div><Notice>Os dados da clínica serão editáveis quando o módulo de administração estiver conectado.</Notice></div> : section === 'notifications' ? <div className="divide-y divide-border-card p-5">{['Lembretes de atendimento', 'Atualizações da equipe', 'Resumo semanal da clínica'].map((item, index) => <label key={item} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"><span><span className="block text-aux font-semibold text-foreground">{item}</span><span className="mt-1 block text-label text-muted">Receber avisos por e-mail</span></span><input type="checkbox" defaultChecked={index < 2} className="size-4 accent-[var(--fc-primary-800)]" /></label>)}</div> : section === 'appearance' ? <div className="space-y-4 p-5"><p className="text-aux text-muted">A aparência clara está ativa para preservar o melhor contraste nesta etapa.</p><div className="grid gap-3 sm:grid-cols-2"><button type="button" className="rounded-xl border-2 border-brand bg-surface p-4 text-left"><span className="block h-16 rounded-lg bg-background" /><span className="mt-3 block text-aux font-semibold text-foreground">Claro</span><span className="mt-1 block text-label text-muted">Ativo</span></button><button type="button" disabled title="Modo escuro será habilitado em breve" className="rounded-xl border border-border-card bg-background p-4 text-left opacity-60"><span className="block h-16 rounded-lg bg-slate-900" /><span className="mt-3 block text-aux font-semibold text-foreground">Escuro</span><span className="mt-1 block text-label text-muted">Em breve</span></button></div></div> : <div className="space-y-4 p-5"><div className="flex items-start gap-3 rounded-xl border border-border-card bg-background p-4"><LockKeyhole aria-hidden className="mt-0.5 size-5 shrink-0 text-link" /><div><p className="text-aux font-semibold text-foreground">Sessão protegida</p><p className="mt-1 text-label leading-5 text-muted">Sua autenticação usa Supabase Auth e as áreas sensíveis exigem sessão válida.</p></div></div><Button variant="secondary" disabled title="Gerenciamento de sessões em breve">Gerenciar sessões ativas</Button></div>}</Card>
+      </div>
+    </div>
+  )
+}
+
+const teamMembers = [
+  { id: 'member-1', name: 'Tamara Vieira', role: 'Administradora', email: 'tamara@focusscare.com.br', status: 'Ativo', lastActivity: 'Agora' },
+  { id: 'member-2', name: 'Dra. Ana Ribeiro', role: 'Clínica geral', email: 'ana.ribeiro@focusscare.com.br', status: 'Ativo', lastActivity: 'Hoje, 09:32' },
+  { id: 'member-3', name: 'Dr. Paulo Freitas', role: 'Ortopedia', email: 'paulo.freitas@focusscare.com.br', status: 'Ativo', lastActivity: 'Ontem, 17:20' },
+  { id: 'member-4', name: 'Helena Souza', role: 'Nutrição', email: 'helena.souza@focusscare.com.br', status: 'Convite pendente', lastActivity: 'Aguardando acesso' },
+]
+
+export function EquipeScreen() {
+  const [query, setQuery] = useState('')
+  const members = teamMembers.filter((member) => `${member.name} ${member.role}`.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Gestão da clínica" title="Equipe" description="Organize as pessoas que fazem o cuidado acontecer." actions={<Button disabled title="Convites serão habilitados com o módulo de permissões"><Plus aria-hidden className="size-4" /> Convidar profissional</Button>} />
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Membros ativos" value="03" icon={UsersRound} /><StatCard label="Convites pendentes" value="01" icon={Mail} tone="attention" /><StatCard label="Disponíveis hoje" value="02" icon={CheckCircle2} /></div>
+      <Card className="overflow-hidden"><div className="flex flex-col gap-4 border-b border-border-card p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-card-title font-semibold text-foreground">Pessoas da clínica</h2><p className="mt-0.5 text-label text-muted">Funções e acessos em um só lugar.</p></div><SearchField label="Buscar membro" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou função" className="sm:w-72" /></div><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[720px] text-left"><thead className="border-b border-border-card bg-background text-label font-semibold text-muted"><tr><th className="px-5 py-3">Pessoa</th><th className="px-5 py-3">Função</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Última atividade</th><th className="px-5 py-3 text-right">Ações</th></tr></thead><tbody className="divide-y divide-border-card">{members.map((member) => <tr key={member.id} className="text-aux hover:bg-row-hover"><td className="px-5 py-4"><div className="flex items-center gap-3"><Avatar name={member.name} size="sm" /><div><p className="font-semibold text-foreground">{member.name}</p><p className="mt-0.5 text-label text-muted">{member.email}</p></div></div></td><td className="px-5 py-4 text-muted">{member.role}</td><td className="px-5 py-4"><StatusBadge tone={member.status === 'Ativo' ? 'positive' : 'pending'}>{member.status}</StatusBadge></td><td className="px-5 py-4 text-muted">{member.lastActivity}</td><td className="px-5 py-4"><div className="flex justify-end"><button type="button" disabled title="Permissões detalhadas em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></td></tr>)}</tbody></table></div><div className="divide-y divide-border-card md:hidden">{members.map((member) => <div key={member.id} className="flex items-start gap-3 p-4"><Avatar name={member.name} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-aux font-semibold text-foreground">{member.name}</p><p className="mt-1 truncate text-label text-muted">{member.role} · {member.email}</p><div className="mt-3 flex items-center justify-between gap-3"><StatusBadge tone={member.status === 'Ativo' ? 'positive' : 'pending'}>{member.status}</StatusBadge><span className="text-label text-muted">{member.lastActivity}</span></div></div></div>)}</div>{members.length === 0 ? <EmptyState icon={UsersRound} title="Nenhum membro encontrado" /> : null}</Card>
+      <Notice>Prontuários e informações sensíveis continuam sujeitos às permissões definidas no Supabase.</Notice>
+    </div>
+  )
+}
+
+const insuranceProviders = [
+  { name: 'Particular', patients: '842 pacientes', table: 'Tabela própria', status: 'Ativo' },
+  { name: 'Saúde Mais', patients: '216 pacientes', table: 'Vigente até 31 dez', status: 'Ativo' },
+  { name: 'Vida Plena', patients: '98 pacientes', table: 'Revisar valores', status: 'Atenção' },
+]
+
+export function ConveniosScreen() {
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Gestão da clínica" title="Convênios" description="Gerencie operadoras, tabelas e o acompanhamento dos atendimentos." actions={<Button disabled title="Cadastro de convênio será habilitado na próxima etapa"><Plus aria-hidden className="size-4" /> Adicionar convênio</Button>} />
+      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Operadoras ativas" value="02" icon={Building2} /><StatCard label="Guias pendentes" value="14" icon={FileCheck2} tone="attention" /><StatCard label="Glosas em análise" value="03" icon={FileText} /></div>
+      <Card className="overflow-hidden"><CardHeader title="Operadoras e tabelas" description="Acompanhe o relacionamento financeiro dos atendimentos." /><div className="divide-y divide-border-card">{insuranceProviders.map((provider) => <div key={provider.name} className="flex flex-col gap-4 p-5 transition-colors hover:bg-row-hover sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-brand-subtle text-link"><Building2 aria-hidden className="size-5" /></span><div><p className="text-aux font-semibold text-foreground">{provider.name}</p><p className="mt-1 text-label text-muted">{provider.patients} · {provider.table}</p></div></div><div className="flex items-center justify-between gap-4 sm:justify-end"><StatusBadge tone={provider.status === 'Ativo' ? 'positive' : 'pending'}>{provider.status}</StatusBadge><button type="button" disabled title="Detalhes do convênio em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></div>)}</div></Card>
+      <Notice>O cadastro de convênios será conectado ao financeiro e às guias sem alterar o prontuário do paciente.</Notice>
+    </div>
+  )
+}
