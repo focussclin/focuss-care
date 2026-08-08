@@ -66,6 +66,7 @@ export default async function AgendaPage({
       patients={patientPage.items}
       professionals={professionals}
       openNewOnMount={novo === '1'}
+      isLive={appointmentSource.isLive}
     />
   )
 }

@@ -2,7 +2,10 @@ import 'server-only'
 
 import { redirect } from 'next/navigation'
 
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { resolveDataSource } from '@/lib/data-source'
+import type { Database } from '@/lib/supabase/database.types'
 
 import type { AppointmentRepository } from '../domain/AppointmentRepository'
 import { MockAppointmentRepository } from './MockAppointmentRepository'
@@ -32,4 +35,22 @@ export async function getAppointmentRepository(today: Date): Promise<{
     clinicId: source.clinicId,
     isLive: false,
   }
+}
+
+/**
+ * Composicao para escrita.
+ *
+ * A action nao chama `getAppointmentRepository()`: ela ja recebeu do
+ * `createAction` um cliente COM A SESSAO DO USUARIO e a clinica ativa resolvida
+ * pelo banco. Resolver a fonte de dados de novo ali seria repetir a pergunta — e
+ * abriria a porta para a escrita cair no repositorio de demonstracao, que nao
+ * persiste.
+ *
+ * Mantido aqui, e nao dentro da action, para que a escolha do adapter continue
+ * sendo decisao de infrastructure: a camada de aplicacao so ve a porta.
+ */
+export function appointmentRepositoryFor(
+  client: SupabaseClient<Database>,
+): AppointmentRepository {
+  return new SupabaseAppointmentRepository(client)
 }

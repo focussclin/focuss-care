@@ -16,7 +16,15 @@ export interface AppointmentDetailsModalProps {
   appointment: Appointment | null
   onOpenChange: (open: boolean) => void
   onReschedule: (appointment: Appointment) => void
-  onCancel: (appointment: Appointment) => void
+  onCancel: (appointment: Appointment) => void | Promise<void>
+  /**
+   * Recusa do cancelamento pelo servidor.
+   *
+   * Chega por prop porque o modal não fala com o servidor — quem chama a action
+   * é a tela. Sem isto, uma recusa fecharia o modal em silêncio e o atendimento
+   * continuaria marcado sem ninguém saber por quê.
+   */
+  cancelError?: string | null
 }
 
 /**
@@ -29,6 +37,7 @@ export function AppointmentDetailsModal({
   onOpenChange,
   onReschedule,
   onCancel,
+  cancelError = null,
 }: AppointmentDetailsModalProps) {
   const [confirmingCancel, setConfirmingCancel] = useState(false)
 
@@ -127,6 +136,19 @@ export function AppointmentDetailsModal({
           >
             Ao cancelar, o horário volta a ficar livre e o paciente precisará ser
             avisado. Esta ação não pode ser desfeita.
+          </p>
+        ) : null}
+
+        {/*
+          Recusa do servidor. Sem isto o modal fecharia em silêncio e o
+          atendimento continuaria marcado, sem ninguém saber por quê.
+        */}
+        {cancelError ? (
+          <p
+            role="alert"
+            className="rounded-field border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
+          >
+            {cancelError}
           </p>
         ) : null}
       </div>

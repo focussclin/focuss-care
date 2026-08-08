@@ -9,7 +9,11 @@ import type {
   Professional,
 } from '@/modules/_shared/domain/types'
 
-import type { AppointmentRepository } from '../domain/AppointmentRepository'
+import type {
+  AppointmentRepository,
+  NewAppointmentData,
+} from '../domain/AppointmentRepository'
+import { AppointmentRepositoryError } from '../domain/AppointmentRepositoryError'
 
 type Client = SupabaseClient<Database>
 
@@ -129,4 +133,239 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       specialty: row.specialties[0] ?? '',
     }))
   }
+
+  /**
+   * Cria o atendimento.
+   *
+   * `clinic_id` e `created_by` chegam por parametro, do `ActionContext` — nunca
+   * do formulario. A RLS ainda recusaria a clinica errada, mas a assinatura ja
+   * tira a tentacao de aceita-los do cliente (P3 de docs/01-arquitetura.md).
+   *
+   * `is_walk_in: false` porque isto e agendamento; encaixe sem hora marcada e
+   * fila de espera, que e outra fatia (E-01).
+   */
+  async create(
+    clinicId: string,
+    data: NewAppointmentData,
+    createdBy: string,
+  ): Promise<Appointment> {
+    const { data: row, error } = await this.client
+      .from('appointments')
+      .insert({
+        clinic_id: clinicId,
+        patient_id: data.patientId,
+        professional_id: data.professionalId,
+        status: data.status,
+        starts_at: data.startsAt.toISOString(),
+        ends_at: data.endsAt.toISOString(),
+        reason: data.reason,
+        internal_notes: data.notes,
+        is_walk_in: false,
+        created_by: createdBy,
+      })
+      .select(SELECT_WITH_NAMES)
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    const appointment = toAppointment(row as unknown as AppointmentJoinRow)
+
+    await this.recordStatusChange(clinicId, appointment.id, {
+      from: null,
+      to: data.status,
+      by: createdBy,
+      reason: null,
+    })
+
+    return appointment
+  }
+
+  /**
+   * Move o atendimento de horario.
+   *
+   * O `update` NAO toca em `status`: um atendimento confirmado que muda de hora
+   * continua confirmado. Zerar a confirmacao aqui faria a recepcao ligar de
+   * novo para um paciente que ja tinha confirmado.
+   *
+   * `clinic_id` no `where` e defesa em profundidade — a RLS ja recusaria a linha
+   * de outra clinica, e o filtro transforma a recusa em "nao encontrado" em vez
+   * de "atualizou zero linhas em silencio".
+   */
+  async reschedule(
+    clinicId: string,
+    appointmentId: string,
+    startsAt: Date,
+    endsAt: Date,
+  ): Promise<Appointment> {
+    const { data: row, error } = await this.client
+      .from('appointments')
+      .update({
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      // Remarcar um atendimento cancelado seria ressuscita-lo pela porta dos
+      // fundos, sem passar por nenhuma decisao de quem cancelou.
+      .not('status', 'in', '("canceled","no_show")')
+      .select(SELECT_WITH_NAMES)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw notFound(appointmentId)
+
+    return toAppointment(row as unknown as AppointmentJoinRow)
+  }
+
+  /**
+   * Cancela — sem apagar.
+   *
+   * A linha continua na base com `status = 'canceled'`, `canceled_at` e o
+   * motivo. Agenda de saude e registro do que foi combinado, inclusive do que
+   * foi desmarcado; e o §8 do roadmap proibe `DELETE` de qualquer forma.
+   */
+  async cancel(
+    clinicId: string,
+    appointmentId: string,
+    reason: string | null,
+    canceledBy: string,
+  ): Promise<Appointment> {
+    // O status anterior e lido ANTES do update: depois dele a informacao some,
+    // e e ela que o historico precisa para dizer de onde a linha veio.
+    const { data: current } = await this.client
+      .from('appointments')
+      .select('status')
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .maybeSingle()
+
+    const { data: row, error } = await this.client
+      .from('appointments')
+      .update({
+        status: 'canceled',
+        canceled_at: new Date().toISOString(),
+        cancel_reason: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .neq('status', 'canceled')
+      .select(SELECT_WITH_NAMES)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw notFound(appointmentId)
+
+    const appointment = toAppointment(row as unknown as AppointmentJoinRow)
+
+    await this.recordStatusChange(clinicId, appointmentId, {
+      from: current?.status ?? null,
+      to: 'canceled',
+      by: canceledBy,
+      reason,
+    })
+
+    return appointment
+  }
+
+  /**
+   * Trilha de status em `appointment_status_history`.
+   *
+   * **Best-effort, e deliberadamente.** O atendimento JA foi criado ou
+   * cancelado quando isto roda; falhar aqui e desfazer a operacao seria trocar
+   * um registro de histórico ausente por uma agenda errada. O sinal fica no log
+   * do servidor.
+   *
+   * E a mesma escolha do `recordAuditEvent`, e pelo mesmo motivo — com uma
+   * diferenca: este historico e operacional (a recepcao consulta), enquanto o
+   * `audit_log` e de conformidade.
+   */
+  private async recordStatusChange(
+    clinicId: string,
+    appointmentId: string,
+    change: {
+      from: AppointmentStatus | null
+      to: AppointmentStatus
+      by: string
+      reason: string | null
+    },
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('appointment_status_history')
+      .insert({
+        clinic_id: clinicId,
+        appointment_id: appointmentId,
+        from_status: change.from,
+        to_status: change.to,
+        changed_by: change.by,
+        reason: change.reason,
+        // Obrigatorio no `Insert` gerado: a coluna nao tem default no schema
+        // remoto. Mesma regra do resto do projeto — nenhum default de banco e
+        // presumido; o que a coluna exige, o insert manda.
+        changed_at: new Date().toISOString(),
+      })
+
+    if (error) {
+      console.error('[scheduling] recordStatusChange', {
+        appointmentId,
+        code: error.code ?? null,
+        message: error.message ?? null,
+      })
+    }
+  }
+}
+
+/**
+ * Zero linhas afetadas.
+ *
+ * Pode ser id inexistente, atendimento ja cancelado, ou atendimento de OUTRA
+ * clinica — a RLS filtra antes de o `update` ver a linha. Os tres devolvem a
+ * mesma coisa de proposito: distinguir "nao existe" de "existe, mas nao e seu"
+ * entregaria ao chamador a informacao de que aquele id existe em algum tenant.
+ */
+function notFound(appointmentId: string): AppointmentRepositoryError {
+  return new AppointmentRepositoryError(
+    'not-found',
+    `nenhuma linha afetada para o atendimento ${appointmentId} na clinica ativa`,
+  )
+}
+
+/**
+ * Traduz a recusa do Postgres para o vocabulario do dominio.
+ *
+ * A mensagem que sobe daqui e para o LOG DO SERVIDOR — a action nunca a repassa
+ * para a tela.
+ */
+function toWriteError(error: {
+  code?: string | null
+  message?: string | null
+}): AppointmentRepositoryError {
+  const code = error.code ?? undefined
+  const message = error.message ?? 'sem mensagem'
+
+  // 23P01 = exclusion_violation, 23505 = unique_violation. Os dois significam
+  // "ja existe atendimento nesse intervalo" SE houver constraint de exclusao no
+  // banco. Nao foi possivel verificar se ha (bloqueio B1) — a deteccao de
+  // conflito de verdade e A-02. Se a constraint existir, o usuario ja recebe a
+  // mensagem certa; se nao existir, este caminho simplesmente nao ocorre.
+  if (code === '23P01' || code === '23505') {
+    return new AppointmentRepositoryError('conflict', message, code)
+  }
+
+  // 23503 = foreign_key_violation: paciente ou profissional que nao existe
+  // nesta clinica. Para quem agendou, e o mesmo que "nao encontrado".
+  if (code === '23503') {
+    return new AppointmentRepositoryError('not-found', message, code)
+  }
+
+  if (code === '42501' || code === 'PGRST301') {
+    return new AppointmentRepositoryError('forbidden', message, code)
+  }
+
+  if (!code && /fetch|network|timeout|econnre/i.test(message)) {
+    return new AppointmentRepositoryError('unavailable', message)
+  }
+
+  return new AppointmentRepositoryError('unexpected', message, code)
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
@@ -27,7 +27,21 @@ export interface NewAppointmentModalProps {
   existingAppointments: readonly Appointment[]
   defaultDate: string
   defaultTime?: string
-  onSubmit: (values: NewAppointmentInput) => void
+  /**
+   * Envio.
+   *
+   * Devolve `null` em caso de sucesso, ou a falha para o formulário exibir.
+   * O modal **só fecha depois que o servidor confirma** — fechar antes daria
+   * "agendado" para algo que pode ter sido recusado.
+   */
+  onSubmit: (values: NewAppointmentInput) => Promise<AppointmentSubmitFailure | null>
+}
+
+export interface AppointmentSubmitFailure {
+  /** Mensagem global, exibida no topo do formulário. */
+  message: string
+  /** Erro por campo, quando o servidor sabe qual recusou. */
+  fieldErrors?: Partial<Record<keyof NewAppointmentInput, string>>
 }
 
 /** Sobreposicao real de intervalos para o mesmo profissional. */
@@ -97,11 +111,25 @@ export function NewAppointmentModal({
     },
   })
 
-  function handleValidSubmit(values: NewAppointmentInput) {
+  const [isSubmitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  async function handleValidSubmit(values: NewAppointmentInput) {
+    /*
+     * Checagem LOCAL de conflito — feedback imediato, não garantia.
+     *
+     * Ela só enxerga os atendimentos que a tela carregou: o período visível,
+     * do profissional que o usuário está vendo. Duas recepcionistas marcando
+     * o mesmo horário ao mesmo tempo passam por aqui sem se ver.
+     *
+     * A garantia de verdade é uma constraint de exclusão no banco, e é A-02.
+     * Enquanto ela não existe, o adapter já traduz `23P01`/`23505` em
+     * "horário ocupado" — se a constraint estiver lá, o usuário recebe a
+     * mensagem certa mesmo neste caminho.
+     */
     const conflict = findConflict(values, existingAppointments)
 
     if (conflict) {
-      // Erro contextual no campo, conforme o handoff
       setError('time', {
         type: 'conflict',
         message: appointmentMessages.conflict,
@@ -109,9 +137,32 @@ export function NewAppointmentModal({
       return
     }
 
-    onSubmit(values)
-    reset()
-    onOpenChange(false)
+    setSubmitting(true)
+    setFormError(null)
+
+    try {
+      const failure = await onSubmit(values)
+
+      if (failure) {
+        setFormError(failure.message)
+
+        for (const [field, message] of Object.entries(
+          failure.fieldErrors ?? {},
+        )) {
+          setError(field as keyof NewAppointmentInput, {
+            type: 'server',
+            message,
+          })
+        }
+
+        return
+      }
+
+      reset()
+      onOpenChange(false)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -125,11 +176,19 @@ export function NewAppointmentModal({
       description="Preencha os dados para agendar."
       footer={
         <>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
             Cancelar
           </Button>
-          <Button type="submit" form="new-appointment-form">
-            Salvar atendimento
+          <Button
+            type="submit"
+            form="new-appointment-form"
+            isLoading={isSubmitting}
+          >
+            {isSubmitting ? 'Salvando...' : 'Salvar atendimento'}
           </Button>
         </>
       }
@@ -140,6 +199,16 @@ export function NewAppointmentModal({
         onSubmit={handleSubmit(handleValidSubmit)}
         className="flex flex-col gap-4"
       >
+        {/* Recusa do servidor: anunciada, não só pintada de vermelho */}
+        {formError ? (
+          <p
+            role="alert"
+            className="rounded-card border border-danger/30 bg-danger/5 px-3.5 py-2.5 text-aux text-danger"
+          >
+            {formError}
+          </p>
+        ) : null}
+
         {/*
           Busca por nome com datalist nativo: acessivel e sem JS extra.
           Com a base real (milhares de pacientes) isto vira um combobox com busca
