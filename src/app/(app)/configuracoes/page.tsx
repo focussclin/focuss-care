@@ -15,15 +15,6 @@ export const metadata: Metadata = {
   description: 'Ajuste as preferências e os dados da sua clínica.',
 }
 
-/**
- * Configurações — feature **C-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir o que renderizar. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 export default async function ConfiguracoesPage() {
   await connection()
 

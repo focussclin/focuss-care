@@ -16,15 +16,6 @@ export const metadata: Metadata = {
   description: 'Acompanhe os indicadores de atendimento da sua clínica.',
 }
 
-/**
- * Relatórios — feature **T-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir o que renderizar. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 export default async function RelatoriosPage({
   searchParams,
 }: PageProps<'/relatorios'>) {

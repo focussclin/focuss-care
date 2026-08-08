@@ -17,15 +17,6 @@ export const metadata: Metadata = {
   description: 'Gerencie os profissionais e as permissões de acesso.',
 }
 
-/**
- * Equipe — feature **S-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir se renderiza. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 /** Quantas ausências a tela carrega. Histórico completo é relatório, não tela. */
 const TIME_OFF_LIMIT = 50
 

@@ -19,15 +19,6 @@ export const metadata: Metadata = {
   description: 'Cobranças, recebimentos e o caixa da clínica.',
 }
 
-/**
- * Financeiro — feature **B-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir o que renderizar. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 export default async function FinanceiroPage() {
   await connection()
 

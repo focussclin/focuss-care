@@ -9,8 +9,6 @@ export const metadata: Metadata = {
   description: 'Regras cadastradas e o que falta para executá-las.',
 }
 
-export const instant = false
-
 export default async function AutomacoesPage() {
   await connection()
 

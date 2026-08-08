@@ -24,15 +24,6 @@ export const metadata: Metadata = {
 /** Quantos registros vigentes a tela carrega por vez. */
 const RECENT_LIMIT = 30
 
-/**
- * Prontuários — feature **R-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir se renderiza. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 export default async function ProntuariosPage() {
   await connection()
   const today = startOfDay(new Date())

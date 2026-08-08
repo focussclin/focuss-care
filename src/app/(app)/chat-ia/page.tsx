@@ -9,8 +9,6 @@ export const metadata: Metadata = {
   description: 'Estado do assistente e a regra que vale antes dele existir.',
 }
 
-export const instant = false
-
 export default async function ChatIaPage() {
   await connection()
 

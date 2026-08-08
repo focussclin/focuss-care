@@ -119,7 +119,7 @@ aplicada, nenhum corpo de RPC é legível, nenhuma policy é verificável.
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
-| **P-C2** | `cacheComponents` exige shell estático | 11 segmentos usam `instant = false` | Empurrar leitura de sessão para dentro de `<Suspense>`, rota a rota |
+| **P-C2** | `cacheComponents` exige shell estático | **5 segmentos** usam `instant = false` (eram 14). Um cobre toda a área autenticada; os outros quatro são de `(auth)` e precisam de fallback desenhado | Empurrar leitura de sessão/`searchParams` para dentro de `<Suspense>` nas quatro telas públicas |
 
 ---
 

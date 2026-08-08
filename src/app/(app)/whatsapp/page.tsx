@@ -9,15 +9,6 @@ export const metadata: Metadata = {
   description: 'Estado do canal de WhatsApp da clínica.',
 }
 
-/**
- * WhatsApp — estado de conexão (W-01 bloqueada).
- *
- * `instant = false` pela mesma razão das demais rotas de `(app)`: a leitura
- * depende da sessão em cookie, e `cacheComponents` exige shell estático
- * (pendência P-C2).
- */
-export const instant = false
-
 export default async function WhatsappPage() {
   await connection()
 

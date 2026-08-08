@@ -22,15 +22,6 @@ export const metadata: Metadata = {
 /** Quantas guias a tela carrega. Ver o JSDoc do componente sobre o recorte. */
 const AUTHORIZATION_LIMIT = 50
 
-/**
- * Convênios — feature **V-01**.
- *
- * `cacheComponents` (F-02) exige shell estático; esta rota lê sessão em cookie
- * antes de decidir o que renderizar. `instant = false` é a saída documentada, a
- * mesma já adotada na casca de `(app)` (pendência P-C2).
- */
-export const instant = false
-
 export default async function ConveniosPage() {
   await connection()
 

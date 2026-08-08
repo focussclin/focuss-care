@@ -36,6 +36,22 @@ import { ClinicSwitcher } from '@/modules/identity/ui/ClinicSwitcher'
  * Fica aqui, na casca, e nao na raiz: `(auth)/` continua validando. Sair daqui
  * exige empurrar a leitura de sessao para dentro de `<Suspense>` em cada tela —
  * refatoracao de rota por rota, que nao e desta fatia.
+ *
+ * # Este `false` cobre TODAS as paginas abaixo (P-C2, reducao de divida)
+ *
+ * Nove paginas de `(app)` declaravam o proprio `instant = false`, e as nove
+ * eram redundantes: a doc do Next diz que, para a validacao de shell estatico,
+ * **o `false` mais alto da arvore prevalece sobre qualquer `true` mais fundo** —
+ * e o build confirma (removidas as nove, ele continua passando).
+ *
+ * A recomendacao da propria doc e colocar o `false` o mais baixo possivel para
+ * que o resto do app continue validando. Aqui o mais baixo possivel e esta
+ * casca: toda rota sob ela le sessao em cookie antes de decidir se renderiza.
+ * Espalhar a declaracao por nove arquivos nao reduzia nada e escondia o fato de
+ * que a divida e UMA, e mora aqui.
+ *
+ * Ver node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/
+ * 02-route-segment-config/instant.md §"Disabling static shell validation".
  */
 export const instant = false
 export default async function AppLayout({ children }: { children: ReactNode }) {
