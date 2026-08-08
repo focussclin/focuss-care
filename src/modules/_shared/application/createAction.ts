@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { unstable_rethrow } from 'next/navigation'
 import { after } from 'next/server'
 
@@ -9,6 +9,7 @@ import type { ZodType } from 'zod'
 
 import { recordAuditEvent, type AuditEvent } from '@/lib/audit/audit-log'
 import { getSessionState } from '@/lib/auth/session'
+import type { CacheTag } from '@/lib/cache/tags'
 import { describeCause } from '@/lib/observability/describe-cause'
 import type { Database, MembershipRole } from '@/lib/supabase/database.types'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
@@ -56,6 +57,20 @@ export interface ActionContext {
   userId: string
 }
 
+/**
+ * O que o callback de cache enxerga: **so o que o servidor decidiu**.
+ *
+ * Recorte deliberado de `ActionContext`. Nao ha `supabase` (montar tag nao e
+ * consultar) e, principalmente, nao ha entrada do formulario — ver o JSDoc de
+ * `cacheTags`.
+ */
+export interface ActionCacheScope {
+  /** Clinica ativa, resolvida por `current_clinic_id()`. Nunca veio do cliente. */
+  clinicId: string
+  /** Usuario da sessao validada. Para tags de recorte pessoal, quando existirem. */
+  userId: string
+}
+
 export interface CreateActionOptions<TInput, TOutput, F extends string = string> {
   /**
    * Nome estavel da acao, no formato `<entidade>.<verbo>`: 'patient.create'.
@@ -82,10 +97,38 @@ export interface CreateActionOptions<TInput, TOutput, F extends string = string>
    */
   handler: (input: TInput, context: ActionContext) => Promise<ActionResult<TOutput, F>>
   /**
+   * Tags de cache a invalidar apos sucesso (F-02 — divida D3 do roadmap).
+   *
+   * Duas restricoes de desenho, e as duas sao de seguranca:
+   *
+   *  1. **O callback nao recebe a entrada.** Ve `scope` (clinica e usuario, os
+   *     dois derivados no servidor) e `output` (a linha que o caso de uso
+   *     devolveu, ja depois da RLS). Nao ha por onde uma tag nascer de campo de
+   *     formulario — se `input` chegasse aqui, o navegador escolheria qual
+   *     recorte de cache expirar.
+   *  2. **A tag e `CacheTag`, nao `string`.** So `lib/cache/tags.ts` produz esse
+   *     tipo, e la toda tag carrega `clinic_id` (P4 do roadmap). Uma literal
+   *     como `'patients'` nao compila aqui.
+   *
+   * Usa `updateTag`, e nao `revalidateTag`: quem acabou de salvar precisa ver o
+   * proprio dado na leitura seguinte (read-your-own-writes), nao a versao velha
+   * enquanto a nova carrega em segundo plano. `updateTag` so vale dentro de
+   * Server Action — que e exatamente e unicamente o que esta fabrica monta.
+   * Ver node_modules/next/dist/docs/01-app/03-api-reference/04-functions/updateTag.md.
+   *
+   * Hoje isto e cano sem agua: nenhuma leitura do produto usa `use cache` ainda,
+   * entao invalidar e no-op. O cano existe montado e testado para que a primeira
+   * leitura cacheavel tenant-scoped nao precise inventar a invalidacao junto.
+   */
+  cacheTags?: (scope: ActionCacheScope, output: TOutput) => readonly CacheTag[]
+  /**
    * Caminhos a revalidar apos sucesso.
    *
-   * Provisorio: F-02 troca isto por tags de cache com `clinic_id`
-   * (`lib/cache/tags.ts`). Ate la, revalidar por caminho e o que existe.
+   * Continua valendo, e nao foi substituido por `cacheTags`: os dois resolvem
+   * problemas diferentes. `revalidatePath` derruba o cache de Router de uma rota
+   * — que e o que faz a listagem de `/pacientes` reaparecer atualizada hoje, sem
+   * nenhum `use cache` no caminho. Tag invalida entrada de `use cache`, que ainda
+   * nao existe. Enquanto nao existir, remover daqui apagaria a revalidacao real.
    */
   revalidatePaths?: readonly string[]
   /**
@@ -205,6 +248,17 @@ export function createAction<TInput, TOutput, F extends string = string>(
     // desfaz porque a observabilidade ou a invalidacao falharam. O desfecho fica
     // no log do servidor e o resultado de sucesso continua sendo devolvido.
     try {
+      // A clinica sai do contexto, nunca de `input`: `parsed.data` nao entra
+      // nesta chamada, e o tipo de `cacheTags` nao o oferece.
+      const scope: ActionCacheScope = {
+        clinicId: context.clinicId,
+        userId: context.userId,
+      }
+
+      for (const tag of options.cacheTags?.(scope, output) ?? []) {
+        updateTag(tag)
+      }
+
       for (const path of options.revalidatePaths ?? []) {
         revalidatePath(path)
       }

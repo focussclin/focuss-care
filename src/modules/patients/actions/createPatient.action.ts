@@ -1,5 +1,6 @@
 'use server'
 
+import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -44,6 +45,19 @@ const runCreatePatient = createAction<
     unavailable: createPatientMessages.unavailable,
     unexpected: createPatientMessages.unexpected,
   },
+  /**
+   * Invalidacao por tag com `clinic_id` (F-02). A clinica sai do `scope`, que o
+   * pipeline monta do `ActionContext`; o id do paciente sai do `output`, que e a
+   * linha devolvida pelo repositorio depois da RLS. Nenhum dos dois passou pelo
+   * formulario.
+   *
+   * Nao ha leitura com `use cache` ainda, entao isto e no-op em runtime — e o
+   * ponto: quando a primeira leitura cacheavel entrar, a escrita ja a invalida.
+   */
+  cacheTags: ({ clinicId }, output) => [
+    cacheTags.patients(clinicId),
+    cacheTags.patient(clinicId, output.id),
+  ],
   revalidatePaths: ['/pacientes'],
 
   handler: async (input, context) => {

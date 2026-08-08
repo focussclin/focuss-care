@@ -10,9 +10,17 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { can } from '@/lib/auth/permissions'
+import { getSessionState } from '@/lib/auth/session'
+import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
+import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
 import { toIsoDate } from '@/modules/patients/application/toPatientDto'
 import { getMockPatientNotes } from '@/modules/patients/infrastructure/MockPatientRepository'
-import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
+import {
+  getPatientConsentSource,
+  getPatientRepository,
+} from '@/modules/patients/infrastructure/repository'
+import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
@@ -73,6 +81,36 @@ export default async function PatientProfilePage({
     .slice(0, MAX_HISTORY)
 
   const notes = patientSource.isLive ? [] : getMockPatientNotes(today)
+
+  /*
+   * Consentimentos LGPD (P-03).
+   *
+   * A leitura acontece DEPOIS do `notFound()` acima: sem paciente confirmado na
+   * clinica ativa, nao ha o que consultar — e consultar mesmo assim seria usar o
+   * id da URL como chave de busca em uma tabela generica (`consents` guarda
+   * `subject_type` + `subject_id`, sem FK para `patients`).
+   *
+   * O painel monta as cinco finalidades no servidor, com data e versao ja
+   * formatadas. Em modo demonstracao nao ha repositorio: `rows` sai da lista
+   * vazia, e as cinco linhas aparecem como "Não registrado" com os botoes
+   * desabilitados — o painel se anuncia como demonstracao em vez de simular
+   * registro (R11 do roadmap).
+   */
+  const [session, consentSource] = await Promise.all([
+    getSessionState(),
+    getPatientConsentSource(),
+  ])
+
+  const consents = consentSource.isLive
+    ? await consentSource.repository.listByPatient(
+        consentSource.clinicId,
+        patient.id,
+      )
+    : []
+
+  const consentRows = buildPatientConsentRows(consents.map(toPatientConsentDto))
+  const canManageConsents =
+    session.status === 'active' && can(session.role, 'patient.write')
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,6 +186,13 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          <PatientConsentsPanel
+            patientId={patient.id}
+            rows={consentRows}
+            isLive={consentSource.isLive}
+            canManage={canManageConsents}
+          />
 
           <Card>
             <CardHeader

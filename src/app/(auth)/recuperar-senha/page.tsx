@@ -15,6 +15,9 @@ export const metadata: Metadata = {
  * O layout visual completo desta tela ainda depende de handoff proprio do Codex —
  * aqui reusamos os componentes ja definidos, sem inventar direcao nova.
  */
+/** Mesmo motivo de `/login`: `searchParams` no topo, sem shell estatico (F-02). */
+export const instant = false
+
 export default async function RecuperarSenhaPage({
   searchParams,
 }: PageProps<'/recuperar-senha'>) {

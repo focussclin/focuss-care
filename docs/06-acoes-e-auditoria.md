@@ -3,6 +3,10 @@
 > Implementação da feature **F-01** do [`roadmap.md`](./roadmap.md) §13 (dívidas D1 e D2).
 > Escrito contra o código e os tipos gerados do banco em **07/08/2026**,
 > branch `feat/telas-e-camada-supabase`.
+>
+> A **§8 documenta F-02** (cache multi-tenant e flags do Next 16), que evoluiu o
+> passo 6 deste mesmo pipeline. As duas features vivem aqui porque compartilham
+> um arquivo: `createAction.ts`.
 
 Este documento descreve o que a fundação entrega, **onde ela deliberadamente não
 se aplica**, e o que não pôde ser verificado. Nenhuma afirmação sobre policy de
@@ -150,14 +154,18 @@ nenhum repositório). O primeiro chamador será P-01 (pacientes). Retrofitar as
 actions de identidade nele seria forçar a única categoria de ação que o pipeline
 exclui por desenho.
 
-### Pendência conhecida: revalidação por caminho
+### Revalidação: caminho **e** tag
 
-`revalidatePaths` chama `revalidatePath` por caminho. É provisório. Erros na
-revalidação ou na montagem do evento de auditoria são registrados no servidor e
-não transformam uma mutação já concluída em falha para a UI. **F-02**
-substitui isso por tags de cache com `clinic_id` (`lib/cache/tags.ts`), que é o
-que a §8 de [`01-arquitetura.md`](./01-arquitetura.md) exige. Enquanto F-02 não
-entra, revalidar por caminho é o que existe.
+Desde F-02 o passo 6 faz as duas coisas, e elas não competem:
+
+| Opção | O que invalida | Estado |
+|---|---|---|
+| `cacheTags` | Entradas de `use cache` marcadas com aquela tag | Cano montado; **nenhuma leitura cacheada ainda** |
+| `revalidatePaths` | Cache de Router da rota | É o que faz `/pacientes` reaparecer atualizada hoje |
+
+Nenhum dos dois transforma mutação concluída em falha para a UI: erro na
+revalidação ou na montagem do evento de auditoria vai para o log do servidor e o
+sucesso continua sendo devolvido. Detalhe na §8.
 
 ---
 
@@ -322,9 +330,166 @@ quando a policy de `audit_log` estiver verificada — ver P-A1 abaixo.
 
 ## 7. Fora de escopo, deliberadamente
 
-- **Cache tags com `clinic_id`** (D3/F-02) — `createAction` revalida por caminho até lá.
+> Escrito no fechamento de F-01. **A primeira linha foi resolvida por F-02** — ver §8.
+
+- ~~**Cache tags com `clinic_id`** (D3/F-02)~~ — entregue; ver §8.
 - **`eslint-plugin-boundaries`** (D4/F-03) — nenhuma regra de arquitetura é verificada hoje; em particular, nada impede uma Server Action de não usar `createAction` (R4 do roadmap continua sem gate).
 - **Matriz papel × ação** (I-05) — `createAction` aceita uma lista de papéis por ação; a matriz centralizada em `lib/auth/permissions.ts` é outra feature.
 - **`unauthorized()` / `forbidden()`** (D10) — exigem `experimental.authInterrupts` em `next.config.ts`, que não foi habilitado aqui.
 - **`Money`, `Paginated`, `Entity`, `ValueObject`** (D12) — o roadmap os agenda para antes do Financeiro. Criá-los sem chamador seria pasta vazia com nome bonito.
 - **Migrations, mudanças de schema, dependências novas, `service_role`.**
+
+---
+
+## 8. F-02 — cache multi-tenant e flags do Next 16
+
+> Feature **F-02** do [`roadmap.md`](./roadmap.md) §13 (dívida **D3** e parte de **D10**).
+> Escrita em **07/08/2026**, mesma branch. Nenhuma migration, nenhuma dependência
+> nova, nenhum `service_role`, nenhuma escrita no banco remoto.
+
+### 8.1 O que a fatia entrega
+
+| # | Entrega | Onde |
+|---|---|---|
+| 1 | Fábrica única e tipada de tags tenant-scoped (`cacheTags`, `CacheTag`, `InvalidCacheTagError`) | `src/lib/cache/tags.ts` |
+| 2 | `cacheComponents: true` | `next.config.ts` |
+| 3 | Invalidação por tag no passo 6 do pipeline (`cacheTags` em `CreateActionOptions`) | `src/modules/_shared/application/createAction.ts` |
+| 4 | Primeiro chamador: as três ações de pacientes declaram suas tags | `src/modules/patients/actions/*.action.ts` |
+| 5 | Cobertura: 34 testes da fábrica + 10 do contrato de revalidação | `src/lib/cache/tags.test.ts` · `src/modules/_shared/application/createAction.test.ts` |
+
+### 8.2 A regra que a fábrica torna verificável
+
+P4 do roadmap: **toda tag de cache carrega `clinic_id`**. A §8 de
+[`01-arquitetura.md`](./01-arquitetura.md) fixa o formato:
+
+```
+OK   clinic:{clinicId}:patients
+NÃO  patients
+```
+
+Quatro decisões fazem disso mais do que concatenar strings:
+
+1. **`CacheTag` é tipo marcado.** Uma string literal não o satisfaz, então
+   `updateTag('patients')` **não compila** onde o contrato pede `CacheTag`.
+   "Toda tag sai da fábrica" deixa de depender de revisão humana — enquanto F-03
+   (`eslint-plugin-boundaries`) não existe, o compilador é o gate.
+2. **O identificador é validado como UUID.** É o que impede dado pessoal de virar
+   tag: nome, e-mail, CPF e telefone não são UUID, então não passam. `clinicId`
+   sai de `current_clinic_id()` e `patientId` sai da linha que o repositório
+   devolveu — os dois são `uuid` no schema.
+3. **O erro nunca repete o valor recusado.** Uma mensagem que ecoasse a entrada
+   inválida colocaria no log exatamente o dado que a regra 2 barrou. Há teste
+   para isso.
+4. **Normaliza caixa e apara espaço.** `updateTag`/`revalidateTag` são
+   case-sensitive
+   (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/revalidateTag.md`).
+   Sem normalizar, o mesmo id em maiúsculas produziria uma tag que a leitura
+   nunca criou — a invalidação "funcionaria" e não invalidaria nada.
+
+`agenda(clinicId, date)` exige data civil `YYYY-MM-DD` e valida o calendário
+(`2026-02-31` é recusada). A checagem usa `Date.UTC`, função pura: nada ali lê o
+relógio, então a fábrica continua chamável de dentro de um escopo `use cache`.
+
+### 8.3 `cacheComponents: true` — e o que ela **não** ligou
+
+A flag é o que habilita `use cache`, `use cache: private`, `cacheTag()` e
+`cacheLife()`. Ela substitui `experimental.dynamicIO`, `experimental.useCache` e
+`experimental.ppr`, **removidas no Next 16** — nenhuma delas foi declarada.
+`experimental.authInterrupts` (D10, telas 401/403) continua fora: é I-05, não
+esta fatia.
+
+Com a flag ligada o padrão continua **dinâmico**: só entra em cache o que declara
+`use cache`. Nada declara.
+
+#### O custo real: validação de shell estático
+
+`cacheComponents` passa a exigir que toda rota produza um shell estático não
+vazio. A casca de `(app)/` lê a sessão em cookie **antes de decidir se
+redireciona** — não há shell a pré-renderizar, porque nem se sabe ainda se a rota
+renderiza. O build quebrou em `/agenda`, e depois em `/login`.
+
+A saída é a documentada para adoção incremental: `export const instant = false`
+marca o segmento como "pode bloquear" — **não força a rota a ser dinâmica e não
+cacheia nada**
+(`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/02-route-segment-config/instant.md`,
+§"Disabling static shell validation").
+
+| Segmento | Por quê |
+|---|---|
+| `src/app/(app)/layout.tsx` | Sessão em cookie no topo; cobre toda a área autenticada de uma vez |
+| `src/app/(auth)/login/page.tsx` | `searchParams` no topo |
+| `src/app/(auth)/recuperar-senha/page.tsx` | `searchParams` no topo |
+| `src/app/(auth)/onboarding/page.tsx` | Sessão em cookie decide se a tela existe |
+
+Colocado o mais baixo possível: `(auth)/layout.tsx`, `/cadastro` e `/` continuam
+validando, e `/pacientes/[patientId]` e `/pacientes/[patientId]/historico` saem
+do build como **Partial Prerender**. Sair dessa lista exige empurrar a leitura de
+sessão para dentro de `<Suspense>` tela por tela, com fallback desenhado —
+refatoração de rota, não de infraestrutura.
+
+### 8.4 Invalidação: `updateTag`, e por que não `revalidateTag`
+
+```ts
+cacheTags?: (scope: ActionCacheScope, output: TOutput) => readonly CacheTag[]
+```
+
+`updateTag` é o correto aqui: quem acabou de salvar precisa ver o próprio dado na
+leitura seguinte (*read-your-own-writes*), não a versão velha enquanto a nova
+carrega em segundo plano. Ele **só vale dentro de Server Action** — que é
+exatamente e unicamente o que `createAction` monta
+(`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/updateTag.md`).
+`revalidateTag(tag, 'max')` seria a escolha em Route Handler ou webhook; não há
+nenhum que invalide cache hoje.
+
+**Duas restrições de desenho, as duas de segurança:**
+
+1. **O callback não recebe `input`.** Vê `scope` (`clinicId` e `userId`, os dois
+   derivados no servidor) e `output` (a linha que o caso de uso devolveu, já
+   depois da RLS). Não existe assinatura pela qual um campo de formulário
+   influencie qual recorte de cache expira. Isso é estrutura, não convenção — e
+   tem teste que manda `clinicId` da clínica vizinha no corpo e verifica que a
+   tag continua sendo a da sessão.
+2. **`updatePatient` e `archivePatient` tagueiam por `output.id`, não por
+   `input.patientId`.** Os dois valem o mesmo, mas só um é o id que o banco
+   confirmou.
+
+Falha na fabricação de uma tag vai para o log do servidor e **não** transforma a
+mutação já concluída em erro na tela — mesma regra best-effort do passo 7. Há
+teste: `cacheTags` que lança ainda devolve `{ ok: true }` para a UI.
+
+### 8.5 Nenhum dado clínico foi cacheado nesta fatia
+
+Esta é a decisão central, e é deliberada: **`use cache` não aparece em lugar
+nenhum do código.**
+
+A listagem de `/pacientes` seria o candidato óbvio, e reúne as três condições que
+desaconselham:
+
+| Condição | Consequência |
+|---|---|
+| Lê sessão em cookie | `cookies()` é proibido em `use cache` |
+| Lê `searchParams` (busca, filtro e cursor de P-02a) | Idem |
+| Devolve dado de paciente | Cachear dado de saúde exige contrato próprio, não herdado |
+
+Some-se `await connection()`, proibido nos **dois** sabores de cache.
+
+O caminho eventual é `'use cache: private'` — resultado nunca armazenado no
+servidor, só na memória do browser — com `cacheTag(cacheTags.patients(clinicId))`
+e `cacheLife` explícito. Esse contrato precisa ser escrito olhando para o dado
+clínico, com decisão de retenção e de LGPD junto. Não é subproduto de uma fatia
+de infraestrutura, e antecipá-lo aqui seria o R2 do roadmap disfarçado de
+progresso.
+
+**O que existe hoje, então:** a fábrica, o cano de invalidação e a flag. As três
+ações de pacientes já declaram suas tags — em runtime isso é *no-op*, porque não
+há entrada de cache para expirar. É de propósito: quando a primeira leitura
+cacheável tenant-scoped entrar, ela não precisa inventar a invalidação junto.
+
+### 8.6 Pendências de F-02
+
+| # | Pendência | Impacto | Como fechar |
+|---|---|---|---|
+| **P-C1** | **Nenhuma leitura usa `use cache`.** A fatia entrega tag sem consumidor. | Nenhum ganho de performance ainda; a invalidação é no-op. D3 está resolvida na infraestrutura, não no uso. | Primeira leitura cacheável tenant-scoped — candidata natural é P-02b, com `'use cache: private'` e contrato de dado clínico explícito. |
+| **P-C2** | **Quatro segmentos com `instant = false`.** | Área autenticada e três telas de auth não produzem shell estático. Não é regressão (era o comportamento anterior), é dívida assumida e nomeada. | Empurrar a leitura de sessão/`searchParams` para dentro de `<Suspense>`, uma tela por vez, com fallback desenhado pelo Codex. |
+| **P-C3** | **`updateTag` não foi exercitado contra o runtime do Next.** Os testes usam mock de `next/cache`: verificam qual tag o pipeline decide invalidar, não o efeito no cache. | Se a chamada falhar em produção, o sinal fica no log do servidor (`[action] falha pós-mutação`) e a escrita permanece válida. | Só é observável quando existir leitura cacheada (P-C1). Smoke E2E em F2+. |
+| **P-C4** | **Nada impede uma tag literal fora do pipeline.** `updateTag('x')` chamado direto em um arquivo qualquer compila. | O tipo `CacheTag` só protege quem passa por `createAction`. | F-03 (`eslint-plugin-boundaries`): regra proibindo `next/cache` fora de `_shared/application` e `lib/cache`. É o R2 do roadmap. |

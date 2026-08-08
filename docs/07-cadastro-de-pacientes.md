@@ -12,6 +12,12 @@ Consentimento LGPD, prontuário, agenda e Patient 360 continuam fora — ver §6
 > cursor, com busca e filtro de status no servidor**. A §8 documenta a fatia,
 > incluindo o que ficou de fora e por quê.
 
+> **Atualização 07/08/2026 — P-03.** O perfil do paciente ganhou o **painel de
+> consentimentos LGPD** (`consents`): conceder e revogar por finalidade, com data
+> e versão do documento decididas no servidor. A §9 documenta a fatia — inclusive
+> os limites da tabela remota (sem FK para `patients`, sem `created_by`, sem
+> unique parcial) e o que falta para sair de Review.
+
 > **Achado que atravessa o produto inteiro:** a policy de `INSERT` de `audit_log`
 > **recusa o membro autenticado**. Nenhum evento de auditoria está sendo gravado
 > hoje — nem `clinic.created`, nem os três deste módulo. Ver **P-P6** na §7.
@@ -232,8 +238,17 @@ de emergência, foto e importação em massa.
 Também fora: cache tags com `clinic_id` (F-02 — a action revalida por caminho,
 como todo o resto hoje).
 
+> **Atualizado por F-02.** As três ações de pacientes passaram a declarar
+> `cacheTags` (`clinic:{clinicId}:patients` e `clinic:{clinicId}:patient:{id}`) —
+> `revalidatePath('/pacientes')` continua ao lado, porque é ele que ainda faz a
+> listagem reaparecer atualizada. **Nenhuma leitura foi cacheada.** Ver
+> [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md) §8.
+
 Busca paginada por cursor **saiu desta lista**: foi entregue em P-02a, §8. O que
 sobrou dela está em P-02b, bloqueado por acesso ao banco.
+
+**Consentimento LGPD também saiu desta lista**: foi entregue em P-03, §9. Segue
+em Review até a policy de escrita de `consents` ser confirmada no banco (§9.8).
 
 ---
 
@@ -454,7 +469,7 @@ Tenancy real continua sendo pgTAP (R1), ainda pendente.
 | 1 | Filtro "Última visita (30/90 dias)" | Deriva de `appointments`; "mais de 90 dias" é anti-join (inclui quem nunca veio). Exige `last_visit_at` denormalizado ou RPC → migration |
 | 2 | Busca infixa em escala | `pg_trgm` (+ `unaccent` para acento) e índice GIN → migration |
 | 3 | Índice do keyset `(clinic_id, full_name, id) where deleted_at is null` | Migration |
-| 4 | Cache da listagem | F-02 (`lib/cache/tags.ts`): `use cache` sem tag por `clinic_id` é o R2 |
+| 4 | Cache da listagem | F-02 entregou a tag por `clinic_id` e ligou `cacheComponents`. O que falta é o **contrato**: a listagem lê cookie de sessão, `searchParams` e `connection()` — proibidos em `use cache`. Caminho: `'use cache: private'` com `cacheLife` e decisão de LGPD explícitas |
 | 5 | Confirmação da colação de `full_name` | Sem acesso SQL (B1) |
 
 Sem trigram, `ilike '%termo%'` é seq scan **dentro da fatia da clínica** —
@@ -475,3 +490,208 @@ select collname, collprovider, collisdeterministic   -- confirma a 8.3
  where oid = (select attcollation from pg_attribute
                where attrelid = 'patients'::regclass and attname = 'full_name');
 ```
+
+---
+
+## 9. P-03 — consentimento LGPD do paciente
+
+> Entregue em **07/08/2026**, sem tocar no banco remoto: nenhuma migration,
+> nenhuma coluna nova, nenhuma dependência nova. A tabela `consents` já existia,
+> tipada e sob RLS, sem repositório nem tela.
+>
+> **Status: Review, não Done.** O que falta para `Done` está na §9.8 — e nada
+> disso é código de aplicação.
+
+### 9.1 O que a fatia entrega
+
+| # | Entrega | Onde |
+|---|---|---|
+| 1 | Porta e entidade dos consentimentos de paciente | `src/modules/patients/domain/PatientConsentRepository.ts` |
+| 2 | Adapter Supabase com os três filtros de recorte | `src/modules/patients/infrastructure/SupabasePatientConsentRepository.ts` |
+| 3 | Tradução de recusa do Postgres, pública e testada | `src/modules/patients/infrastructure/postgrestFailure.ts` |
+| 4 | Composição de leitura e de escrita | `src/modules/patients/infrastructure/repository.ts` |
+| 5 | Contrato Zod, rótulos pt-BR e DTO | `src/modules/patients/schemas/patientConsent.schema.ts` |
+| 6 | Versão vigente do documento, **server-only** | `src/modules/patients/application/consentDocumentVersions.ts` |
+| 7 | DTO mínimo e montagem do painel no servidor | `src/modules/patients/application/toPatientConsentDto.ts`, `patientConsentRows.ts` |
+| 8 | Server Actions de conceder e revogar | `src/modules/patients/actions/{grant,revoke}PatientConsent.action.ts` |
+| 9 | Painel no perfil do paciente | `src/modules/patients/ui/PatientConsentsPanel.tsx` |
+| 10 | Testes: schema, versão, adapter, actions, DTO | 4 arquivos `*.test.ts`, **sem rede** |
+
+Fecha o item "Registro de consentimento por finalidade → `consents` → F2" da
+tabela de LGPD da §8 do roadmap, e o `patients` do §3 passa a ter a última entrega
+do seu MVP fora de contatos e documentos.
+
+### 9.2 O que o navegador escolhe — e o que ele nunca escolhe
+
+O contrato de entrada tem **dois campos**:
+
+```ts
+{ patientId: uuid, purpose: 'terms_of_service' | … | 'ai_assisted_processing' }
+```
+
+O que **não** é campo, e de onde vem cada um:
+
+| Valor gravado | Fonte | Por quê |
+|---|---|---|
+| `clinic_id` | `ActionContext` (`current_clinic_id()`) | P3 de [`01-arquitetura.md`](./01-arquitetura.md) |
+| `subject_type` | constante `'patient'` no adapter | A tabela é genérica; a porta cobre um recorte só |
+| `document_version` | `application/consentDocumentVersions.ts`, com `server-only` | Um registro que aceita a própria versão por parâmetro **não prova nada** em auditoria |
+| `granted_at` | relógio do servidor | Idem |
+| `revoked_at` | `null` no insert, relógio do servidor no update | Idem |
+
+`purpose` é `z.enum` derivado de `PATIENT_CONSENT_PURPOSES`, que por sua vez é
+`satisfies readonly ConsentPurpose[]` — inventar uma finalidade **não compila**.
+A direção contrária (o banco ganhar um valor no enum `consent_purpose` e a tela
+ignorá-lo em silêncio) quebra a compilação em `toPatientConsentPurpose`.
+
+### 9.3 Os três filtros de toda consulta
+
+```
+.eq('clinic_id', clinicId)          <- tenant, vindo da sessão
+.eq('subject_type', 'patient')      <- só paciente
+.eq('subject_id', patientId)        <- só este paciente, validado como uuid
+```
+
+Cada um responde por um risco diferente, e o do meio é o que só existe aqui:
+
+- **`clinic_id`** é defesa em profundidade. A RLS impede o vazamento; o filtro
+  impede a consulta errada.
+- **`subject_type`** importa porque `consents` é **genérica**. Sem ele, um
+  `subject_id` que coincidisse com o id de outro tipo de sujeito devolveria o
+  consentimento errado — e a RLS não teria nada a reclamar, porque a linha é da
+  mesma clínica.
+- **`subject_id` validado como uuid** porque a coluna **não tem FK para
+  `patients`** (§9.5). O banco aceitaria qualquer texto; o formato é a única
+  checagem deste lado. Id malformado devolve `not-found` sem chegar ao banco — e
+  a mensagem de log não repete o valor recusado.
+
+### 9.4 O que nunca sai do banco
+
+O `select` do adapter é `id, purpose, document_version, granted_at, revoked_at`.
+Ficam de fora, deliberadamente:
+
+| Coluna | Por que não sai |
+|---|---|
+| `ip`, `user_agent` | Dado pessoal (LGPD art. 5, I). Este caminho termina em props de Client Component |
+| `clinic_id` | Quem consulta já sabe em qual clínica está — foi ele quem passou o filtro |
+| `subject_type`, `subject_id` | São o filtro da consulta, não resultado dela |
+
+São **três barreiras na mesma direção** — `SELECT`, entidade e DTO — porque é o
+caminho mais curto entre uma tabela de dado sensível e a tela.
+
+### 9.5 Limites da tabela remota, declarados
+
+O schema remoto é o que está em `src/lib/supabase/database.types.ts`. Três coisas
+que **não existem lá**, e o que cada ausência custa:
+
+| Ausente | Consequência | O que a aplicação faz |
+|---|---|---|
+| **FK de `subject_id` → `patients`** | O banco aceitaria consentimento para um paciente inexistente, ou para um id de outra entidade | A action lê o paciente por `findById(clinicId, …)` **antes** de gravar, e o adapter valida o formato uuid |
+| **Unique parcial em `(clinic_id, subject_type, subject_id, purpose) where revoked_at is null`** | Duas concessões simultâneas deixam **duas linhas vigentes** | Ver abaixo |
+| **`created_by` / `created_at`** | A linha não diz **quem da equipe** registrou nem quando foi criada (só `granted_at`) | O ator fica em `audit_log`, via `recordAuditEvent` — que deriva ator, clínica e papel da sessão |
+
+**A corrida, em detalhe.** "Já existe consentimento vigente?" é uma leitura
+seguida de uma escrita, sem transação — PostgREST não expõe uma. Duas
+recepcionistas clicando ao mesmo tempo na mesma finalidade podem produzir duas
+linhas vigentes. A degradação foi escolhida para ser a mais barata possível:
+
+- o painel mostra **a mais recente** das vigentes, então a tela continua correta;
+- `revokeActive` fecha **todas** as vigentes, não uma — revogar não deixa
+  consentimento de pé por trás de uma tela que diz "revogado";
+- o evento `patient.consent.revoked` grava `revoked_count`. Em operação normal é
+  sempre `1`; **um valor maior no log é a evidência de que a corrida aconteceu** —
+  e é o que justificaria criar o índice.
+
+A correção estrutural é o índice único parcial, e ela é **migration** (§7.4 do
+roadmap: aprovação do Codex + PR isolado). Quando entrar, `23505` já está mapeado
+para `conflict` em `postgrestFailure.ts` e a action responde certo sem código novo.
+
+### 9.6 O que NÃO foi feito, de propósito
+
+| Item | Por quê |
+|---|---|
+| Gravar `ip` e `user_agent` em `consents` | `recordAuditEvent` já os coleta, com a mesma finalidade e sob a mesma RLS. Duplicar dado pessoal em duas tabelas é mais superfície de vazamento sem informação nova |
+| Revogação/re-aceite automático quando a versão do documento muda | O painel **informa** que o aceite é de uma versão anterior. Derrubar consentimento sozinho é decisão da clínica, e precisa de ato explícito de alguém |
+| Consentimento de outros sujeitos (`subject_type` ≠ `'patient'`) | Um repositório genérico de consentimentos seria caminho pronto para ler o consentimento de outra entidade a partir de um id de paciente |
+| Texto das políticas versionado no produto | Não há tabela para isso no schema remoto. Hoje a versão é o que amarra o registro a um documento |
+| `revalidatePath` do perfil | `/pacientes/[patientId]` tem segmento dinâmico e exige o parâmetro `type`, que `revalidatePaths` do `createAction` não oferece. Mudar o pipeline por causa desta fatia seria mexer em área compartilhada (§6 do roadmap). O `updateTag` da tag `clinic:<uuid>:patient:<uuid>` acontece, e a tela atualiza pelo `router.refresh()` do painel — o mesmo caminho de editar e arquivar |
+
+### 9.7 Dívida declarada nesta fatia
+
+`postgrestFailure.ts` nasceu com `toPatientWriteError` e `readFailure` públicas
+porque P-03 precisava exatamente da tradução que `SupabasePatientRepository` tem
+como funções **privadas**. Extrair as de lá seria editar um arquivo que outro
+agente tem aberto no worktree compartilhado (§6) e não pertence a esta fatia.
+
+**Resultado: há duas cópias da mesma tabela de SQLSTATE.** Unificá-las — o
+adapter de pacientes passar a importar de `postgrestFailure.ts` — é um follow-up
+de uma linha por função, e fica registrado aqui em vez de descoberto depois.
+
+### 9.8 O que falta para P-03 sair de Review
+
+| # | Pendência | Quem consegue fechar |
+|---|---|---|
+| P-C1 | **Confirmar RLS e policies de `consents` no SQL Editor.** Nenhuma sonda foi executada contra a tabela nesta fatia; o que se sabe é que a §2 de [`03-banco-de-dados.md`](./03-banco-de-dados.md) registra RLS ativa em 56/56 objetos e leitura anônima devolvendo 0 linhas | Quem tiver acesso ao painel do Supabase |
+| P-C2 | **Verificar se `INSERT`/`UPDATE` de `consents` são permitidos ao membro autenticado.** É o mesmo tipo de achado do `audit_log` (P-P6): a policy pode ter `USING` sem `WITH CHECK`, e aí a escrita falha com `42501` — que a UI já traduz para "você não tem permissão", mas o botão não funcionaria | Idem |
+| P-C3 | Auditoria de fato gravando. `patient.consent.granted` / `.revoked` **não chegam a `audit_log` hoje**, pelo mesmo bloqueio de policy de P-P6 | Idem |
+| P-C4 | Teste de tenancy pgTAP para `consents` (R1 do roadmap: **toda tabela nova exige o teste**) | `supabase/tests/`, que ainda não existe (D5/D7) |
+| P-C5 | Índice único parcial que fecha a corrida da §9.5 | Migration com aprovação do Codex |
+| P-C6 | Persistência verificada por um usuário real: registrar, recarregar, o dado continua lá (DoD da §11 do roadmap) | Depende de P-C1 e P-C2 |
+
+**Enquanto P-C1 e P-C2 não forem verificados, P-03 não pode ser declarada `Done`.**
+O código está completo e verde em `lint` + `typecheck` + `build` + `npm test`; o
+que não está verificado é o outro lado da fronteira.
+
+### 9.9 Consultas que alguém com acesso ao SQL Editor precisa rodar
+
+```sql
+-- P-C1: RLS ligada e forçada?
+select relname, relrowsecurity, relforcerowsecurity
+  from pg_class where relname = 'consents';
+
+-- P-C2: as policies têm USING **e** WITH CHECK?
+select polname, polcmd, pg_get_expr(polqual, polrelid) as using_expr,
+       pg_get_expr(polwithcheck, polrelid) as with_check_expr
+  from pg_policy where polrelid = 'consents'::regclass;
+
+-- P-C5: existe algum índice único parcial hoje?
+select indexname, indexdef from pg_indexes
+ where schemaname = 'public' and tablename = 'consents';
+
+-- §9.5: `clinic_id` é nullable no tipo gerado. É nullable mesmo?
+select column_name, is_nullable, data_type
+  from information_schema.columns
+ where table_name = 'consents';
+```
+
+### 9.10 O que os testes cobrem (`npm test`)
+
+**Schema e versão** — os dois campos aceitos e nada mais; `documentVersion`,
+`grantedAt` e `clinicId` mandados pelo cliente são descartados; finalidade fora do
+enum recusada; uuid inválido recusado; a mensagem de recusa não ecoa o valor
+recusado; toda finalidade tem rótulo pt-BR sem enum cru vazando; o aviso do painel
+se declara registro técnico.
+
+**Adapter** — os três filtros em leitura, inserção e revogação; `select` sem `ip`,
+`user_agent`, `clinic_id`, `subject_id` e `subject_type`; `insert` sem `ip` e sem
+`user_agent`, com os sete campos exatos; `is('revoked_at', null)` no update (clique
+repetido não reescreve a data da primeira revogação); revogação fecha **todas** as
+vigentes; id malformado **não chega a chamar `from()`**; `42501` vira `forbidden` e
+falha de rede vira `unavailable`, sem a mensagem do Postgres subir.
+
+**Actions** — papel `finance` não escreve; clínica gravada é a da sessão mesmo
+quando a entrada manda outra; versão gravada é a do servidor mesmo quando a
+entrada manda outra; tag invalidada é `clinic:<uuid>:patient:<uuid>` e a de
+`patients` **não** é; paciente inexistente e de outra clínica dão a mesma resposta;
+consentimento vigente vira `conflict` sem gravar; registro revogado não bloqueia
+novo consentimento; auditoria não carrega id do paciente, nome nem clínica;
+auditoria que falha não derruba a escrita; `revoked_count` no evento.
+
+**DTO e painel** — as seis chaves exatas; nada de `clinic`, `subject`, `ip` ou
+`user_agent` no JSON; nenhuma `Date` atravessa; as cinco finalidades aparecem sem
+registro nenhum; "revogado" ≠ "não registrado"; vigente vence revogado antigo;
+entre duas vigentes mostra a mais recente; versão defasada é sinalizada sem
+derrubar o consentimento; data ilegível vira `null`, nunca "Invalid Date"; linha de
+finalidade desconhecida não cria uma sexta linha na tela.
+
+Os fakes gravam a cadeia de chamadas do supabase-js — **nenhuma chamada de rede**.

@@ -1,5 +1,6 @@
 'use server'
 
+import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -69,6 +70,16 @@ const runUpdatePatient = createAction<
     unexpected: createPatientMessages.unexpectedEdit,
     'not-found': createPatientMessages.notFound,
   },
+  /**
+   * `output.id`, e nao `input.patientId`: os dois valem o mesmo aqui, mas so um
+   * deles e o id que o banco confirmou depois da RLS. Montar tag a partir da
+   * entrada seria deixar o navegador escolher qual recorte de cache expirar
+   * (F-02 — ver o JSDoc de `cacheTags` em `createAction`).
+   */
+  cacheTags: ({ clinicId }, output) => [
+    cacheTags.patients(clinicId),
+    cacheTags.patient(clinicId, output.id),
+  ],
   revalidatePaths: ['/pacientes'],
 
   handler: async (input, context) => {

@@ -284,7 +284,7 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 - [ ] Leitura de prontuário é auditada (quem, quando, qual, de qual IP).
 - [ ] Exclusão é lógica (`deleted_at`), nunca `DELETE`.
 - [ ] Dado clínico não vaza para Client Component (usar `taint`; view recebe só o necessário).
-- [ ] Novo tratamento de dado pessoal tem finalidade registrada em `consents`.
+- [ ] Novo tratamento de dado pessoal tem finalidade registrada em `consents`. **P-03 entregou o registro por finalidade do paciente** (5 propósitos do enum `consent_purpose`, conceder e revogar pelo `createAction`); o item só fecha quando a policy de escrita da tabela for confirmada — C1/C2 da §13.
 - [ ] Alteração/remoção de vínculo **revoga a sessão explicitamente** (claims do JWT ficam velhas por ~1h).
 - [ ] `SUPABASE_SECRET_KEY` não aparece em nenhum caminho alcançável pelo browser.
 
@@ -292,7 +292,7 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 
 | Requisito | Onde | Fase |
 |---|---|---|
-| Registro de consentimento por finalidade | `consents` | F2 |
+| Registro de consentimento por finalidade | `consents` | F2 — **em Review (P-03)**: painel no perfil do paciente, conceder/revogar com data e versão do documento. Falta confirmar RLS/policy da tabela e o teste de tenancy |
 | Auditoria de acesso a prontuário | `audit_log` | F5 |
 | Exportação de dados do titular | `identity` / `settings` | F6 |
 | Eliminação/anonimização respeitando prazo legal de guarda | `records` | F6 |
@@ -419,7 +419,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **P-01** | **Pacientes — cadastro real persistindo** | Claude | **Review** |
 | **P-02a** | **Pacientes — busca server-side e paginação por cursor** | Claude | **Review** |
 | P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
-| P-03 | Pacientes — consentimento LGPD | Claude | Backlog |
+| **P-03** | **Pacientes — consentimento LGPD** | Claude | **Review** |
 | A-01 | Agenda — criar/remarcar/cancelar persistindo | Claude | Backlog |
 | A-02 | Agenda — conflito e disponibilidade reais | Claude | Backlog |
 | E-01 | Atendimentos — check-in, fila, encerramento | Claude | Backlog |
@@ -486,6 +486,28 @@ no banco**. O resto depende de coisas que não são código de aplicação:
 | B4 | **Destravado como infraestrutura, ainda aberto como decisão.** F-02 entregou `lib/cache/tags.ts`, `cacheComponents: true` e a invalidação por tag no `createAction` — a tag por clínica existe e é testada. O que falta não é mais o R2: é o **contrato de cache do dado clínico**. A listagem lê sessão em cookie, `searchParams` e `connection()`, e as três são proibidas em `use cache`; o caminho é `'use cache: private'` com `cacheLife` e decisão de LGPD explícitas | A listagem continua **sem cache**. P-02b decide o contrato ou entrega só índice e filtro |
 
 **P-02 não está Done.** P-02a está em Review; P-02b continua Blocked.
+
+### O que falta para P-03 sair de Review
+
+P-03 entregou o consentimento LGPD ponta a ponta — porta, adapter, Zod, duas
+Server Actions pelo `createAction`, painel no perfil e 4 arquivos de teste — **sem
+tocar no banco remoto**. `lint`, `typecheck`, `build` e `npm test` estão verdes.
+
+O que impede `Done` é o outro lado da fronteira, e nada disso é código de
+aplicação (detalhe em [`07-cadastro-de-pacientes.md`](./07-cadastro-de-pacientes.md) §9.8):
+
+| # | Bloqueio | Consequência |
+|---|---|---|
+| C1 | **RLS e policies de `consents` não verificadas.** Nenhuma sonda foi executada contra a tabela; o que se sabe é o levantamento geral da §2 de [`03-banco-de-dados.md`](./03-banco-de-dados.md) | Sem B1 resolvido (acesso SQL), continua não verificável |
+| C2 | **`INSERT`/`UPDATE` de `consents` pelo membro autenticado não confirmados.** Mesmo tipo de achado do `audit_log` (P-A1): policy com `USING` e sem `WITH CHECK` recusa a escrita com `42501` | O botão traduziria a recusa para "você não tem permissão" — correto, e inútil |
+| C3 | `patient.consent.granted` / `.revoked` **não chegam a `audit_log`**, pelo mesmo bloqueio de policy | Escrita acontece, evento vira log de servidor |
+| C4 | **Teste de tenancy pgTAP de `consents`** — R1 exige o teste para toda tabela nova | `supabase/tests/` não existe (D5/D7) |
+| C5 | Sem unique parcial em `(clinic_id, subject_type, subject_id, purpose) where revoked_at is null`, duas concessões simultâneas deixam duas linhas vigentes | Degradação escolhida: o painel mostra a mais recente, a revogação fecha **todas**, e `revoked_count > 1` no evento é a evidência da corrida. A correção é migration (§7.4) |
+| C6 | Persistência não verificada por usuário real (DoD da §11) | Depende de C1 e C2 |
+
+**A tabela `consents` também não tem FK de `subject_id` para `patients` nem
+`created_by`.** A aplicação compensa lendo o paciente antes de gravar e validando
+o formato uuid no adapter; o ator do registro fica em `audit_log`, não na linha.
 
 ---
 

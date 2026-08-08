@@ -1,5 +1,6 @@
 'use server'
 
+import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -45,6 +46,11 @@ const runArchivePatient = createAction<ArchivePatientInput, PatientDto>({
     unexpected: createPatientMessages.unexpectedArchive,
     'not-found': createPatientMessages.notFound,
   },
+  /** Arquivar muda a listagem e o perfil: as duas tags caem juntas (F-02). */
+  cacheTags: ({ clinicId }, output) => [
+    cacheTags.patients(clinicId),
+    cacheTags.patient(clinicId, output.id),
+  ],
   revalidatePaths: ['/pacientes'],
 
   handler: async (input, context) => {
