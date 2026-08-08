@@ -86,7 +86,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', disabled: true },
   { label: 'Fila e senhas', href: '/fila', icon: PanelTop, section: 'care', disabled: true },
   { label: 'Check-in digital', href: '/check-in', icon: ScanLine, section: 'care', disabled: true },
-  { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', disabled: true },
+  { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', permission: 'encounter.read' },
   { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', disabled: true },
   { label: 'Teleatendimento', href: '/teleatendimento', icon: Video, section: 'care', disabled: true },
 

@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 788 testes em 61 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 817 testes em 63 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 23 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -65,7 +65,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 23 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 24 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -79,6 +79,7 @@ As 23 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
 | `/pacientes` e subrotas | **COMPLETO** | Banco (patients + patient_contacts + consents) | `patient.read`; alterações exigem `patient.write` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
+| `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
