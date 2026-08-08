@@ -2,12 +2,16 @@
 
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 
 import type { MembershipRole } from '@/lib/supabase/database.types'
 import { cn } from '@/lib/utils/cn'
 
 import { AppHeader } from './AppHeader'
+import {
+  CommandPalette,
+  useCommandPaletteShortcut,
+} from './CommandPalette'
 import { SidebarNav } from './SidebarNav'
 
 export interface AppShellProps {
@@ -41,6 +45,13 @@ export function AppShell({
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [commandsOpen, setCommandsOpen] = useState(false)
+
+  /*
+   * O atalho vive AQUI, e nao dentro da paleta: ele precisa funcionar com ela
+   * fechada, entao pertence a quem a monta.
+   */
+  useCommandPaletteShortcut(useCallback(() => setCommandsOpen(true), []))
 
   return (
     <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -72,11 +83,23 @@ export function AppShell({
             clinicName={clinicName}
             clinicSwitcher={clinicSwitcher}
             onMenuClick={() => setDrawerOpen(true)}
+            onOpenCommands={() => setCommandsOpen(true)}
           />
           <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
             {children}
           </main>
         </div>
+
+        {/*
+          A paleta recebe o mesmo `role` do menu: os dois oferecem o mesmo
+          conjunto de rotas, e divergir faria a paleta ser o atalho para
+          justamente o que o menu esconde.
+        */}
+        <CommandPalette
+          open={commandsOpen}
+          onOpenChange={setCommandsOpen}
+          role={role}
+        />
 
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#071f3b]/35 backdrop-blur-[2px] md:hidden" />

@@ -20,6 +20,8 @@ interface AppHeaderProps {
   /** Seletor de clinica (I-03), quando ha mais de um vinculo. */
   clinicSwitcher?: ReactNode
   onMenuClick: () => void
+  /** Abre a paleta de comandos — o campo de busca e o gatilho dela. */
+  onOpenCommands: () => void
 }
 
 const titles: Record<string, { title: string; description: string }> = {
@@ -44,6 +46,7 @@ export function AppHeader({
   clinicName,
   clinicSwitcher,
   onMenuClick,
+  onOpenCommands,
 }: AppHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -80,17 +83,30 @@ export function AppHeader({
           <div className="hidden min-w-0 shrink md:block">{clinicSwitcher}</div>
         ) : null}
 
-        <div className="mx-auto hidden w-full max-w-[420px] items-center gap-2 rounded-xl border border-border-card bg-background px-3 text-muted transition-colors focus-within:border-brand/45 focus-within:bg-surface focus-within:shadow-[0_0_0_3px_rgba(37,99,166,0.1)] sm:flex">
+        {/*
+          Era um `<input>` INERTE, com o texto "Buscar pacientes, agenda…".
+
+          Campo que aceita digitação e não faz nada é pior que botão
+          desabilitado: a pessoa digita, espera, e conclui que a busca não
+          encontrou o paciente. Virou um botão — que é o que ele sempre foi — e
+          abre a paleta de comandos. O texto também mudou: a paleta vai a telas
+          e ações, não procura registros, e prometer o contrário reintroduziria
+          o mesmo engano com outra roupa.
+        */}
+        <button
+          type="button"
+          onClick={onOpenCommands}
+          aria-keyshortcuts="Control+K Meta+K"
+          className="mx-auto hidden w-full max-w-[420px] items-center gap-2 rounded-xl border border-border-card bg-background px-3 text-left text-muted transition-colors hover:border-brand/45 hover:bg-surface focus-visible:border-focus focus-visible:shadow-focus focus-visible:outline-none sm:flex"
+        >
           <Search aria-hidden className="size-4 shrink-0" />
-          <input
-            aria-label="Buscar no Focuss Care"
-            placeholder="Buscar pacientes, agenda..."
-            className="h-10 min-w-0 flex-1 bg-transparent text-aux text-foreground outline-none placeholder:text-muted"
-          />
+          <span className="h-10 min-w-0 flex-1 content-center truncate text-aux">
+            Ir para uma tela ou criar…
+          </span>
           <kbd className="hidden items-center gap-1 rounded-md border border-border-card bg-surface px-1.5 py-0.5 text-[10px] text-muted lg:inline-flex">
             <Command aria-hidden className="size-3" /> K
           </kbd>
-        </div>
+        </button>
 
         <div className="ml-auto flex items-center gap-2">
           {/*
