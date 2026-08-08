@@ -1,23 +1,28 @@
+import { rolesWith } from '@/lib/auth/permissions'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 
 /**
- * Quem escreve no cadastro de pacientes: criar, editar e arquivar.
+ * Quem escreve no cadastro de pacientes.
  *
- * `finance` fica de fora — o papel existe para faturamento, e cadastro e ato de
- * recepcao. As tres actions compartilham a mesma lista de proposito: separar
- * "pode criar" de "pode editar" sem regra de negocio que justifique seria inventar
- * politica.
+ * Desde I-05 a lista é **derivada da matriz** (`lib/auth/permissions.ts`), não
+ * escrita à mão aqui. Era o que este arquivo prometia: uma segunda cópia da
+ * política, escrita em outro lugar, envelhece em silêncio — muda-se a matriz e
+ * a action continua com a lista antiga, sem nada quebrar.
  *
- * Provisorio: a matriz papel x acao centralizada e a feature I-05 do roadmap.
- * Quando ela existir, este arquivo some e as actions passam a consultar
- * `lib/auth/permissions.ts`.
+ * O resultado é o mesmo de antes de I-05 (owner, admin, receptionist,
+ * professional), então esta fatia **não muda comportamento**.
  *
- * Vive fora de `actions/` porque um modulo `'use server'` so pode exportar funcao
- * async — constante exportada de la nao compila.
+ * Vive fora de `actions/` porque um módulo `'use server'` só pode exportar
+ * função async — constante exportada de lá não compila.
+ *
+ * ## Follow-up declarado
+ *
+ * As três actions (criar, editar, arquivar) ainda compartilham esta lista. A
+ * matriz já separa `patient.write` de `patient.archive` — arquivar é decisão
+ * administrativa sobre o vínculo, não sobre o cuidado, e por isso `professional`
+ * não a tem. Aplicar a separação exige editar as três actions, que estão abertas
+ * por outro agente (F-02) neste worktree. Fica para o commit seguinte, com o
+ * comportamento de hoje preservado até lá.
  */
-export const patientWriteRoles: readonly MembershipRole[] = [
-  'owner',
-  'admin',
-  'receptionist',
-  'professional',
-]
+export const patientWriteRoles: readonly MembershipRole[] =
+  rolesWith('patient.write')
