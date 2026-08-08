@@ -4,11 +4,11 @@ import { connection } from 'next/server'
 import { addDays, startOfDay, startOfWeek } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
 import { PICKER_RESULT_LIMIT } from '@/modules/patients/schemas/patientPicker.schema'
-import { PatientPicker } from '@/modules/patients/ui/PatientPicker'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
-import { AgendaScreen } from '@/modules/scheduling/ui/AgendaScreen'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 import { getCachedDefaultDuration } from '@/modules/settings/infrastructure/settingsCache'
+
+import { AgendaWorkspace } from './AgendaWorkspace'
 
 export const metadata: Metadata = {
   title: 'Agenda',
@@ -91,12 +91,13 @@ export default async function AgendaPage({
   ])
 
   /*
-   * O seletor de paciente e montado AQUI, e nao dentro da agenda.
+   * O seletor de paciente e montado por `AgendaWorkspace`, e nao aqui.
    *
    * `PatientPicker` pertence ao modulo `patients` e a agenda nao alcanca o
-   * interior dele (regra 4 da arquitetura). A tela declara um buraco com forma
-   * conhecida — `renderPatientField` — e a rota o preenche. Mesmo padrao do
-   * seletor de clinica e do cartao de perfil.
+   * interior dele (regra 4 da arquitetura), entao a composicao fica fora dos
+   * dois modulos. O que ela NAO pode ser e uma funcao criada nesta rota: daqui
+   * so atravessa o que serializa, e funcao nao serializa. O porque completo
+   * esta no JSDoc de `AgendaWorkspace`.
    */
   const patientOptions = patientPage.items.map((patient) => ({
     id: patient.id,
@@ -104,7 +105,7 @@ export default async function AgendaPage({
   }))
 
   return (
-    <AgendaScreen
+    <AgendaWorkspace
       today={today}
       initialAppointments={appointments}
       patients={patientPage.items}
@@ -112,15 +113,8 @@ export default async function AgendaPage({
       openNewOnMount={novo === '1'}
       defaultDurationMinutes={defaultDurationMinutes}
       isLive={appointmentSource.isLive}
-      renderPatientField={(control) => (
-        <PatientPicker
-          initialOptions={patientOptions}
-          value={control.value}
-          onChange={control.onChange}
-          error={control.error}
-          isLive={patientSource.isLive}
-        />
-      )}
+      patientOptions={patientOptions}
+      patientSearchIsLive={patientSource.isLive}
     />
   )
 }

@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 569 testes em 42 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 573 testes em 43 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
