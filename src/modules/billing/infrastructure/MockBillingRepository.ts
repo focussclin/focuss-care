@@ -1,6 +1,7 @@
 import type {
   FinanceSummary,
   Invoice,
+  Payable,
   OpenCashSession,
 } from '../domain/Billing'
 import type { BillingRepository } from '../domain/BillingRepository'
@@ -19,6 +20,10 @@ import { BillingRepositoryError } from '../domain/BillingRepositoryError'
  * A tela vazia diz a verdade: sem banco, não há financeiro.
  */
 export class MockBillingRepository implements BillingRepository {
+  async listPayables(): Promise<Payable[]> {
+    return []
+  }
+
   async listInvoices(): Promise<Invoice[]> {
     return []
   }
@@ -40,6 +45,14 @@ export class MockBillingRepository implements BillingRepository {
 
   async createInvoice(): Promise<never> {
     return this.refuseWrite('createInvoice')
+  }
+
+  async createPayable(): Promise<never> {
+    return this.refuseWrite('createPayable')
+  }
+
+  async settlePayable(): Promise<never> {
+    return this.refuseWrite('settlePayable')
   }
 
   async cancelInvoice(): Promise<never> {

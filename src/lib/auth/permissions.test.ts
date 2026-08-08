@@ -142,6 +142,7 @@ const ALL_PERMISSIONS = [
   'invoice.write',
   'payment.write',
   'cash.manage',
+  'payable.write',
   'insurance.manage',
   'team.read',
   'team.manage',

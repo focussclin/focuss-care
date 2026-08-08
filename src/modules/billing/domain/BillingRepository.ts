@@ -6,6 +6,9 @@ import type {
   NewInvoiceData,
   NewPaymentData,
   OpenCashSession,
+  Payable,
+  NewPayableData,
+  SettlePayableData,
   Payment,
 } from './Billing'
 
@@ -32,11 +35,27 @@ import type {
  * `canceled_at` e o motivo; estorno é assunto de quem tiver a RPC. Registro
  * financeiro apagado é registro que não serve de prova.
  *
- * **Não há contas a pagar.** `payables` existe no schema e nenhuma tela grava
- * nela. Ler agora devolveria despesa zero para toda clínica — e "não tenho
- * custo" é uma afirmação que nenhum consultório assina.
+ * Contas a pagar usam a tabela `payables` já existente no schema. O adapter
+ * mantém a mesma regra de todas as escritas financeiras: sempre filtra a
+ * clínica e nunca aceita do navegador o valor que será baixado.
  */
 export interface BillingRepository {
+  /** Despesas com vencimento até o limite informado, incluindo atrasadas. */
+  listPayables(clinicId: string, through: Date): Promise<Payable[]>
+
+  /** Registra uma despesa ainda não paga. */
+  createPayable(
+    clinicId: string,
+    data: NewPayableData,
+    createdBy: string,
+  ): Promise<Payable>
+
+  /** Baixa a despesa pelo valor que está persistido, sem valor vindo do cliente. */
+  settlePayable(
+    clinicId: string,
+    data: SettlePayableData,
+  ): Promise<Payable>
+
   /** Cobranças do período, mais recentes primeiro. */
   listInvoices(clinicId: string, from: Date, to: Date): Promise<Invoice[]>
 

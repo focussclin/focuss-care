@@ -3,12 +3,14 @@ import type {
   FinanceSummary,
   Invoice,
   OpenCashSession,
+  Payable,
 } from '../domain/Billing'
 import type {
   CashEntryDto,
   CashSessionDto,
   FinanceSummaryDto,
   InvoiceDto,
+  PayableDto,
 } from '../schemas/billing.schema'
 
 /**
@@ -71,5 +73,22 @@ export function toFinanceSummaryDto(
     openCents: summary.openCents,
     openInvoices: summary.openInvoices,
     issuedInvoices: summary.issuedInvoices,
+  }
+}
+
+export function toPayableDto(payable: Payable): PayableDto {
+  return {
+    id: payable.id,
+    description: payable.description,
+    category: payable.category,
+    supplier: payable.supplier,
+    amountCents: payable.amountCents,
+    dueDate: payable.dueDate.toISOString().slice(0, 10),
+    paidAt: payable.paidAt?.toISOString() ?? null,
+    paidAmountCents: payable.paidAmountCents,
+    method: payable.method,
+    isRecurring: payable.isRecurring,
+    status: payable.status,
+    notes: payable.notes,
   }
 }

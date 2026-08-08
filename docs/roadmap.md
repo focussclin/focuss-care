@@ -622,7 +622,7 @@ papel — "encerrou o atendimento de Fulano" continua fora da descrição.
 | **Pagamento**, total ou parcial, em sete formas | **Entregue.** Recusa valor acima do saldo; `paid_cents` recalculado da soma |
 | **Caixa**: abrir, lançar entrada/saída, fechar com contagem | **Entregue.** Pagamento em espécie vira lançamento automático |
 | **Emissão fiscal numerada** | **Bloqueado.** Ver abaixo |
-| **Contas a pagar / despesas** (`payables`) | **Fora de escopo.** Nenhuma tela grava; despesa zero diria que a clínica não tem custo |
+| **Contas a pagar / despesas** (`payables`) | **Entregue nesta fatia.** Lista vencimentos, registra despesa e baixa usando o valor persistido |
 | **Repasse a profissional** (`professional_payouts`) | **Bloqueado.** `preview_professional_payout` tem a mesma limitação |
 
 **Três RPCs financeiras aparecem em `database.types.ts` como

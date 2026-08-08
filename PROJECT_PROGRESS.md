@@ -55,7 +55,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
-| `billing` | **EM ANDAMENTO** | Cobrança, pagamento e caixa funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
+| `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda do dia e atividade — todos contados do banco |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
@@ -82,7 +82,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
-| `/financeiro` | **EM ANDAMENTO** | Banco (billing + patients) | `invoice.read` |
+| `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance) | `insurance.manage` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
@@ -237,7 +237,7 @@ que não funciona:
 | Ausência | Onde a tela diz | Por quê |
 |---|---|---|
 | Emissão fiscal numerada | `/financeiro` | `issue_invoice` com assinatura não resolvida; numeração que pula é problema com a prefeitura |
-| Despesas e contas a pagar | `/financeiro` | `payables` existe, nenhuma tela grava; card em R$ 0,00 diria que a clínica não tem custo |
+| Repasse a profissional | `/financeiro` | `professional_payouts` existe, mas a RPC de prévia/emissão ainda não tem assinatura verificável |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |
 | Elegibilidade junto à operadora | `/convenios` | Exige integração externa; o que existe é a validade cadastrada |
 | Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |

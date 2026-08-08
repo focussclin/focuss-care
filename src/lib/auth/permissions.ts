@@ -66,6 +66,7 @@ export type Permission =
   | 'invoice.write'
   | 'payment.write'
   | 'cash.manage'
+  | 'payable.write'
   // Convênios
   | 'insurance.manage'
   // Equipe e clínica
@@ -98,6 +99,7 @@ const FINANCIAL = [
   'invoice.write',
   'payment.write',
   'cash.manage',
+  'payable.write',
   'insurance.manage',
 ] as const satisfies readonly Permission[]
 

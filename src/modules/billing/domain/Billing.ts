@@ -89,6 +89,40 @@ export interface NewPaymentData {
   notes: string | null
 }
 
+/** Despesa administrativa registrada para a clínica. */
+export type PayableStatus = 'open' | 'overdue' | 'paid'
+
+export interface Payable {
+  id: string
+  description: string
+  category: string | null
+  supplier: string | null
+  amountCents: number
+  dueDate: Date
+  paidAt: Date | null
+  paidAmountCents: number
+  method: PaymentMethod | null
+  isRecurring: boolean
+  notes: string | null
+  status: PayableStatus
+  createdAt: Date
+}
+
+export interface NewPayableData {
+  description: string
+  category: string | null
+  supplier: string | null
+  amountCents: number
+  dueDate: Date
+  isRecurring: boolean
+  notes: string | null
+}
+
+export interface SettlePayableData {
+  payableId: string
+  method: PaymentMethod
+}
+
 /**
  * O turno do caixa.
  *
@@ -134,8 +168,8 @@ export interface OpenCashSession {
  *
  * Nenhum campo é estimado. `receivedCents` sai de `payments`; `openCents` sai do
  * que falta pagar em faturas não canceladas. **Não há "despesas"** — o produto
- * ainda não registra contas a pagar (`payables` existe e nenhuma tela grava
- * nela), e um card de despesas em R$ 0,00 diria que a clínica não tem custo.
+ * registra despesas por meio de `payables`; o painel de contas a pagar mantém
+ * esse controle separado da receita recebida, sem chamar despesa de lucro.
  */
 export interface FinanceSummary {
   from: Date

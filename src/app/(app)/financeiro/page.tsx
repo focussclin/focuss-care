@@ -8,6 +8,7 @@ import {
   toCashSessionDto,
   toFinanceSummaryDto,
   toInvoiceDto,
+  toPayableDto,
 } from '@/modules/billing/application/toBillingDto'
 import { getBillingRepository } from '@/modules/billing/infrastructure/repository'
 import { FinanceiroScreen } from '@/modules/billing/ui/FinanceiroScreen'
@@ -46,10 +47,14 @@ export default async function FinanceiroPage() {
    * o interior de `patients`. O seletor de paciente da nova cobrança carrega a
    * PRIMEIRA página, não a base inteira — mesma troca honesta feita em /agenda.
    */
-  const [summary, invoices, cashSession, patientPage] = await Promise.all([
+  const [summary, invoices, cashSession, payables, patientPage] = await Promise.all([
     billingSource.repository.summary(billingSource.clinicId, from, to),
     billingSource.repository.listInvoices(billingSource.clinicId, from, to),
     billingSource.repository.currentCashSession(billingSource.clinicId),
+    billingSource.repository.listPayables(
+      billingSource.clinicId,
+      new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+    ),
     patientSource.repository.listPage(patientSource.clinicId, {
       search: null,
       status: 'active',
@@ -62,6 +67,7 @@ export default async function FinanceiroPage() {
     <FinanceiroScreen
       summary={toFinanceSummaryDto(summary)}
       invoices={invoices.map(toInvoiceDto)}
+      payables={payables.map(toPayableDto)}
       cashSession={cashSession ? toCashSessionDto(cashSession) : null}
       patients={patientPage.items.map((patient) => ({
         id: patient.id,
@@ -71,6 +77,7 @@ export default async function FinanceiroPage() {
       canWriteInvoice={can(role, 'invoice.write')}
       canRegisterPayment={can(role, 'payment.write')}
       canManageCash={can(role, 'cash.manage')}
+      canManagePayables={can(role, 'payable.write')}
       isLive={billingSource.isLive}
     />
   )

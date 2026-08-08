@@ -33,20 +33,24 @@ import {
   type CashSessionDto,
   type FinanceSummaryDto,
   type InvoiceDto,
+  type PayableDto,
 } from '../schemas/billing.schema'
 import { CashSessionCard } from './CashSessionCard'
 import { NewInvoiceModal, type InvoicePatientOption } from './NewInvoiceModal'
 import { PaymentModal } from './PaymentModal'
+import { PayablesPanel } from './PayablesPanel'
 
 export interface FinanceiroScreenProps {
   summary: FinanceSummaryDto
   invoices: readonly InvoiceDto[]
+  payables: readonly PayableDto[]
   cashSession: CashSessionDto | null
   patients: readonly InvoicePatientOption[]
   periodLabel: string
   canWriteInvoice: boolean
   canRegisterPayment: boolean
   canManageCash: boolean
+  canManagePayables: boolean
   isLive?: boolean
 }
 
@@ -68,10 +72,9 @@ const statusMeta: Record<string, { label: string; tone: StatusTone }> = {
  *
  * # O que sumiu junto com a vitrine, e não voltou
  *
- * **Despesas e saldo do período.** A vitrine tinha os dois cards. `payables`
- * existe no schema e nenhuma tela grava nela: um card de despesas em R$ 0,00
- * diria que a clínica não tem custo, e saldo calculado sobre despesa zero seria
- * o lucro mais otimista já exibido a um consultório.
+ * **Despesas e saldo do período.** As contas a pagar têm painel próprio abaixo:
+ * a tela não mistura despesa com receita recebida e não apresenta um saldo
+ * calculado com dados de despesas que não foram carregados.
  *
  * **O gráfico de fluxo.** Ele precisa de série temporal agregada, que o
  * PostgREST não faz sem view — e view exige migration (B1). Um gráfico com dois
@@ -80,12 +83,14 @@ const statusMeta: Record<string, { label: string; tone: StatusTone }> = {
 export function FinanceiroScreen({
   summary,
   invoices,
+  payables,
   cashSession,
   patients,
   periodLabel,
   canWriteInvoice,
   canRegisterPayment,
   canManageCash,
+  canManagePayables,
   isLive = false,
 }: FinanceiroScreenProps) {
   const router = useRouter()
@@ -283,10 +288,14 @@ export function FinanceiroScreen({
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-        {billingMessages.issueUnavailable} Despesas e contas a pagar também não
-        aparecem aqui: nenhuma tela do sistema as registra ainda, e mostrar
-        despesa zero diria que a clínica não tem custo.
+        {billingMessages.issueUnavailable}
       </p>
+
+      <PayablesPanel
+        payables={payables}
+        canManage={canManagePayables}
+        isLive={isLive}
+      />
 
       <NewInvoiceModal
         open={creating}
