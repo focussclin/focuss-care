@@ -39,15 +39,6 @@ export const professionals: readonly Professional[] = [
 ] as const
 
 /** Metricas do dashboard — valores exatos de DASHBOARD_DESIGN.md. */
-export const dashboardMetrics = {
-  appointmentsToday: 24,
-  waitingPatients: 3,
-  newPatients: 8,
-  attendanceRate: 92,
-  appointmentsTrend: '+12%',
-  newPatientsTrend: '+4%',
-} as const
-
 /** Resumo rapido de pacientes — valores exatos de PATIENTS_DESIGN.md. */
 export const patientMetrics = {
   total: 1284,

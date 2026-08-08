@@ -428,7 +428,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **C-01** | **Configurações da clínica** | Claude | **Review** |
 | B-01 | Financeiro — fatura, pagamento, caixa | Claude | Backlog |
 | V-01 | Convênios — operadoras, guias, glosas | Claude | Backlog |
-| T-01 | Relatórios e dashboard sem mock | Claude | Backlog |
+| **T-01** | **Relatórios e dashboard sem mock** | Claude | **Review** |
 
 ### Diferenciação
 
@@ -449,7 +449,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Prontuários | R-01 | **Removida** |
 | Financeiro | B-01 | Backlog |
 | Convênios | V-01 | Backlog |
-| Relatórios | T-01 | Backlog |
+| Relatórios | T-01 | **Removida** |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
 
 ### 13.1 Uma assinatura, uma clínica — e o que isso NÃO significa
@@ -562,6 +562,48 @@ select conname, pg_get_constraintdef(oid)
 
 Enquanto isso, a ausência não degrada nada: sem interpretação, não há regra
 imposta, que é exatamente o comportamento de hoje.
+
+### O que T-01 mede, e o que se recusa a medir
+
+O painel e os relatórios passaram a contar linhas do banco. `dashboardMetrics`
+— 24 atendimentos, 92% de comparecimento, "+12%" — saiu de
+`src/lib/mocks/clinic-data.ts`.
+
+| Indicador | Fonte | Fatia que a criou |
+|---|---|---|
+| Atendimentos hoje / no período | `appointments`, exceto cancelados | A-01 |
+| Desfechos (realizados, cancelados, faltas, por acontecer) | `appointments.status` | A-01 |
+| Pacientes aguardando | `waiting_queue` com `status = 'waiting'`, chegados hoje | E-01 |
+| Novos pacientes (mês e período) | `patients.created_at` | P-01 |
+| Base ativa | `patients.is_active` | P-01 |
+| Comparecimento | `completed` sobre `completed + no_show` | A-01 |
+| Volume por profissional | `appointments` agrupados, sem cancelados | A-01 |
+| Atividade recente | `appointments`, `patients` e `encounters` recentes | A-01, P-01, E-01 |
+
+**Faturamento, recebimentos e glosas não entram.** `invoices`, `payments` e
+`cash_entries` existem no schema, e **nenhuma tela do produto grava neles**. Ler
+agora devolveria R$ 0,00 para toda clínica: verdadeiro como consulta e falso como
+informação — "a clínica não faturou" e "o sistema ainda não registra
+faturamento" são coisas diferentes, e o painel diria a primeira. Entram com
+**B-01** e **V-01**.
+
+**A atividade recente não vem de `audit_log`.** A policy de `INSERT` daquela
+tabela recusa o membro autenticado (**P-P6**), o que a mantém vazia: um feed lido
+de lá ficaria permanentemente em branco e pareceria defeito. Vem das próprias
+operações — e **nenhuma descrição cita o paciente**, porque o painel não tem
+recorte por papel e "encerrou o atendimento de Fulano" é informação de saúde.
+
+**Três decisões sobre ausência de dado**, que valem para os relatórios que vierem:
+
+- **Comparecimento sem base é `null`, não 0%.** Zero por cento diz que ninguém
+  compareceu; numa clínica que ainda não fechou um atendimento, é acusação falsa.
+  A tela mostra "—" e explica quando o número aparece.
+- **Variação percentual só com base declarada.** O painel exibe uma única — novos
+  pacientes, mês contra mês — e a omite quando o mês anterior é zero: crescer do
+  nada não é percentual, e todo primeiro mês cairia nesse caso.
+- **Relatório truncado avisa.** A leitura tem teto de 5.000 linhas; atingi-lo
+  troca o número por uma amostra, e a tela diz isso. Truncar em silêncio é o pior
+  erro possível num painel — o número parece completo e a decisão é tomada.
 
 ---
 
