@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 833 testes em 64 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 863 testes em 66 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 23 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -59,13 +59,14 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
+| `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 
 ---
 
 ## 4. Rotas
 
-As 25 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 26 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -81,6 +82,7 @@ As 25 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
+| `/assinaturas` | **COMPLETO** | Banco (subscription) — plano, estado e cotas contadas do uso real | `clinic.settings` |
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/indicadores` | **COMPLETO** | Banco (reporting) — série de 12 meses contada por `count`, sem transferir linha | `report.read` |
