@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -39,6 +40,16 @@ const runUpdateAppointmentDefaults = createAction<
     unavailable: settingsMessages.unavailable,
     unexpected: settingsMessages.unexpected,
   },
+  /*
+   * A tag que a leitura cacheada de `/agenda` carrega (dívida D3).
+   *
+   * `updateTag`, e não `revalidateTag`: quem acabou de mudar a duração padrão
+   * precisa vê-la na próxima leitura, não a versão anterior enquanto a nova
+   * carrega. Para as OUTRAS pessoas da clínica, o cache é privado do navegador
+   * delas e expira pelo `stale` de cinco minutos — está escrito em
+   * `settingsCache.ts`.
+   */
+  cacheTags: ({ clinicId }) => [cacheTags.clinicSettings(clinicId)],
   revalidatePaths: ['/configuracoes', '/agenda'],
 
   handler: async (input, context) => {

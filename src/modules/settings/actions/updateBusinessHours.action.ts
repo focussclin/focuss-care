@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -44,6 +45,12 @@ const runUpdateBusinessHours = createAction<
     unavailable: settingsMessages.unavailable,
     unexpected: settingsMessages.unexpected,
   },
+  /*
+   * Mesma tag da duração padrão: as duas moram em `clinic_settings`, e um
+   * recorte de cache por coluna seria precisão sem ganho — configuração de
+   * clínica muda uma vez por mês.
+   */
+  cacheTags: ({ clinicId }) => [cacheTags.clinicSettings(clinicId)],
   revalidatePaths: ['/configuracoes'],
 
   handler: async (input, context) => {

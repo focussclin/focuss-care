@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 430 testes em 34 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 432 testes em 34 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -31,7 +31,7 @@
 | `createAction` — pipeline único de mutação | **COMPLETO** | `src/modules/_shared/application/createAction.ts` · usado por 20 actions |
 | `Result` / `AppError` tipado | **COMPLETO** | `src/modules/_shared/domain/Result.ts` |
 | Auditoria (`recordAuditEvent`) | **EM ANDAMENTO** | Código completo; **nenhum evento persiste** — ver P-P6 na §6 |
-| Cache tags tenant-scoped | **EM ANDAMENTO** | `src/lib/cache/tags.ts` existe e é invalidado; **nenhuma leitura usa `use cache`** ainda |
+| Cache tags tenant-scoped | **COMPLETO** | `src/lib/cache/tags.ts` + a primeira leitura cacheada, em `settings/infrastructure/settingsCache.ts` (`use cache: private`) |
 | 6 regras de arquitetura no lint | **COMPLETO** | `eslint.config.mjs` · `eslint-plugin-boundaries` |
 | Harness de teste + CI | **COMPLETO** | Vitest · `.github/workflows/` |
 | Tipos gerados do schema | **COMPLETO** | `npm run db:types` |

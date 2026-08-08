@@ -111,6 +111,28 @@ describe('isolamento entre clinicas', () => {
   it('a tag de um paciente nao colide com a da listagem', () => {
     expect(cacheTags.patient(CLINIC_A, PATIENT)).not.toBe(cacheTags.patients(CLINIC_A))
   })
+
+  it('configuracao de clinica e isolada por tenant (D3)', () => {
+    /*
+     * E o unico recorte CACHEADO do produto hoje — a leitura de
+     * `settingsCache.ts`. Se duas clinicas compartilhassem esta tag, a
+     * invalidacao de uma limparia a outra; e, pior, uma chave mal formada
+     * serviria a configuracao errada.
+     */
+    const inA = cacheTags.clinicSettings(CLINIC_A)
+    const inB = cacheTags.clinicSettings(CLINIC_B)
+
+    expect(inA).not.toBe(inB)
+    expect(inA.includes(CLINIC_A)).toBe(true)
+    expect(inA.includes(CLINIC_B)).toBe(false)
+  })
+
+  it('configuracao nao colide com agenda nem com pacientes da mesma clinica', () => {
+    const settings = cacheTags.clinicSettings(CLINIC_A)
+
+    expect(settings).not.toBe(cacheTags.patients(CLINIC_A))
+    expect(settings).not.toBe(cacheTags.agenda(CLINIC_A, '2026-08-07'))
+  })
 })
 
 describe('clinicId obrigatorio', () => {
@@ -122,6 +144,8 @@ describe('clinicId obrigatorio', () => {
     expect(() => cacheTags.patients(value)).toThrow(InvalidCacheTagError)
     expect(() => cacheTags.patient(value, PATIENT)).toThrow(InvalidCacheTagError)
     expect(() => cacheTags.agenda(value, '2026-08-07')).toThrow(InvalidCacheTagError)
+    // Vale tambem para o unico recorte que hoje e de fato cacheado.
+    expect(() => cacheTags.clinicSettings(value)).toThrow(InvalidCacheTagError)
   })
 
   it('recusa o que nao e string', () => {

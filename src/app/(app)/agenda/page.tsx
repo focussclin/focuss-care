@@ -7,6 +7,7 @@ import { PATIENT_PAGE_MAX_SIZE } from '@/modules/patients/schemas/patientQuery.s
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { AgendaScreen } from '@/modules/scheduling/ui/AgendaScreen'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
+import { getCachedDefaultDuration } from '@/modules/settings/infrastructure/settingsCache'
 
 export const metadata: Metadata = {
   title: 'Agenda',
@@ -42,20 +43,23 @@ export default async function AgendaPage({
    * Composicao entre modulos acontece na ROTA (regra 4 da arquitetura): a agenda
    * nao alcanca o interior de `settings`, e vice-versa.
    *
-   * A leitura e defensiva de proposito. Duracao padrao e conveniencia; a agenda
-   * e o trabalho. Derrubar a tela inteira porque a preferencia nao carregou
-   * trocaria um problema pequeno por um grande — o fallback de 30 minutos e o
-   * mesmo valor que o formulario assumia antes de C-01 existir.
+   * Esta e a UNICA leitura cacheada do produto (divida D3), e usa
+   * `use cache: private` — que nunca guarda no servidor. O porque de nenhuma
+   * outra leitura poder entrar esta em `settingsCache.ts`.
+   *
+   * A leitura continua defensiva: duracao padrao e conveniencia, a agenda e o
+   * trabalho. Derrubar a tela porque a preferencia nao carregou trocaria um
+   * problema pequeno por um grande — o fallback de 30 minutos e o mesmo valor
+   * que o formulario assumia antes de C-01 existir.
    */
-  const defaultDurationMinutes = await settingsSource.repository
-    .load(settingsSource.clinicId)
-    .then((settings) => settings.appointmentDefaults.durationMinutes)
-    .catch((cause) => {
-      console.error('[agenda] preferencia de duracao indisponivel', {
-        kind: cause instanceof Error ? cause.name : typeof cause,
-      })
-      return 30
+  const defaultDurationMinutes = await getCachedDefaultDuration(
+    settingsSource.clinicId,
+  ).catch((cause) => {
+    console.error('[agenda] preferencia de duracao indisponivel', {
+      kind: cause instanceof Error ? cause.name : typeof cause,
     })
+    return 30
+  })
 
   const [appointments, professionals, patientPage] = await Promise.all([
     appointmentSource.repository.listByRange(

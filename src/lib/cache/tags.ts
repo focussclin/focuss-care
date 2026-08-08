@@ -158,4 +158,16 @@ export const cacheTags = {
   /** A agenda de um dia do calendario da clinica (`YYYY-MM-DD`). */
   agenda: (clinicId: string, date: string): CacheTag =>
     clinicScoped(identifier('clinicId', clinicId), 'agenda', civilDate('date', date)),
+
+  /**
+   * Configuracao operacional da clinica: horario de funcionamento e padroes da
+   * agenda (C-01).
+   *
+   * **E o unico recorte cacheado do produto hoje**, e a escolha foi por
+   * eliminacao: nao e dado pessoal, nao e dado clinico, muda raramente, e e
+   * lido em toda renderizacao de `/agenda`. Ver `settingsCache.ts` para o porque
+   * de nenhuma leitura de paciente, prontuario ou financeiro poder entrar aqui.
+   */
+  clinicSettings: (clinicId: string): CacheTag =>
+    clinicScoped(identifier('clinicId', clinicId), 'settings'),
 } as const
