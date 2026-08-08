@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { safeNextPath } from '@/lib/routes/safeNextPath'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 /**
@@ -16,16 +17,21 @@ const RESET_PATH = '/redefinir-senha'
 const RECOVERY_REQUEST_PATH = '/recuperar-senha'
 
 /**
- * Allowlist de destino — a defesa contra redirecionamento aberto.
+ * O destino é validado, não conferido contra uma lista de dois itens.
  *
- * `next` vem da URL, e URL é entrada de quem clicou no link. Sem esta lista,
+ * `next` vem da URL, e URL é entrada de quem clicou no link: sem validação,
  * `/auth/callback?next=https://exemplo.net` mandaria uma sessão recém-aberta
  * para fora do domínio.
+ *
+ * Até aqui a defesa era um `Set` com `/dashboard` e `/redefinir-senha`, o que
+ * era seguro e custava o resto: quem foi convidado, desviado ao login e entrou
+ * com o Google perdia o convite no caminho, porque `/convite/<token>` não estava
+ * — nem poderia estar — numa lista fixa. `safeNextPath` aceita qualquer caminho
+ * INTERNO e recusa o que troca de origem; é o mesmo validador que a entrada por
+ * senha usa, então os dois caminhos de login não podem divergir.
  */
-const allowedNextPaths = new Set([RESET_PATH, '/dashboard'])
-
 function getSafeNextPath(value: string | null) {
-  return value && allowedNextPaths.has(value) ? value : '/dashboard'
+  return safeNextPath(value)
 }
 
 function redirectToLogin(request: NextRequest, code: string) {

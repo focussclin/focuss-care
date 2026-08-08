@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 681 testes em 50 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 744 testes em 53 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 ---
@@ -64,7 +64,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
 | `/` | **COMPLETO** | Estático | Pública |
-| `/login`, `/cadastro` | **COMPLETO** | Supabase Auth · `/login` prerenderiza; só o aviso de retorno do OAuth é dinâmico | Pública |
+| `/login`, `/cadastro` | **COMPLETO** | Supabase Auth · `/login` prerenderiza; só o aviso de retorno do OAuth é dinâmico. O `?next=` leva de volta ao destino, validado por `safeNextPath` | Pública |
 | `/recuperar-senha` | **COMPLETO** | Supabase Auth (`resetPasswordForEmail`) · responde a mesma frase para conta existente e inexistente | Pública |
 | `/redefinir-senha` | **COMPLETO** | Supabase Auth (`updateUser`) · sessão vinda do link, validada no servidor; `noindex` | Pública no proxy, e o conteúdo depende da sessão do link |
 | `/onboarding` | **COMPLETO** | `create_clinic()` | Sessão sem clínica |
@@ -82,6 +82,38 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
+
+---
+
+## 4.1 Auditoria incremental de 08/08/2026
+
+Varredura de rotas, ações e componentes atrás de fluxo inerte, mock fora do
+fallback, segredo exposto e furo de tenant. **O que foi conferido, e o que se
+achou:**
+
+| Frente | Resultado |
+|---|---|
+| Botão/formulário inerte | Nenhum. Os cinco controles desabilitados que restam (sino de notificações, filtro de última visita, paginação no fim da lista) dizem na própria tela por que estão assim |
+| `TODO`/`FIXME` no código | Nenhum |
+| `href="#"`, `onClick` vazio, `<form>` sem envio | Nenhum |
+| `clinic_id` nos repositórios | Todos os `.from()` filtram por clínica, exceto `profiles` (chaveada por usuário) e `clinics` (chaveada pelo próprio id) — corretos |
+| `clinicId` em schema de entrada | Nenhum. Continua vindo só de `current_clinic_id()` (P3) |
+| Cliente `service_role` | `src/lib/supabase/admin.ts` **não é importado por ninguém**; a regra 5 do lint impede que passe a ser |
+| Segredos e `process.env` | Só em `config.ts` e `admin.ts`. Nenhum valor no repositório |
+| `dangerouslySetInnerHTML`, `target="_blank"` | Nenhuma ocorrência |
+| **`?next=` escrito e ignorado** | **Defeito real, corrigido nesta etapa** — ver abaixo |
+
+**O defeito:** cinco lugares escreviam `?next=` ao mandar alguém para o login (o
+proxy, a tela de convite, a agenda e a lista de pacientes ao perder a sessão), e
+**nenhum código lia**. Todo login terminava em `/dashboard`. O caso caro era o
+convite: `/convite/[token]` desviava para `/login?next=/convite/<token>` com um
+comentário afirmando que "assim o token sobrevive ao desvio" — não sobrevivia, e
+o link de convite costuma valer uma vez.
+
+Corrigido com `src/lib/routes/safeNextPath.ts`, usado pela entrada por senha e
+pelo retorno do Google. A validação compara a **origem** depois de resolver a
+entrada, e não uma lista de caracteres proibidos: `//evil.net` e `/\evil.net`
+trocam de origem sem conter "http" nem dois pontos.
 
 ---
 

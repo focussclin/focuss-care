@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 
+import { safeNextPath } from '@/lib/routes/safeNextPath'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 import {
@@ -16,7 +17,19 @@ export interface SignInResult {
   error?: string
 }
 
-export async function signInAction(input: LoginInput): Promise<SignInResult> {
+/**
+ * Entra com e-mail e senha e leva a pessoa **para onde ela ia**.
+ *
+ * `requestedNext` chega do navegador, e é por isso que ele não é usado como
+ * veio: quem escreve a URL escreveria o destino, e mandar alguém recém-logado
+ * para fora do domínio é redirecionamento aberto. `safeNextPath` decide, no
+ * servidor, e o pior caso dela é `/dashboard` — que era o único destino possível
+ * antes desta correção.
+ */
+export async function signInAction(
+  input: LoginInput,
+  requestedNext?: string,
+): Promise<SignInResult> {
   const parsed = loginSchema.safeParse(input)
 
   if (!parsed.success) {
@@ -35,5 +48,5 @@ export async function signInAction(input: LoginInput): Promise<SignInResult> {
 
   if (error) return { ok: false, error: loginMessages.invalidCredentials }
 
-  redirect('/dashboard')
+  redirect(safeNextPath(requestedNext))
 }

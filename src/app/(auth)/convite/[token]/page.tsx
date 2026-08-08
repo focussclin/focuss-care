@@ -21,6 +21,12 @@ export const metadata: Metadata = {
  * assim o token sobrevive ao desvio e a pessoa cai direto no aceite depois de
  * entrar. É o mesmo motivo pelo qual o convite não é aceito automaticamente:
  * quem decide é a pessoa, não a navegação.
+ *
+ * Esta frase foi **falsa até 08/08/2026**: o `next` era escrito aqui e ignorado
+ * pelo login, que sempre terminava em `/dashboard`. Quem era convidado entrava,
+ * caía no painel e precisava achar o e-mail de novo — e o link de convite vale
+ * uma vez. Quem faz valer agora é `src/lib/routes/safeNextPath.ts`, que valida o
+ * destino no servidor, tanto na entrada por senha quanto no retorno do Google.
  */
 /**
  * P-C2 — este segmento **permanece** com `instant = false`, pelo mesmo motivo

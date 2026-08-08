@@ -150,9 +150,9 @@ describe('link de recuperação de senha', () => {
 describe('destino do redirecionamento', () => {
   it.each([
     ['host externo', 'https://evil.net'],
-    ['protocolo', '//evil.net'],
-    ['rota interna fora da lista', '/configuracoes'],
-    ['caminho relativo', '../../etc'],
+    ['sem esquema', '//evil.net'],
+    ['barra invertida', '/\\evil.net'],
+    ['laço de volta ao login', '/login'],
   ])('ignora next %s e cai no dashboard', async (_label, next) => {
     const destination = await destinationOf(
       `?code=abc123&next=${encodeURIComponent(next)}`,
@@ -162,12 +162,28 @@ describe('destino do redirecionamento', () => {
     expect(destination).not.toContain('evil.net')
   })
 
-  it.each([['/dashboard'], ['/redefinir-senha']])(
-    'aceita %s, que está na allowlist',
-    async (next) => {
-      expect(
-        await destinationOf(`?code=abc123&next=${encodeURIComponent(next)}`),
-      ).toBe(next)
-    },
-  )
+  it.each([
+    ['/dashboard'],
+    ['/redefinir-senha'],
+    ['/configuracoes'],
+    ['/pacientes?q=maria'],
+  ])('aceita o caminho interno %s', async (next) => {
+    expect(
+      await destinationOf(`?code=abc123&next=${encodeURIComponent(next)}`),
+    ).toBe(next)
+  })
+
+  it('leva de volta ao convite — o caso que a allowlist fixa não cobria', async () => {
+    /*
+     * `/convite/<token>` não cabe numa lista fixa: o token muda a cada convite.
+     * Enquanto o destino era conferido contra dois caminhos literais, quem era
+     * convidado, caía no login e entrava com o Google perdia o convite — e o
+     * link costuma valer uma vez.
+     */
+    expect(
+      await destinationOf(
+        '?code=abc123&next=%2Fconvite%2Ftok_9019956fbdd84d61',
+      ),
+    ).toBe('/convite/tok_9019956fbdd84d61')
+  })
 })

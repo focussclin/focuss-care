@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react'
 
+import { safeNextPath } from '@/lib/routes/safeNextPath'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 import { signInAction } from '../actions/signIn.action'
@@ -28,12 +29,29 @@ export function LoginFormContainer({ notice }: LoginFormContainerProps) {
   const [isPending, startTransition] = useTransition()
   const [isGooglePending, setIsGooglePending] = useState(false)
 
+  /**
+   * Para onde a pessoa ia antes de ser mandada para cá.
+   *
+   * Lido de `window.location` no momento do envio, e não de `searchParams` na
+   * rota, por causa do shell estático (P-C2): ler a URL no servidor tiraria o
+   * formulário do prerender, que foi o trabalho da fatia anterior. No envio já
+   * estamos no navegador, e ler a barra de endereços ali não custa nada.
+   *
+   * O valor **não é confiável** — é URL. Quem decide é `safeNextPath`, dentro da
+   * Server Action.
+   */
+  function requestedNext(): string | undefined {
+    return (
+      new URLSearchParams(window.location.search).get('next') ?? undefined
+    )
+  }
+
   async function handleSubmit(values: LoginInput) {
     setFormError(null)
 
     startTransition(async () => {
       try {
-        const result = await signInAction(values)
+        const result = await signInAction(values, requestedNext())
 
         if (!result.ok) {
           setFormError(result.error ?? loginMessages.invalidCredentials)
@@ -58,18 +76,13 @@ export function LoginFormContainer({ notice }: LoginFormContainerProps) {
     }
 
     /*
-     * O retorno do OAuth vai SEMPRE para `/dashboard`.
-     *
-     * Antes existia um prop `nextPath`, vindo de `?next=` da URL, e ele era
-     * fixado em `/dashboard` na linha seguinte — ou seja, nao tinha efeito
-     * nenhum. O prop saiu; a decisao continua, agora dita em voz alta: destino
-     * escolhido pela URL num retorno de autenticacao e redirecionamento aberto,
-     * e o convite (`/login?next=/convite/<token>`) e o unico caso que perde
-     * algo com isso. Preserva-lo exige uma lista de destinos permitidos, que e
-     * trabalho proprio — nao um `set()` que aceita o que vier.
+     * O destino atravessa o Google e volta pelo callback, que o valida com o
+     * MESMO `safeNextPath` da action de senha. Mandar daqui sem validar seria
+     * inofensivo (o callback recusaria), mas mandar o que veio da URL sem dizer
+     * isso convida a alguém confiar no valor mais adiante.
      */
     const callbackUrl = new URL('/auth/callback', window.location.origin)
-    callbackUrl.searchParams.set('next', '/dashboard')
+    callbackUrl.searchParams.set('next', safeNextPath(requestedNext()))
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
