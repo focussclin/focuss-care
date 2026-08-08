@@ -8,6 +8,8 @@ import type {
   NewPlanData,
   NewProviderData,
   PatientInsuranceOption,
+  PatientInsurance,
+  NewPatientInsuranceData,
   ClaimDenial,
   ClaimDenialUpdate,
   ClaimInvoiceOption,
@@ -39,6 +41,19 @@ export interface InsuranceRepository {
 
   /** Carteirinhas ativas, para abrir uma guia. */
   listPatientInsurances(clinicId: string): Promise<PatientInsuranceOption[]>
+
+  listPatientInsuranceRecords(clinicId: string): Promise<PatientInsurance[]>
+
+  createPatientInsurance(
+    clinicId: string,
+    data: NewPatientInsuranceData,
+  ): Promise<PatientInsurance>
+
+  setPatientInsuranceActive(
+    clinicId: string,
+    insuranceId: string,
+    isActive: boolean,
+  ): Promise<PatientInsurance>
 
   summary(clinicId: string): Promise<InsuranceSummary>
 

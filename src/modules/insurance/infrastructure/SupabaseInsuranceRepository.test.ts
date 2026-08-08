@@ -18,6 +18,7 @@ const USER = 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f'
 const AUTHORIZATION = '9019956f-bdd8-4d61-868d-09b02332dad0'
 const CARD = '5f2b1a3c-4d5e-4f60-8a71-9b2c3d4e5f60'
 const PATIENT = '11111111-1111-4111-8111-111111111111'
+const PLAN = '44444444-4444-4444-8444-444444444444'
 const INVOICE = '22222222-2222-4222-8222-222222222222'
 const DENIAL = '33333333-3333-4333-8333-333333333333'
 
@@ -55,6 +56,9 @@ function createFakeClient(results: {
   authorization?: unknown
   /** Linha devolvida ao buscar a carteirinha. */
   card?: unknown
+  patient?: unknown
+  plan?: unknown
+  record?: unknown
   /** O UPDATE da guia encontrou linha pendente? */
   answered?: unknown
   rows?: (table: string) => unknown[]
@@ -94,8 +98,20 @@ function createFakeClient(results: {
     }
 
     const resolve = () => {
+      if (table === 'patients') {
+        return 'patient' in results ? results.patient : { id: PATIENT }
+      }
+
+      if (table === 'insurance_plans') {
+        return 'plan' in results ? results.plan : { id: PLAN }
+      }
+
       if (table === 'patient_insurances' && selectArg() === 'patient_id') {
         return 'card' in results ? results.card : { patient_id: PATIENT }
+      }
+
+      if (table === 'patient_insurances') {
+        return 'record' in results ? results.record : patientInsuranceRow()
       }
 
       if (table === 'insurance_authorizations') {
@@ -149,6 +165,25 @@ function createFakeClient(results: {
     calls,
     client: { from } as never,
     ofTable: (table: string) => calls.filter((call) => call.table === table),
+  }
+}
+
+function patientInsuranceRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: CARD,
+    patient_id: PATIENT,
+    insurance_plan_id: PLAN,
+    card_number: '0001-ABC',
+    holder_name: 'Marina Costa',
+    valid_until: '2027-08-31',
+    is_primary: true,
+    is_active: true,
+    patients: { full_name: 'Marina Costa' },
+    insurance_plans: {
+      name: 'Enfermaria',
+      insurance_providers: { name: 'Unimed' },
+    },
+    ...overrides,
   }
 }
 
@@ -465,6 +500,101 @@ describe('leitura', () => {
 
     expect(fake.ofTable('patient_insurances')).toContainEqual(
       expect.objectContaining({ method: 'eq', args: ['is_active', true] }),
+    )
+  })
+})
+
+describe('carteirinhas', () => {
+  it('lista carteirinhas completas sem perder o vinculo de paciente e plano', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'patient_insurances' ? [patientInsuranceRow()] : [],
+    })
+
+    const records = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).listPatientInsuranceRecords(CLINIC)
+
+    expect(records).toEqual([
+      expect.objectContaining({
+        patientId: PATIENT,
+        patientName: 'Marina Costa',
+        planId: PLAN,
+        planName: 'Enfermaria',
+        providerName: 'Unimed',
+        cardNumber: '0001-ABC',
+        isPrimary: true,
+        isActive: true,
+      }),
+    ])
+    expect(records[0]?.validUntil?.toISOString()).toContain('2027-08-31')
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+  })
+
+  it('confere paciente e plano na clinica antes de inserir e troca a principal anterior', async () => {
+    const fake = createFakeClient({})
+
+    await new SupabaseInsuranceRepository(fake.client).createPatientInsurance(
+      CLINIC,
+      {
+        patientId: PATIENT,
+        planId: PLAN,
+        cardNumber: '0001-ABC',
+        holderName: 'Marina Costa',
+        validUntil: new Date(2027, 7, 31),
+        isPrimary: true,
+      },
+    )
+
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('insurance_plans')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+
+    const demote = fake
+      .ofTable('patient_insurances')
+      .find(
+        (call) =>
+          call.method === 'update' &&
+          (call.args[0] as Record<string, unknown>).is_primary === false,
+      )
+    expect(demote).toBeDefined()
+
+    const insert = fake
+      .ofTable('patient_insurances')
+      .find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+    expect(insert).toEqual(
+      expect.objectContaining({
+        clinic_id: CLINIC,
+        patient_id: PATIENT,
+        insurance_plan_id: PLAN,
+        card_number: '0001-ABC',
+        is_primary: true,
+        is_active: true,
+      }),
+    )
+  })
+
+  it('ativa ou desativa apenas a carteirinha da clinica ativa', async () => {
+    const fake = createFakeClient({})
+
+    const record = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).setPatientInsuranceActive(CLINIC, CARD, false)
+
+    expect(record.isActive).toBe(true)
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['id', CARD] }),
     )
   })
 })

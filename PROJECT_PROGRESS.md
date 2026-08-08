@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 782 testes em 61 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 788 testes em 61 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 23 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -56,7 +56,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
-| `insurance` | **EM ANDAMENTO** | Operadoras, planos, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
+| `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
@@ -85,7 +85,7 @@ As 23 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/auditoria` | **COMPLETO** | Banco (`audit_log`) — sem IP, user-agent ou metadados brutos | `audit.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
-| `/convenios` | **EM ANDAMENTO** | Banco (insurance) | `insurance.manage` |
+| `/convenios` | **EM ANDAMENTO** | Banco (insurance): operadoras, planos, carteirinhas, guias e glosas | `insurance.manage` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -95,7 +95,7 @@ As 23 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 ## 4.0 Auditoria final local — 08/08/2026
 
 Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
-**782 testes em 61 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
+**788 testes em 61 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
 das 23 rotas com o servidor de desenvolvimento ativo.
 
 | Verificação | Resultado |

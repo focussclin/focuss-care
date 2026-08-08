@@ -664,15 +664,16 @@ select distinct kind from public.document_sequences;
   duplicado; recalcular faz a repetição ser inócua e conserta divergência
   deixada por falha anterior.
 
-### O que V-01 entregou, e as duas ausências que a tela declara
+### O que V-01 entregou, e a ausência que a tela declara
 
 | Operação | Estado |
 |---|---|
+| **Carteirinhas de pacientes**: vincular paciente a plano, validade, titular, principal e ativa/inativa | **Entregue.** Paciente e plano são conferidos na clínica; a busca do paciente é server-side |
 | **Operadoras**: cadastrar, ativar, desativar | **Entregue.** Desativar não mexe nos planos |
 | **Planos** com coparticipação e prazo de pagamento | **Entregue.** Exige operadora antes — a dependência aparece na interface |
 | **Guias**: abrir solicitação com procedimentos | **Entregue.** Nasce em `requested`, sem número |
 | **Resposta da operadora**: autorizada com número, ou negada com motivo | **Entregue.** Só guia pendente aceita resposta |
-| **Glosas** | **Infraestrutura entregue.** Tabela aplicada; tela e fluxo financeiro seguem em evolução |
+| **Glosas** | **Entregue.** Registro, recurso, recuperação e aceite persistem com transições controladas |
 | **Elegibilidade junto à operadora** | **Ausente.** Exige integração externa (TISS/portal) |
 
 **Glosa não tem tabela, e não é a mesma coisa que guia negada.**
@@ -683,7 +684,9 @@ prestado, a fatura foi enviada — e o dinheiro não vem. Modelar a segunda em c
 da primeira somaria dois fatos com efeitos financeiros opostos e esconderia
 justamente o número que a clínica precisa acompanhar. A migration está em
 `supabase/migrations/20260808_insurance_claim_denials.sql`, aplicada no banco em
-08/08/2026. A tela completa de glosas continua sendo uma próxima fatia.
+08/08/2026. A tela de glosas já oferece o ciclo controlado de registro, recurso,
+recuperação e aceite; integrações externas de faturamento continuam fora do
+escopo local.
 
 **Elegibilidade não é a validade cadastrada.** `patient_insurances.valid_until` é
 uma data que a clínica digitou. Consultar a operadora exige integração externa

@@ -21,8 +21,10 @@ import type {
   InsuranceSummary,
   NewAuthorizationData,
   NewClaimDenialData,
+  NewPatientInsuranceData,
   NewPlanData,
   NewProviderData,
+  PatientInsurance,
   PatientInsuranceOption,
 } from '../domain/Insurance'
 import type { InsuranceRepository } from '../domain/InsuranceRepository'
@@ -74,6 +76,22 @@ const CLAIM_DENIAL_SELECT = `
   invoice_items ( description )
 `
 
+const PATIENT_INSURANCE_SELECT = `
+  id,
+  patient_id,
+  insurance_plan_id,
+  card_number,
+  holder_name,
+  valid_until,
+  is_primary,
+  is_active,
+  patients ( full_name ),
+  insurance_plans (
+    name,
+    insurance_providers ( name )
+  )
+`
+
 interface AuthorizationRow {
   id: string
   patient_id: string
@@ -113,6 +131,22 @@ interface ClaimDenialRow {
     insurance_plans: { name: string } | null
   } | null
   invoice_items: { description: string } | null
+}
+
+interface PatientInsuranceRow {
+  id: string
+  patient_id: string
+  insurance_plan_id: string
+  card_number: string
+  holder_name: string | null
+  valid_until: string | null
+  is_primary: boolean
+  is_active: boolean
+  patients: { full_name: string } | null
+  insurance_plans: {
+    name: string
+    insurance_providers: { name: string } | null
+  } | null
 }
 
 /**
@@ -398,6 +432,106 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
       cardNumber: row.card_number,
       validUntil: row.valid_until ? new Date(`${row.valid_until}T00:00:00`) : null,
     }))
+  }
+
+  async listPatientInsuranceRecords(
+    clinicId: string,
+  ): Promise<PatientInsurance[]> {
+    const { data, error } = await this.client
+      .from('patient_insurances')
+      .select(PATIENT_INSURANCE_SELECT)
+      .eq('clinic_id', clinicId)
+      .order('is_active', { ascending: false })
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(ROW_CAP)
+
+    if (error) throw readFailure('listPatientInsuranceRecords', error)
+
+    return ((data ?? []) as unknown as PatientInsuranceRow[]).map(
+      toPatientInsurance,
+    )
+  }
+
+  async createPatientInsurance(
+    clinicId: string,
+    data: NewPatientInsuranceData,
+  ): Promise<PatientInsurance> {
+    const [patientResult, planResult] = await Promise.all([
+      this.client
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('id', data.patientId)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      this.client
+        .from('insurance_plans')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('id', data.planId)
+        .eq('is_active', true)
+        .maybeSingle(),
+    ])
+
+    if (patientResult.error) throw toWriteError(patientResult.error)
+    if (planResult.error) throw toWriteError(planResult.error)
+    if (!patientResult.data || !planResult.data) {
+      throw new InsuranceRepositoryError('not-found', 'paciente ou plano indisponivel')
+    }
+
+    // Sem uma constraint parcial verificada no schema, manter uma única primária
+    // é uma regra explícita da aplicação. A linha nova só entra depois disso.
+    if (data.isPrimary) {
+      const { error } = await this.client
+        .from('patient_insurances')
+        .update({ is_primary: false, updated_at: new Date().toISOString() })
+        .eq('clinic_id', clinicId)
+        .eq('patient_id', data.patientId)
+        .eq('is_primary', true)
+        .eq('is_active', true)
+
+      if (error) throw toWriteError(error)
+    }
+
+    const { data: row, error } = await this.client
+      .from('patient_insurances')
+      .insert({
+        clinic_id: clinicId,
+        patient_id: data.patientId,
+        insurance_plan_id: data.planId,
+        card_number: data.cardNumber,
+        holder_name: data.holderName,
+        valid_until: data.validUntil ? toDateOnly(data.validUntil) : null,
+        is_primary: data.isPrimary,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select(PATIENT_INSURANCE_SELECT)
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return toPatientInsurance(row as unknown as PatientInsuranceRow)
+  }
+
+  async setPatientInsuranceActive(
+    clinicId: string,
+    insuranceId: string,
+    isActive: boolean,
+  ): Promise<PatientInsurance> {
+    const { data: row, error } = await this.client
+      .from('patient_insurances')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('id', insuranceId)
+      .select(PATIENT_INSURANCE_SELECT)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw notFound(insuranceId)
+
+    return toPatientInsurance(row as unknown as PatientInsuranceRow)
   }
 
   async summary(clinicId: string): Promise<InsuranceSummary> {
@@ -689,6 +823,24 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     if (!data) throw notFound(denialId)
 
     return toClaimDenial(data as unknown as ClaimDenialRow)
+  }
+}
+
+function toPatientInsurance(row: PatientInsuranceRow): PatientInsurance {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: row.patients?.full_name ?? 'Paciente',
+    planId: row.insurance_plan_id,
+    planName: row.insurance_plans?.name ?? 'Plano',
+    providerName: row.insurance_plans?.insurance_providers?.name ?? 'Operadora',
+    cardNumber: row.card_number,
+    holderName: row.holder_name,
+    validUntil: row.valid_until
+      ? new Date(`${row.valid_until}T00:00:00`)
+      : null,
+    isPrimary: row.is_primary,
+    isActive: row.is_active,
   }
 }
 

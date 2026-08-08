@@ -8,6 +8,12 @@ export const insuranceMessages = {
   planNameRequired: 'Informe o nome do plano.',
   providerRequired: 'Selecione a operadora deste plano.',
   cardRequired: 'Selecione a carteirinha do paciente.',
+  patientRequired: 'Selecione o paciente da carteirinha.',
+  planRequired: 'Selecione um plano ativo.',
+  cardNumberRequired: 'Informe o número da carteirinha.',
+  cardNumberTooLong: 'O número da carteirinha pode ter no máximo 80 caracteres.',
+  holderNameTooLong: 'O nome do titular pode ter no máximo 160 caracteres.',
+  dateInvalid: 'Informe uma data de validade válida.',
   procedureRequired: 'Inclua pelo menos um procedimento na guia.',
   procedureDescription: 'Descreva o procedimento solicitado.',
   quantityInvalid: 'A quantidade precisa ser um número inteiro de 1 a 99.',
@@ -144,6 +150,46 @@ export const createAuthorizationSchema = z.object({
 
 export type CreateAuthorizationInput = z.infer<
   typeof createAuthorizationSchema
+>
+
+function validDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.toISOString().slice(0, 10) === value
+}
+
+export const createPatientInsuranceSchema = z.object({
+  patientId: z.uuid(insuranceMessages.patientRequired),
+  planId: z.uuid(insuranceMessages.planRequired),
+  cardNumber: z
+    .string()
+    .trim()
+    .min(1, insuranceMessages.cardNumberRequired)
+    .max(80, insuranceMessages.cardNumberTooLong),
+  holderName: optionalText(160),
+  validUntil: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || validDateOnly(value),
+      insuranceMessages.dateInvalid,
+    )
+    .transform((value) => (value === '' ? null : value)),
+  isPrimary: z.boolean(),
+})
+
+export type CreatePatientInsuranceInput = z.infer<
+  typeof createPatientInsuranceSchema
+>
+
+export const setPatientInsuranceActiveSchema = z.object({
+  insuranceId: z.uuid(insuranceMessages.unexpected),
+  isActive: z.boolean(),
+})
+
+export type SetPatientInsuranceActiveInput = z.infer<
+  typeof setPatientInsuranceActiveSchema
 >
 
 /**
@@ -283,6 +329,20 @@ export interface PatientInsuranceDto {
   label: string
   /** ISO, ou null. A tela avisa quando está vencida. */
   validUntil: string | null
+}
+
+export interface PatientInsuranceRecordDto {
+  id: string
+  patientId: string
+  patientName: string
+  planId: string
+  planName: string
+  providerName: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: string | null
+  isPrimary: boolean
+  isActive: boolean
 }
 
 export interface InsuranceSummaryDto {

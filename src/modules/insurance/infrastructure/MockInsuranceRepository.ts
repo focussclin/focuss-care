@@ -34,6 +34,10 @@ export class MockInsuranceRepository implements InsuranceRepository {
     return []
   }
 
+  async listPatientInsuranceRecords(): Promise<never[]> {
+    return []
+  }
+
   async summary(): Promise<InsuranceSummary> {
     return {
       activeProviders: 0,
@@ -53,6 +57,14 @@ export class MockInsuranceRepository implements InsuranceRepository {
 
   async createPlan(): Promise<never> {
     return this.refuseWrite('createPlan')
+  }
+
+  async createPatientInsurance(): Promise<never> {
+    return this.refuseWrite('createPatientInsurance')
+  }
+
+  async setPatientInsuranceActive(): Promise<never> {
+    return this.refuseWrite('setPatientInsuranceActive')
   }
 
   async createAuthorization(): Promise<never> {

@@ -118,6 +118,29 @@ export interface PatientInsuranceOption {
   validUntil: Date | null
 }
 
+export interface PatientInsurance {
+  id: string
+  patientId: string
+  patientName: string
+  planId: string
+  planName: string
+  providerName: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: Date | null
+  isPrimary: boolean
+  isActive: boolean
+}
+
+export interface NewPatientInsuranceData {
+  patientId: string
+  planId: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: Date | null
+  isPrimary: boolean
+}
+
 export interface InsuranceSummary {
   activeProviders: number
   activePlans: number

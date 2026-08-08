@@ -6,6 +6,7 @@ import type {
   InsuranceProvider,
   InsuranceSummary,
   PatientInsuranceOption,
+  PatientInsurance,
 } from '../domain/Insurance'
 import type {
   AuthorizationDto,
@@ -13,6 +14,7 @@ import type {
   ClaimInvoiceOptionDto,
   InsuranceSummaryDto,
   PatientInsuranceDto,
+  PatientInsuranceRecordDto,
   PlanDto,
   ProviderDto,
 } from '../schemas/insurance.schema'
@@ -75,6 +77,24 @@ export function toPatientInsuranceDto(
     id: option.id,
     label: `${option.patientName} · ${option.planName} · ${option.cardNumber}`,
     validUntil: option.validUntil?.toISOString() ?? null,
+  }
+}
+
+export function toPatientInsuranceRecordDto(
+  insurance: PatientInsurance,
+): PatientInsuranceRecordDto {
+  return {
+    id: insurance.id,
+    patientId: insurance.patientId,
+    patientName: insurance.patientName,
+    planId: insurance.planId,
+    planName: insurance.planName,
+    providerName: insurance.providerName,
+    cardNumber: insurance.cardNumber,
+    holderName: insurance.holderName,
+    validUntil: insurance.validUntil?.toISOString().slice(0, 10) ?? null,
+    isPrimary: insurance.isPrimary,
+    isActive: insurance.isActive,
   }
 }
 
