@@ -25,6 +25,28 @@ export async function getActiveClinicId(): Promise<string | null> {
   return data
 }
 
+/**
+ * `professionals.id` do usuario na clinica ativa, ou null.
+ *
+ * E OUTRA coisa que o id de usuario: `professionals` e o cadastro de quem
+ * atende, com conselho, registro e especialidade. Recepcao e financeiro tem
+ * usuario e nao tem linha ali — e por isso nao assinam prontuario.
+ *
+ * Sai da RPC do proprio banco, e nao de uma consulta montada aqui, pela mesma
+ * razao de `current_clinic_id()`: e a funcao que as policies consultam, entao
+ * aplicacao e banco nunca discordam sobre quem e o profissional da sessao.
+ */
+export async function getCurrentProfessionalId(): Promise<string | null> {
+  const supabase = await createSupabaseServerClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase.rpc('current_professional_id')
+
+  if (error || !data) return null
+
+  return data
+}
+
 /** Papel do usuario na clinica ativa, para decisoes de autorizacao na UI. */
 export async function getActiveClinicRole() {
   const supabase = await createSupabaseServerClient()

@@ -10,7 +10,6 @@ import {
   Building2,
   Bot,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   FileCheck2,
   FileText,
@@ -23,7 +22,6 @@ import {
   Palette,
   Plus,
   RefreshCw,
-  Search,
   Send,
   Save,
   ShieldCheck,
@@ -47,31 +45,6 @@ import { StatCard } from '@/components/ui/stat-card'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils/cn'
 
-type Tab = { id: string; label: string }
-
-function Tabs({ tabs, active, onChange }: { tabs: readonly Tab[]; active: string; onChange: (id: string) => void }) {
-  return (
-    <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border-card bg-background p-1" role="tablist">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={active === tab.id}
-          onClick={() => onChange(tab.id)}
-          className={cn(
-            'min-h-9 shrink-0 rounded-[9px] px-3 text-label font-semibold transition-colors',
-            active === tab.id
-              ? 'bg-surface text-foreground shadow-card'
-              : 'text-muted hover:bg-surface/70 hover:text-foreground',
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 function Notice({ children, tone = 'info' }: { children: string; tone?: 'info' | 'success' | 'warning' }) {
   const classes = {
@@ -89,28 +62,6 @@ function Notice({ children, tone = 'info' }: { children: string; tone?: 'info' |
 }
 
 
-const recordItems = [
-  { id: 'record-1', patientId: 'pat-1', patient: 'Marina Costa', type: 'Evolução clínica', professional: 'Dra. Ana Ribeiro', date: 'Hoje, 09:32', summary: 'Paciente relatou melhora após ajuste da medicação. Manter acompanhamento mensal.' },
-  { id: 'record-2', patientId: 'pat-7', patient: 'Luiza Prado', type: 'Avaliação nutricional', professional: 'Dra. Helena Souza', date: 'Ontem, 16:10', summary: 'Plano alimentar revisado e orientações registradas para o próximo retorno.' },
-  { id: 'record-3', patientId: 'pat-2', patient: 'João Almeida', type: 'Retorno', professional: 'Dr. Paulo Freitas', date: '05 ago, 15:48', summary: 'Acompanhamento pós-consulta com indicação de novo exame.' },
-]
-
-export function ProntuariosScreen() {
-  const [tab, setTab] = useState('evolutions')
-  const [query, setQuery] = useState('')
-  const filtered = recordItems.filter((record) => record.patient.toLowerCase().includes(query.trim().toLowerCase()))
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Cuidado contínuo" title="Prontuários" description="Acesse evoluções e documentos com rastreabilidade e segurança." actions={<Button disabled title="A criação de evoluções será habilitada na próxima etapa"><Plus aria-hidden className="size-4" /> Nova evolução</Button>} />
-      <Notice>Informações protegidas. O acesso a esta área é registrado para sua segurança.</Notice>
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-border-card p-5 lg:flex-row lg:items-center lg:justify-between"><Tabs tabs={[{ id: 'evolutions', label: 'Evoluções recentes' }, { id: 'documents', label: 'Documentos' }, { id: 'access', label: 'Histórico de acesso' }]} active={tab} onChange={setTab} /><SearchField label="Buscar prontuário" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por paciente" className="lg:w-64" /></div>
-        {tab === 'evolutions' ? <div className="divide-y divide-border-card">{filtered.map((record) => <article key={record.id} className="flex gap-4 p-5 transition-colors hover:bg-row-hover"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-link"><FileText aria-hidden className="size-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><Link href={`/pacientes/${record.patientId}`} className="font-semibold text-foreground hover:text-link">{record.patient}</Link><span className="mx-2 hidden text-muted sm:inline">·</span><span className="text-label text-muted">{record.type}</span></div><span className="text-label text-muted">{record.date}</span></div><p className="mt-2 max-w-3xl text-aux leading-6 text-muted">{record.summary}</p><p className="mt-2 text-label text-muted">Assinado por <span className="font-semibold text-foreground">{record.professional}</span></p></div><ChevronRight aria-hidden className="mt-1 hidden size-4 shrink-0 text-muted sm:block" /></article>)}{filtered.length === 0 ? <EmptyState icon={Search} title="Nenhum prontuário encontrado" /> : null}</div> : tab === 'documents' ? <EmptyState icon={FileCheck2} title="Nenhum documento recente" description="Documentos anexados aos atendimentos aparecerão aqui." /> : <div className="divide-y divide-border-card">{['Dra. Ana Ribeiro acessou Marina Costa · Hoje, 09:32', 'Recepção acessou João Almeida · Ontem, 16:10'].map((item) => <div key={item} className="flex items-center gap-3 p-5 text-aux text-muted"><LockKeyhole aria-hidden className="size-4 text-link" />{item}</div>)}</div>}
-      </Card>
-    </div>
-  )
-}
 
 const transactions = [
   { date: '07 ago', description: 'Consulta · Marina Costa', category: 'Atendimentos', value: 'R$ 280,00', kind: 'income' },
