@@ -107,4 +107,20 @@ describe('repositório de notificações', () => {
     expect(fake.calls).toContainEqual({ method: 'is', args: ['read_at', null] })
     expect(fake.calls.some((call) => call.method === 'update')).toBe(true)
   })
+
+  it('marca em lote somente avisos não lidos do tenant e usuário', async () => {
+    const fake = fakeClient({
+      rows: [row(), row({ id: '22222222-2222-4222-8222-222222222222' })],
+    })
+
+    const count = await new SupabaseNotificationRepository(fake.client).markAllRead(
+      CLINIC,
+      USER,
+    )
+
+    expect(count).toBe(2)
+    expect(fake.calls).toContainEqual({ method: 'eq', args: ['clinic_id', CLINIC] })
+    expect(fake.calls).toContainEqual({ method: 'eq', args: ['user_id', USER] })
+    expect(fake.calls).toContainEqual({ method: 'is', args: ['read_at', null] })
+  })
 })

@@ -8,6 +8,11 @@ export type MarkNotificationReadInput = z.infer<
   typeof markNotificationReadSchema
 >
 
+export const markAllNotificationsReadSchema = z.object({})
+export type MarkAllNotificationsReadInput = z.infer<
+  typeof markAllNotificationsReadSchema
+>
+
 export interface NotificationDto {
   id: string
   kind: string

@@ -14,4 +14,7 @@ export interface NotificationRepository {
     userId: string,
     notificationId: string,
   ): Promise<Notification | null>
+
+  /** Marca em lote somente os avisos ainda não lidos deste usuário. */
+  markAllRead(clinicId: string, userId: string): Promise<number>
 }

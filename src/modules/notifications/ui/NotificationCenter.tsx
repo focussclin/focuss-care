@@ -8,6 +8,7 @@ import { useState } from 'react'
 
 import { cn } from '@/lib/utils/cn'
 
+import { markAllNotificationsReadAction } from '../actions/markAllNotificationsRead.action'
 import { markNotificationReadAction } from '../actions/markNotificationRead.action'
 import type { NotificationDto } from '../schemas/notification.schema'
 
@@ -22,16 +23,37 @@ export function NotificationCenter({
 }: NotificationCenterProps) {
   const router = useRouter()
   const [pendingId, setPendingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function markRead(notification: NotificationDto) {
     if (notification.readAt || pendingId) return
 
+    setError(null)
     setPendingId(notification.id)
     try {
       const result = await markNotificationReadAction({
         notificationId: notification.id,
       })
       if (result.ok) router.refresh()
+      else setError(result.error.message)
+    } catch {
+      setError('Não foi possível atualizar a notificação agora.')
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  async function markAllRead() {
+    if (unreadCount === 0 || pendingId) return
+
+    setError(null)
+    setPendingId('__all__')
+    try {
+      const result = await markAllNotificationsReadAction({})
+      if (result.ok) router.refresh()
+      else setError(result.error.message)
+    } catch {
+      setError('Não foi possível atualizar as notificações agora.')
     } finally {
       setPendingId(null)
     }
@@ -78,8 +100,25 @@ export function NotificationCenter({
                   : 'Tudo em dia por aqui'}
               </p>
             </div>
-            <Check aria-hidden className="size-4 text-status-positive" />
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                className="rounded-field px-2 py-1 text-label font-semibold text-link transition-colors hover:bg-brand-subtle disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={pendingId !== null}
+                onClick={markAllRead}
+              >
+                {pendingId === '__all__' ? 'Atualizando...' : 'Marcar todas'}
+              </button>
+            ) : (
+              <Check aria-hidden className="size-4 text-status-positive" />
+            )}
           </div>
+
+          {error ? (
+            <p role="alert" className="border-b border-danger/20 bg-danger-surface px-4 py-2 text-label text-danger">
+              {error}
+            </p>
+          ) : null}
 
           {notifications.length === 0 ? (
             <div className="px-4 py-8 text-center">
@@ -142,7 +181,7 @@ export function NotificationCenter({
                   <DropdownMenu.Item
                     key={notification.id}
                     className={itemClass}
-                    disabled={pendingId === notification.id}
+                    disabled={pendingId !== null}
                     onSelect={() => void markRead(notification)}
                   >
                     {content}

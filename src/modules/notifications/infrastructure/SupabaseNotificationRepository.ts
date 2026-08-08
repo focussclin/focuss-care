@@ -66,6 +66,20 @@ export class SupabaseNotificationRepository implements NotificationRepository {
 
     return data ? toNotification(data as NotificationRow) : null
   }
+
+  async markAllRead(clinicId: string, userId: string): Promise<number> {
+    const { data, error } = await this.client
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('user_id', userId)
+      .is('read_at', null)
+      .select('id')
+
+    if (error) throw writeFailure('markAllRead', error)
+
+    return data?.length ?? 0
+  }
 }
 
 function toNotification(row: NotificationRow): Notification {

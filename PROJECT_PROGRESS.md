@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 779 testes em 60 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 780 testes em 60 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -131,7 +131,7 @@ achou:**
 
 | Frente | Resultado |
 |---|---|
-| Botão/formulário inerte | Nenhum. Os controles sem operação local restante (filtro de última visita e paginação no fim da lista) dizem na própria tela por que estão assim; o sino lê notificações reais e contatos do paciente possuem CRUD quando há sessão |
+| Botão/formulário inerte | Nenhum. Os controles sem operação local restante (filtro de última visita e paginação no fim da lista) dizem na própria tela por que estão assim; o sino lê notificações reais, marca uma ou todas como lidas e contatos do paciente possuem CRUD quando há sessão |
 | `TODO`/`FIXME` no código | Nenhum |
 | `href="#"`, `onClick` vazio, `<form>` sem envio | Nenhum |
 | `clinic_id` nos repositórios | Todos os `.from()` filtram por clínica, exceto `profiles` (chaveada por usuário) e `clinics` (chaveada pelo próprio id) — corretos |
