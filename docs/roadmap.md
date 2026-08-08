@@ -63,8 +63,8 @@ rejeição em revisão):
 
 ### 2.3 Mock / read-only por design (telas de vitrine)
 
-`src/modules/workspace/ui/OperationsScreens.tsx` (407 linhas, `'use client'`) concentra
-**11 telas** com dados literais no arquivo e botões `disabled`:
+`src/modules/workspace/ui/OperationsScreens.tsx` concentrava **11 telas** com dados
+literais no arquivo e botões `disabled`:
 
 `AtendimentosScreen` · `ProntuariosScreen` · `FinanceiroScreen` · `WhatsappScreen` ·
 `ChatIaScreen` · `AutomacoesScreen` · `RelatoriosScreen` · `ConfiguracoesScreen` ·
@@ -74,6 +74,11 @@ São **protótipos visuais aprovados**, não funcionalidade. Serão desmontadas 
 cada tela migra para `src/modules/<módulo>/ui/` com container + view + repositório real,
 e sai deste arquivo. **O arquivo desaparece quando o último módulo for implementado** —
 esse é o critério de saída dele.
+
+**Situação em 08/08/2026: restam três.** `WhatsappScreen`, `ChatIaScreen` e
+`AutomacoesScreen` — as três dependem de W-01/AI-*/AU-01, que estão **Blocked**
+aguardando a aprovação de `04-agente-ia.md`. As outras oito saíram com suas
+fatias (I-01, E-01, R-01, S-01, C-01, T-01, B-01, V-01).
 
 ### 2.4 Dívida técnica catalogada
 
@@ -427,7 +432,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
 | **C-01** | **Configurações da clínica** | Claude | **Review** |
 | **B-01** | **Financeiro — cobrança, pagamento, caixa** | Claude | **Review** |
-| V-01 | Convênios — operadoras, guias, glosas | Claude | Backlog |
+| **V-01** | **Convênios — operadoras, planos, guias** | Claude | **Review** |
 | **T-01** | **Relatórios e dashboard sem mock** | Claude | **Review** |
 
 ### Diferenciação
@@ -448,7 +453,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Atendimentos | E-01 | **Removida** |
 | Prontuários | R-01 | **Removida** |
 | Financeiro | B-01 | **Removida** |
-| Convênios | V-01 | Backlog |
+| Convênios | V-01 | **Removida** |
 | Relatórios | T-01 | **Removida** |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
 
@@ -655,6 +660,43 @@ select distinct kind from public.document_sequences;
   Somar sobre o valor anterior transforma uma requisição repetida em dinheiro
   duplicado; recalcular faz a repetição ser inócua e conserta divergência
   deixada por falha anterior.
+
+### O que V-01 entregou, e as duas ausências que a tela declara
+
+| Operação | Estado |
+|---|---|
+| **Operadoras**: cadastrar, ativar, desativar | **Entregue.** Desativar não mexe nos planos |
+| **Planos** com coparticipação e prazo de pagamento | **Entregue.** Exige operadora antes — a dependência aparece na interface |
+| **Guias**: abrir solicitação com procedimentos | **Entregue.** Nasce em `requested`, sem número |
+| **Resposta da operadora**: autorizada com número, ou negada com motivo | **Entregue.** Só guia pendente aceita resposta |
+| **Glosas** | **Ausente.** Não há onde guardar — ver abaixo |
+| **Elegibilidade junto à operadora** | **Ausente.** Exige integração externa (TISS/portal) |
+
+**Glosa não tem tabela, e não é a mesma coisa que guia negada.**
+`insurance_authorizations.status = 'denied'` é negativa de autorização **prévia**:
+decidida antes do atendimento, e a consequência é o atendimento não acontecer.
+Glosa é recusa de **pagamento**: a operadora autorizou, o atendimento foi
+prestado, a fatura foi enviada — e o dinheiro não vem. Modelar a segunda em cima
+da primeira somaria dois fatos com efeitos financeiros opostos e esconderia
+justamente o número que a clínica precisa acompanhar. A migration está em
+`supabase/migrations/20260808_insurance_claim_denials.sql`, **não aplicada**.
+
+**Elegibilidade não é a validade cadastrada.** `patient_insurances.valid_until` é
+uma data que a clínica digitou. Consultar a operadora exige integração externa
+que este ambiente não tem, e chamar o campo local de "elegível" faria a recepção
+confiar num dado que ninguém confirmou. A tela usa o termo "validade cadastrada"
+e avisa quando ela já passou — como aviso, não como bloqueio: impedir a guia por
+causa de um cadastro possivelmente desatualizado seria confiar mais nele do que
+em quem está com o paciente na frente.
+
+**Duas recusas do adapter**, pelas mesmas razões de sempre:
+
+- **Guia já respondida não aceita nova resposta.** Reescrever apagaria o motivo
+  da negativa — o texto que sustenta o recurso. O filtro no `where` também
+  impede que duas pessoas respondendo ao mesmo tempo sobrescrevam uma à outra.
+- **O paciente sai da carteirinha, não da entrada.** Recebê-los separados
+  permitiria montar guia do paciente A com a carteirinha de B, e a operadora só
+  recusaria depois do atendimento marcado.
 
 ---
 

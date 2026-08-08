@@ -80,7 +80,33 @@ cancelado (funciona).
 
 ---
 
-## 4. Índices de `patients` — P-02b
+## 4. `20260808_insurance_claim_denials.sql`
+
+**Problema.** Não há onde registrar **glosa** — a recusa de pagamento da
+operadora depois de a fatura ser enviada. O schema tem
+`insurance_authorizations.status = 'denied'`, que é negativa de **autorização
+prévia**: decidida antes do atendimento, com consequência oposta.
+
+**Por que não reaproveitar `denied`.** Uma guia negada impede o atendimento; uma
+glosa acontece com o atendimento já prestado e vira prejuízo ou recurso. Somar as
+duas no mesmo status faria o relatório de convênios misturar duas coisas e
+esconder exatamente o número que a clínica precisa acompanhar.
+
+**Consequência hoje:** V-01 entregou operadoras, planos e guias, e deixou a
+glosa **explicitamente ausente**, com o motivo escrito na tela. Nada finge
+funcionar.
+
+**Atenção do revisor:** a policy usa `can_access_financial()`, cujo corpo não é
+legível deste ambiente (B1). Se ela não cobrir `finance`, a tela ficará vazia
+justamente para quem trabalha com glosa.
+
+**Verificar depois:** `npm run db:types`, `INSERT` como `finance` (201) e como
+`receptionist` (403), e o teste de tenancy pgTAP que R1 exige para toda tabela
+nova.
+
+---
+
+## 5. Índices de `patients` — P-02b
 
 Ainda **não escritos**, porque dependem de saber o que já existe: sem acesso SQL
 não dá para verificar quais índices e extensões o banco tem, e criar um índice

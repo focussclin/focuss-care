@@ -4,11 +4,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import {
   ArrowRight,
-  Building2,
   Bot,
   Clock3,
-  FileCheck2,
-  FileText,
   Info,
   LockKeyhole,
   MessageCircle,
@@ -124,23 +121,6 @@ export function AutomacoesScreen() {
       {notice ? <Notice tone="success">{notice}</Notice> : null}
       <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Automações ativas" value="02" icon={Workflow} /><StatCard label="Execuções este mês" value="184" icon={RefreshCw} trend="+16%" /><StatCard label="Horas economizadas" value="12h" icon={Clock3} /></div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]"><Card className="overflow-hidden"><CardHeader title="Regras da clínica" description="Acompanhe o que está automatizado e sob controle." /><div className="divide-y divide-border-card">{items.map((item) => <div key={item.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-start gap-3"><span className={cn('mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl', item.enabled ? 'bg-brand-subtle text-link' : 'bg-background text-muted')}><Workflow aria-hidden className="size-4" /></span><div className="min-w-0"><p className="truncate text-aux font-semibold text-foreground">{item.name}</p><p className="mt-1 text-label text-muted">Quando: {item.trigger} · Última execução: {item.lastRun}</p></div></div><div className="flex items-center justify-between gap-3 sm:justify-end"><StatusBadge tone={item.tone}>{item.status}</StatusBadge><button type="button" aria-pressed={item.enabled} onClick={() => toggle(item.id)} className={cn('relative h-7 w-12 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2', item.enabled ? 'bg-brand' : 'bg-border-default')}><span className={cn('absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform', item.enabled ? 'left-6' : 'left-1')} /><span className="sr-only">{item.enabled ? 'Pausar' : 'Ativar'} {item.name}</span></button><button type="button" disabled title="Mais ações em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></div>)}</div></Card><Card className="p-5"><div className="flex items-center gap-2 text-label font-semibold uppercase tracking-[0.08em] text-muted"><Sparkles aria-hidden className="size-4 text-link" /> Exemplo de fluxo</div><h2 className="mt-3 text-control font-semibold text-foreground">Lembrete de atendimento</h2><p className="mt-1 text-aux leading-6 text-muted">Uma prévia de como uma regra pode ser configurada.</p><div className="mt-5 space-y-2"><div className="rounded-xl border border-border-card bg-background p-3"><p className="text-label font-semibold text-muted">QUANDO ISSO ACONTECER</p><p className="mt-1 text-aux font-semibold text-foreground">Atendimento confirmado</p></div><ArrowRight aria-hidden className="mx-auto size-4 rotate-90 text-muted" /><div className="rounded-xl border border-border-card bg-background p-3"><p className="text-label font-semibold text-muted">FAÇA ISTO</p><p className="mt-1 text-aux font-semibold text-foreground">Enviar lembrete 24h antes</p></div></div><Notice tone="info">Toda regra exige revisão antes de ser ativada.</Notice></Card></div>
-    </div>
-  )
-}
-
-const insuranceProviders = [
-  { name: 'Particular', patients: '842 pacientes', table: 'Tabela própria', status: 'Ativo' },
-  { name: 'Saúde Mais', patients: '216 pacientes', table: 'Vigente até 31 dez', status: 'Ativo' },
-  { name: 'Vida Plena', patients: '98 pacientes', table: 'Revisar valores', status: 'Atenção' },
-]
-
-export function ConveniosScreen() {
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Gestão da clínica" title="Convênios" description="Gerencie operadoras, tabelas e o acompanhamento dos atendimentos." actions={<Button disabled title="Cadastro de convênio será habilitado na próxima etapa"><Plus aria-hidden className="size-4" /> Adicionar convênio</Button>} />
-      <div className="grid gap-3 sm:grid-cols-3"><StatCard label="Operadoras ativas" value="02" icon={Building2} /><StatCard label="Guias pendentes" value="14" icon={FileCheck2} tone="attention" /><StatCard label="Glosas em análise" value="03" icon={FileText} /></div>
-      <Card className="overflow-hidden"><CardHeader title="Operadoras e tabelas" description="Acompanhe o relacionamento financeiro dos atendimentos." /><div className="divide-y divide-border-card">{insuranceProviders.map((provider) => <div key={provider.name} className="flex flex-col gap-4 p-5 transition-colors hover:bg-row-hover sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-brand-subtle text-link"><Building2 aria-hidden className="size-5" /></span><div><p className="text-aux font-semibold text-foreground">{provider.name}</p><p className="mt-1 text-label text-muted">{provider.patients} · {provider.table}</p></div></div><div className="flex items-center justify-between gap-4 sm:justify-end"><StatusBadge tone={provider.status === 'Ativo' ? 'positive' : 'pending'}>{provider.status}</StatusBadge><button type="button" disabled title="Detalhes do convênio em breve" className="inline-flex size-9 items-center justify-center rounded-lg text-muted opacity-50"><MoreHorizontal aria-hidden className="size-4" /></button></div></div>)}</div></Card>
-      <Notice>O cadastro de convênios será conectado ao financeiro e às guias sem alterar o prontuário do paciente.</Notice>
     </div>
   )
 }
