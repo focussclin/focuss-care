@@ -1,4 +1,6 @@
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
+
+import { passwordRecoveryMessages } from '../schemas/passwordRecovery.schema'
 
 /**
  * O que deu errado no retorno do Google, lido de `?error=`.
@@ -36,17 +38,47 @@ const OAUTH_MESSAGES: Record<string, string> = {
   connection_error: 'Não foi possível conectar ao serviço de autenticação.',
 }
 
+/**
+ * Avisos de SUCESSO que outra tela deixou para o login exibir.
+ *
+ * Hoje ha um so: a senha acabou de ser trocada e a sessao do link foi encerrada
+ * de proposito (ver `updatePassword.action.ts`). Sem este aviso, a pessoa cairia
+ * numa tela de login sem entender por que precisa entrar de novo — e concluiria
+ * que a troca falhou.
+ */
+const SUCCESS_MESSAGES: Record<string, string> = {
+  'senha-redefinida': passwordRecoveryMessages.passwordUpdated,
+}
+
+/** `?p=a&p=b` chega como array. Vale o primeiro: repetir e ambiguidade. */
+function firstValue(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  return typeof raw === 'string' && raw.length > 0 ? raw : null
+}
+
 export async function OauthErrorNotice({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>
+  searchParams: Promise<{ error?: string | string[]; aviso?: string | string[] }>
 }) {
-  const { error } = await searchParams
-  // `?error=a&error=b` chega como array. Vale o primeiro — repetir o parametro
-  // e ambiguidade de quem chamou, nao pedido de dois avisos.
-  const code = Array.isArray(error) ? error[0] : error
+  const { error, aviso } = await searchParams
 
-  if (typeof code !== 'string' || code.length === 0) return null
+  const success = firstValue(aviso)
+  if (success !== null && success in SUCCESS_MESSAGES) {
+    return (
+      <div
+        role="status"
+        className="mt-6 flex items-start gap-2 rounded-field border border-status-positive/30 bg-status-positive-surface px-4 py-3 text-aux text-foreground"
+      >
+        <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span>{SUCCESS_MESSAGES[success]}</span>
+      </div>
+    )
+  }
+
+  const code = firstValue(error)
+
+  if (code === null) return null
 
   return (
     <div

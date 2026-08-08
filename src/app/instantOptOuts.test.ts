@@ -35,8 +35,6 @@ const INSTANT_OPT_OUTS: Record<string, string> = {
     'A página inteira é uma decisão de sessão que termina em redirect — dentro de <Suspense> o desvio deixaria de ser 307 e passaria a depender de JavaScript.',
   '(auth)/convite/[token]/page.tsx':
     'Mesmo redirect de portão, e aqui ele carrega o token no `next`: sem JS, o convite se perde.',
-  '(auth)/recuperar-senha/page.tsx':
-    'O único dado dinâmico prefilla o campo que a pessoa digita; qualquer boundary em volta dele remonta o input e apaga o que foi escrito.',
 }
 
 function collectFiles(dir: string, suffix: string): string[] {
@@ -77,13 +75,21 @@ describe('P-C2 — opt-outs de shell estático', () => {
     }
   })
 
-  it('/login saiu da lista e não pode voltar sem discussão', () => {
+  it.each([
+    ['(auth)/login/page.tsx'],
+    ['(auth)/recuperar-senha/page.tsx'],
+    ['(auth)/redefinir-senha/page.tsx'],
+  ])('%s já foi convertida e não pode voltar sem discussão', (route) => {
     /*
-     * A conversão de `/login` é o precedente que o resto da dívida segue: o
-     * formulário ficou FORA da fronteira dinâmica e virou o shell; só o aviso de
-     * retorno do OAuth entrou no <Suspense>. Se alguém reintroduzir a linha
-     * aqui, o formulário deixa de prerenderizar e ninguém percebe.
+     * `/login` é o precedente que as outras seguem: o formulário fica FORA da
+     * fronteira dinâmica e vira o shell; só o que ninguém digita entra no
+     * <Suspense>. Reintroduzir a linha aqui faria a página parar de
+     * prerenderizar sem que nada quebrasse — que é como a dívida cresceu antes.
+     *
+     * `/recuperar-senha` saiu ao ganhar envio de verdade (P-RS): o prefill
+     * deixou de ser server-side, e o único dado dinâmico virou o aviso de link
+     * inválido, que não tem campo de texto.
      */
-    expect(optOutsOnDisk()).not.toContain('(auth)/login/page.tsx')
+    expect(optOutsOnDisk()).not.toContain(route)
   })
 })

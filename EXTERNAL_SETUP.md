@@ -46,6 +46,39 @@ Toda escrita é recusada nesse modo, com mensagem explícita. Nada finge salvar.
 | `custom_access_token_hook` | Necessário para as claims de clínica no JWT | Painel → Authentication → Hooks |
 | Provedor de e-mail/senha | Necessário para login e cadastro | Painel → Authentication → Providers |
 | URL de redirecionamento do callback | `<origem>/auth/callback` | Painel → Authentication → URL Configuration |
+| Envio de e-mail (SMTP) | **Necessário para a recuperação de senha** | Ver §1.4 |
+
+### 1.4 Recuperação de senha — o que depende do painel
+
+O código da recuperação está completo (`/recuperar-senha` → e-mail →
+`/auth/callback` → `/redefinir-senha`), e **três coisas fora do repositório
+decidem se ele funciona de verdade**. Nenhuma delas é segredo; todas são
+configuração de painel.
+
+| Item | Onde | Se estiver errado |
+|---|---|---|
+| `<origem>/auth/callback` na lista de **Redirect URLs** | Authentication → URL Configuration | O Supabase recusa o `redirectTo` e o link do e-mail volta para a `Site URL`, não para a tela de nova senha |
+| **Site URL** apontando para o domínio real | Authentication → URL Configuration | Links de produção levam para `localhost` |
+| Servidor de **SMTP próprio** | Authentication → Emails → SMTP Settings | O SMTP embutido do Supabase é limitado a poucos e-mails por hora e **não serve para produção**: a maioria dos pedidos simplesmente não chega |
+
+Sobre o **template do e-mail** (Authentication → Emails → Reset Password): o
+padrão (`{{ .ConfirmationURL }}`) já funciona — é ele que carrega o código de
+uso único até `/auth/callback`. Editar o texto é seguro; trocar a URL não.
+
+**Duas limitações que são do fluxo, não de configuração**, e que a tela já
+declara em vez de esconder:
+
+- **O link precisa ser aberto no mesmo navegador que pediu.** O `@supabase/ssr`
+  usa PKCE, e o verificador fica num cookie de quem fez o pedido. Abrir o link
+  no celular depois de pedir no computador cai em "peça um novo link" — não é
+  bug, é o que impede que um link interceptado sirva a outra pessoa.
+- **O link vale por pouco tempo e uma vez só.** O prazo é do projeto
+  (Authentication → Providers → Email → *Email OTP Expiration*).
+
+**Sem SMTP configurado o produto não quebra e não mente**: a tela responde
+sempre "se existir uma conta, o link está a caminho" — a mesma frase para conta
+existente, inexistente e falha de envio, porque distinguir uma da outra
+transformaria o formulário num verificador de quem tem conta na clínica.
 
 ---
 
