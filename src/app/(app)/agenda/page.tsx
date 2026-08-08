@@ -6,6 +6,7 @@ import { getPatientRepository } from '@/modules/patients/infrastructure/reposito
 import { PATIENT_PAGE_MAX_SIZE } from '@/modules/patients/schemas/patientQuery.schema'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { AgendaScreen } from '@/modules/scheduling/ui/AgendaScreen'
+import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 
 export const metadata: Metadata = {
   title: 'Agenda',
@@ -31,10 +32,30 @@ export default async function AgendaPage({
   const rangeStart = addDays(startOfWeek(today), -7 * WEEKS_BEFORE)
   const rangeEnd = addDays(startOfWeek(today), 7 * WEEKS_AFTER)
 
-  const [appointmentSource, patientSource] = await Promise.all([
+  const [appointmentSource, patientSource, settingsSource] = await Promise.all([
     getAppointmentRepository(today),
     getPatientRepository(today),
+    getClinicSettingsRepository(),
   ])
+
+  /*
+   * Composicao entre modulos acontece na ROTA (regra 4 da arquitetura): a agenda
+   * nao alcanca o interior de `settings`, e vice-versa.
+   *
+   * A leitura e defensiva de proposito. Duracao padrao e conveniencia; a agenda
+   * e o trabalho. Derrubar a tela inteira porque a preferencia nao carregou
+   * trocaria um problema pequeno por um grande — o fallback de 30 minutos e o
+   * mesmo valor que o formulario assumia antes de C-01 existir.
+   */
+  const defaultDurationMinutes = await settingsSource.repository
+    .load(settingsSource.clinicId)
+    .then((settings) => settings.appointmentDefaults.durationMinutes)
+    .catch((cause) => {
+      console.error('[agenda] preferencia de duracao indisponivel', {
+        kind: cause instanceof Error ? cause.name : typeof cause,
+      })
+      return 30
+    })
 
   const [appointments, professionals, patientPage] = await Promise.all([
     appointmentSource.repository.listByRange(
@@ -66,6 +87,7 @@ export default async function AgendaPage({
       patients={patientPage.items}
       professionals={professionals}
       openNewOnMount={novo === '1'}
+      defaultDurationMinutes={defaultDurationMinutes}
       isLive={appointmentSource.isLive}
     />
   )

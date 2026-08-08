@@ -28,6 +28,14 @@ export interface NewAppointmentModalProps {
   defaultDate: string
   defaultTime?: string
   /**
+   * Duração que o formulário abre selecionada.
+   *
+   * Vem da configuração da clínica (C-01). Valor fora de `durationOptions` cai
+   * na primeira opção da lista: as duas listas vivem em módulos diferentes, e
+   * uma divergência entre elas não pode deixar o campo sem seleção.
+   */
+  defaultDurationMinutes?: number
+  /**
    * Envio.
    *
    * Devolve `null` em caso de sucesso, ou a falha para o formulário exibir.
@@ -85,9 +93,16 @@ export function NewAppointmentModal({
   existingAppointments,
   defaultDate,
   defaultTime = '09:00',
+  defaultDurationMinutes = 30,
   onSubmit,
 }: NewAppointmentModalProps) {
   const patientListId = useId()
+
+  const initialDuration = durationOptions.some(
+    (option) => option.value === String(defaultDurationMinutes),
+  )
+    ? String(defaultDurationMinutes)
+    : durationOptions[0].value
 
   const {
     register,
@@ -105,7 +120,7 @@ export function NewAppointmentModal({
       type: '',
       date: defaultDate,
       time: defaultTime,
-      durationMinutes: '30',
+      durationMinutes: initialDuration,
       status: 'scheduled',
       notes: '',
     },

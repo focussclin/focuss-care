@@ -420,12 +420,12 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **P-02a** | **Pacientes — busca server-side e paginação por cursor** | Claude | **Review** |
 | P-02b | Pacientes — filtro "Última visita", índices trigram e cache | Claude | **Blocked** |
 | **P-03** | **Pacientes — consentimento LGPD** | Claude | **Review** |
-| A-01 | Agenda — criar/remarcar/cancelar persistindo | Claude | Backlog |
+| **A-01** | **Agenda — criar/remarcar/cancelar persistindo** | Claude | **Review** |
 | A-02 | Agenda — conflito e disponibilidade reais | Claude | Backlog |
-| E-01 | Atendimentos — check-in, fila, encerramento | Claude | Backlog |
-| R-01 | Prontuário versionado append-only | Claude | Backlog |
-| S-01 | Equipe — profissionais, escalas, ausências | Claude | Backlog |
-| C-01 | Configurações da clínica | Claude | Backlog |
+| **E-01** | **Atendimentos — check-in, fila, encerramento** | Claude | **Review** |
+| **R-01** | **Prontuário versionado append-only** | Claude | **Review** |
+| **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
+| **C-01** | **Configurações da clínica** | Claude | **Review** |
 | B-01 | Financeiro — fatura, pagamento, caixa | Claude | Backlog |
 | V-01 | Convênios — operadoras, guias, glosas | Claude | Backlog |
 | T-01 | Relatórios e dashboard sem mock | Claude | Backlog |
@@ -443,10 +443,10 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Tela | Vira feature | Status |
 |---|---|---|
 | Onboarding | I-01 | **Ready** |
-| Equipe | S-01 | Backlog |
-| Configurações | C-01 | Backlog |
-| Atendimentos | E-01 | Backlog |
-| Prontuários | R-01 | Backlog |
+| Equipe | S-01 | **Removida** |
+| Configurações | C-01 | **Removida** |
+| Atendimentos | E-01 | **Removida** |
+| Prontuários | R-01 | **Removida** |
 | Financeiro | B-01 | Backlog |
 | Convênios | V-01 | Backlog |
 | Relatórios | T-01 | Backlog |
@@ -508,6 +508,30 @@ aplicação (detalhe em [`07-cadastro-de-pacientes.md`](./07-cadastro-de-pacient
 **A tabela `consents` também não tem FK de `subject_id` para `patients` nem
 `created_by`.** A aplicação compensa lendo o paciente antes de gravar e validando
 o formato uuid no adapter; o ator do registro fica em `audit_log`, não na linha.
+
+### O que C-01 deliberadamente NÃO configura
+
+A tela de configurações entrega o que é **fato** (a identidade da empresa) e o
+que **alguém consome** (a duração padrão da agenda). O resto de
+`clinic_settings` ficou sem controle, e a ausência está escrita na própria tela:
+
+| Coluna / campo | Por que não tem ajuste ainda |
+|---|---|
+| `notification_prefs` | Nenhum caminho do produto envia notificação. Gravar a preferência faria a pessoa parar de conferir se o aviso chegou |
+| `branding` e `clinics.logo_url` | Upload exige bucket de Storage cuja configuração não é verificável daqui (B1) |
+| `ai_enabled` | O módulo de IA está **Blocked** (W-01/AI-*). Ligar uma coluna não liga um agente |
+| `clinics.timezone` e `locale` | Somente leitura: datas e horas são renderizadas pelo relógio do dispositivo. Um seletor gravaria o fuso sem mudar nada do que a agenda mostra |
+| `clinics.slug` | Somente leitura: trocá-lo quebra todo link já compartilhado, e não há redirecionamento do endereço antigo |
+
+**O horário de funcionamento é o caso de fronteira.** Ele persiste de verdade,
+mas ainda **não bloqueia** agendamento fora do expediente — isso é **A-02**, que
+também precisará de `availability_rules` por profissional. O formulário declara
+a ressalva em vez de deixar a pessoa descobrir sozinha, e o formato guarda um
+turno por dia: intervalo de almoço ainda não é representável.
+
+**Perfil pessoal não entra aqui.** Nome e telefone de quem usa moram em
+`profiles`, e são do módulo `identity`, não de `settings` — a tela diz que não
+se alteram por ali em vez de repetir o formulário falso da vitrine.
 
 ---
 

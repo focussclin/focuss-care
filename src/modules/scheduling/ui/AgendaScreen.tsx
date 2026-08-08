@@ -47,6 +47,8 @@ export interface AgendaScreenProps {
   professionals: readonly Professional[]
   /** Abre o modal de criacao ja na entrada (link "+ Novo atendimento" do dashboard). */
   openNewOnMount?: boolean
+  /** Duracao padrao configurada em /configuracoes (C-01). */
+  defaultDurationMinutes?: number
   /**
    * Ha banco por tras desta tela.
    *
@@ -70,6 +72,7 @@ export function AgendaScreen({
   patients,
   professionals,
   openNewOnMount = false,
+  defaultDurationMinutes = 30,
   isLive = false,
 }: AgendaScreenProps) {
   const router = useRouter()
@@ -479,7 +482,7 @@ export function AgendaScreen({
         da primeira montagem e "adicionar as 14:00" abriria o modal com 09:00.
       */}
       <NewAppointmentModal
-        key={`${reschedulingId ?? 'new'}-${toDateInputValue(referenceDate)}-${createTime}`}
+        key={`${reschedulingId ?? 'new'}-${toDateInputValue(referenceDate)}-${createTime}-${defaultDurationMinutes}`}
         open={isCreating}
         onOpenChange={(open) => {
           setCreating(open)
@@ -491,6 +494,7 @@ export function AgendaScreen({
         existingAppointments={appointments}
         defaultDate={toDateInputValue(referenceDate)}
         defaultTime={createTime}
+        defaultDurationMinutes={defaultDurationMinutes}
         onSubmit={handleCreate}
       />
 

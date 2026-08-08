@@ -6,7 +6,6 @@ import {
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
-  BellRing,
   Building2,
   Bot,
   Clock3,
@@ -17,12 +16,9 @@ import {
   MessageCircle,
   MoreHorizontal,
   Paperclip,
-  Palette,
   Plus,
   RefreshCw,
   Send,
-  Save,
-  ShieldCheck,
   Sparkles,
   Stethoscope,
   UserRound,
@@ -175,38 +171,6 @@ export function RelatoriosScreen() {
     </div>
   )
 }
-
-const settingsSections = [
-  { id: 'profile', label: 'Perfil pessoal', description: 'Seus dados de acesso', icon: UserRound },
-  { id: 'clinic', label: 'Clínica', description: 'Identidade e informações', icon: Building2 },
-  { id: 'notifications', label: 'Notificações', description: 'Como você recebe avisos', icon: BellRing },
-  { id: 'appearance', label: 'Aparência', description: 'Preferências visuais', icon: Palette },
-  { id: 'security', label: 'Privacidade e segurança', description: 'Proteção da sua conta', icon: ShieldCheck },
-] as const
-
-export function ConfiguracoesScreen() {
-  const [section, setSection] = useState('profile')
-  const [saved, setSaved] = useState(false)
-  const [name, setName] = useState('Tamara Vieira')
-  const activeSection = settingsSections.find((item) => item.id === section) ?? settingsSections[0]
-  const ActiveIcon = activeSection.icon
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSaved(true)
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Gestão da clínica" title="Configurações" description="Ajuste as preferências do seu espaço de trabalho." />
-      <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
-        <Card className="h-fit p-2"><nav aria-label="Seções de configurações" className="space-y-1">{settingsSections.map((item) => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => { setSection(item.id); setSaved(false) }} className={cn('flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors', section === item.id ? 'bg-brand-subtle text-link' : 'text-muted hover:bg-row-hover hover:text-foreground')}><Icon aria-hidden className="size-4 shrink-0" /><span className="min-w-0"><span className="block text-aux font-semibold">{item.label}</span><span className="mt-0.5 block truncate text-label opacity-75">{item.description}</span></span></button> })}</nav></Card>
-        <Card className="overflow-hidden"><div className="flex items-center gap-3 border-b border-border-card p-5"><span className="flex size-10 items-center justify-center rounded-xl bg-brand-subtle text-link"><ActiveIcon aria-hidden className="size-5" /></span><div><h2 className="text-card-title font-semibold text-foreground">{activeSection.label}</h2><p className="mt-0.5 text-label text-muted">{activeSection.description}</p></div></div>{section === 'profile' ? <form onSubmit={handleSubmit} className="space-y-5 p-5"><div className="grid gap-5 sm:grid-cols-2"><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">Nome completo</span><input value={name} onChange={(event) => setName(event.target.value)} className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">Cargo</span><input defaultValue="Administradora" className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label></div><label className="flex flex-col gap-1.5"><span className="text-label font-semibold text-label">E-mail profissional</span><input defaultValue="contato@focusscare.com.br" type="email" className="h-11 rounded-field border border-border-default bg-surface px-3.5 text-aux text-foreground outline-none transition-colors focus:border-focus focus:shadow-focus" /></label><div className="flex flex-col gap-3 border-t border-border-card pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-label text-muted">Alterações ficam disponíveis apenas nesta prévia local.</p><Button type="submit"><Save aria-hidden className="size-4" /> Salvar alterações</Button></div>{saved ? <Notice tone="success">Alterações salvas nesta prévia local, sem alterar dados do Supabase.</Notice> : null}</form> : section === 'clinic' ? <div className="space-y-4 p-5"><div className="rounded-xl border border-border-card bg-background p-4"><p className="text-label text-muted">Nome da clínica</p><p className="mt-1 text-control font-semibold text-foreground">Focuss Care Clínica Integrada</p></div><div className="rounded-xl border border-border-card bg-background p-4"><p className="text-label text-muted">Localização</p><p className="mt-1 text-aux font-semibold text-foreground">São Paulo, SP</p></div><Notice>Os dados da clínica serão editáveis quando o módulo de administração estiver conectado.</Notice></div> : section === 'notifications' ? <div className="divide-y divide-border-card p-5">{['Lembretes de atendimento', 'Atualizações da equipe', 'Resumo semanal da clínica'].map((item, index) => <label key={item} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"><span><span className="block text-aux font-semibold text-foreground">{item}</span><span className="mt-1 block text-label text-muted">Receber avisos por e-mail</span></span><input type="checkbox" defaultChecked={index < 2} className="size-4 accent-[var(--fc-primary-800)]" /></label>)}</div> : section === 'appearance' ? <div className="space-y-4 p-5"><p className="text-aux text-muted">A aparência clara está ativa para preservar o melhor contraste nesta etapa.</p><div className="grid gap-3 sm:grid-cols-2"><button type="button" className="rounded-xl border-2 border-brand bg-surface p-4 text-left"><span className="block h-16 rounded-lg bg-background" /><span className="mt-3 block text-aux font-semibold text-foreground">Claro</span><span className="mt-1 block text-label text-muted">Ativo</span></button><button type="button" disabled title="Modo escuro será habilitado em breve" className="rounded-xl border border-border-card bg-background p-4 text-left opacity-60"><span className="block h-16 rounded-lg bg-slate-900" /><span className="mt-3 block text-aux font-semibold text-foreground">Escuro</span><span className="mt-1 block text-label text-muted">Em breve</span></button></div></div> : <div className="space-y-4 p-5"><div className="flex items-start gap-3 rounded-xl border border-border-card bg-background p-4"><LockKeyhole aria-hidden className="mt-0.5 size-5 shrink-0 text-link" /><div><p className="text-aux font-semibold text-foreground">Sessão protegida</p><p className="mt-1 text-label leading-5 text-muted">Sua autenticação usa Supabase Auth e as áreas sensíveis exigem sessão válida.</p></div></div><Button variant="secondary" disabled title="Gerenciamento de sessões em breve">Gerenciar sessões ativas</Button></div>}</Card>
-      </div>
-    </div>
-  )
-}
-
 
 const insuranceProviders = [
   { name: 'Particular', patients: '842 pacientes', table: 'Tabela própria', status: 'Ativo' },
