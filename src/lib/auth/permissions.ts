@@ -73,6 +73,7 @@ export type Permission =
   | 'team.read'
   | 'team.manage'
   | 'clinic.settings'
+  | 'audit.read'
   // Relatórios
   | 'report.read'
 
@@ -128,6 +129,7 @@ const MATRIX: Record<MembershipRole, readonly Permission[]> = {
     'team.read',
     'team.manage',
     'clinic.settings',
+    'audit.read',
     'report.read',
   ],
 
@@ -137,6 +139,7 @@ const MATRIX: Record<MembershipRole, readonly Permission[]> = {
     'team.read',
     'team.manage',
     'clinic.settings',
+    'audit.read',
     'report.read',
   ],
 

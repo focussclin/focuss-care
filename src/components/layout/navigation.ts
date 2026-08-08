@@ -119,7 +119,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', disabled: true },
   { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', disabled: true },
   { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', disabled: true },
-  { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', disabled: true },
+  { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', permission: 'audit.read' },
 
   /*
    * Quatro itens `?tab=…` foram REMOVIDOS: "Convites e tags", "Integrações",

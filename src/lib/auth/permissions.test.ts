@@ -147,5 +147,6 @@ const ALL_PERMISSIONS = [
   'team.read',
   'team.manage',
   'clinic.settings',
+  'audit.read',
   'report.read',
 ] as const satisfies readonly Permission[]

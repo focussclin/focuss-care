@@ -27,6 +27,7 @@ const EXISTING_ROUTES = new Set([
   '/whatsapp',
   '/chat-ia',
   '/automacoes',
+  '/auditoria',
 ])
 
 describe('navItems', () => {

@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 780 testes em 60 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 22 rotas.
+**Validação atual:** 782 testes em 61 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 23 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -58,13 +58,14 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
+| `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 
 ---
 
 ## 4. Rotas
 
-As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 23 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -82,6 +83,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
+| `/auditoria` | **COMPLETO** | Banco (`audit_log`) — sem IP, user-agent ou metadados brutos | `audit.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance) | `insurance.manage` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
@@ -93,8 +95,8 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 ## 4.0 Auditoria final local — 08/08/2026
 
 Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
-**779 testes em 60 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
-das 22 rotas com o servidor de desenvolvimento ativo.
+**782 testes em 61 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
+das 23 rotas com o servidor de desenvolvimento ativo.
 
 | Verificação | Resultado |
 |---|---|
