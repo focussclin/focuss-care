@@ -39,7 +39,6 @@ const elements = [
   // regra 4 passaria a proibir todo mundo de usá-lo.
   { type: "shared-domain", pattern: "src/modules/_shared/domain" },
   { type: "shared-application", pattern: "src/modules/_shared/application" },
-
   { type: "domain", pattern: "src/modules/*/domain", capture: ["module"] },
   {
     type: "application",
@@ -68,6 +67,7 @@ const elements = [
 const files = [
   // `*.view.tsx` mora dentro de `ui/`, então continua sendo elemento `ui`.
   { category: "view", pattern: "src/modules/*/ui/*.view.tsx" },
+  { category: "public-api", pattern: "src/modules/*/index.ts", capture: ["module"] },
   // Um arquivo só, e o mais perigoso do repositório.
   { category: "supabase-admin", pattern: "src/lib/supabase/admin.ts" },
 ];
@@ -203,6 +203,22 @@ const eslintConfig = defineConfig([
           ],
         },
       ],
+    },
+  },
+
+  /*
+   * `index.ts` Ã© a porta pÃºblica: suas dependÃªncias internas usam caminhos
+   * relativos do prÃ³prio mÃ³dulo. Impedir aliases de `@/modules/*` evita que a
+   * porta pÃºblica vire um atalho para atravessar outro mÃ³dulo; os consumidores
+   * continuam importando a porta, por exemplo `@/modules/patients`.
+   */
+  {
+    files: ["src/modules/*/index.ts"],
+    rules: {
+      "no-restricted-imports": proibirPacotes(
+        ["@/modules/*", "@supabase/*"],
+        REGRA_4,
+      ),
     },
   },
 
