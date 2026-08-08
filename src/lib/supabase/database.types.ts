@@ -4,7 +4,7 @@
  * Fonte: schema real do projeto Supabase (documento OpenAPI do PostgREST).
  * Regenerar com:  npm run db:types
  *
- * Tabelas: 55 · Views: 1 · Enums: 31
+ * Tabelas: 56 · Views: 1 · Enums: 32
  *
  * Nota sobre Insert: o OpenAPI nao expoe DEFAULTs, entao id/created_at/
  * updated_at sao tratados como opcionais. Demais colunas NOT NULL entram
@@ -78,6 +78,12 @@ export type ChannelProvider =
   | 'zapi'
   | 'twilio'
   | 'other'
+
+export type ClaimDenialStatus =
+  | 'received'
+  | 'appealing'
+  | 'recovered'
+  | 'accepted'
 
 export type ClinicStatus =
   | 'trial'
@@ -1533,6 +1539,92 @@ export type Database = {
           },
           {
             foreignKeyName: 'insurance_authorizations_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      insurance_claim_denials: {
+        Row: {
+          id: string
+          clinic_id: string
+          invoice_id: string
+          invoice_item_id: string | null
+          denial_code: string | null
+          reason: string
+          amount_cents: number
+          status: ClaimDenialStatus
+          denied_at: string
+          appealed_at: string | null
+          resolved_at: string | null
+          recovered_cents: number | null
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          invoice_id: string
+          invoice_item_id?: string | null
+          denial_code?: string | null
+          reason: string
+          amount_cents: number
+          status: ClaimDenialStatus
+          denied_at: string
+          appealed_at?: string | null
+          resolved_at?: string | null
+          recovered_cents?: number | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          invoice_id?: string
+          invoice_item_id?: string | null
+          denial_code?: string | null
+          reason?: string
+          amount_cents?: number
+          status?: ClaimDenialStatus
+          denied_at?: string
+          appealed_at?: string | null
+          resolved_at?: string | null
+          recovered_cents?: number | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'insurance_claim_denials_clinic_id_fkey'
+            columns: ['clinic_id']
+            isOneToOne: false
+            referencedRelation: 'clinics'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'insurance_claim_denials_invoice_id_fkey'
+            columns: ['invoice_id']
+            isOneToOne: false
+            referencedRelation: 'invoices'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'insurance_claim_denials_invoice_item_id_fkey'
+            columns: ['invoice_item_id']
+            isOneToOne: false
+            referencedRelation: 'invoice_items'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'insurance_claim_denials_created_by_fkey'
             columns: ['created_by']
             isOneToOne: false
             referencedRelation: 'profiles'
@@ -3770,6 +3862,10 @@ export type Database = {
         Args: { p_slug: string; p_trade_name: string }
         Returns: ClinicRow
       }
+      create_invitation: {
+        Args: Record<string, unknown>
+        Returns: unknown
+      }
       current_clinic_id: {
         Args: Record<string, never>
         Returns: string | null
@@ -3829,6 +3925,7 @@ export type Database = {
       cash_entry_kind: CashEntryKind
       cash_session_status: CashSessionStatus
       channel_provider: ChannelProvider
+      claim_denial_status: ClaimDenialStatus
       clinic_status: ClinicStatus
       consent_purpose: ConsentPurpose
       contract_type: ContractType
@@ -3882,6 +3979,7 @@ export type DocumentSequenceRow = Database['public']['Tables']['document_sequenc
 export type EmployeeRow = Database['public']['Tables']['employees']['Row']
 export type EncounterRow = Database['public']['Tables']['encounters']['Row']
 export type InsuranceAuthorizationRow = Database['public']['Tables']['insurance_authorizations']['Row']
+export type InsuranceClaimDenialRow = Database['public']['Tables']['insurance_claim_denials']['Row']
 export type InsurancePlanRow = Database['public']['Tables']['insurance_plans']['Row']
 export type InsuranceProviderRow = Database['public']['Tables']['insurance_providers']['Row']
 export type InvitationRow = Database['public']['Tables']['invitations']['Row']
