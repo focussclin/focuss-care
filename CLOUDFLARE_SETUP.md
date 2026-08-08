@@ -50,6 +50,22 @@ O `preview` usa o runtime `workerd`, mais próximo do Worker publicado, enquanto
 
 ## 4. Publicar
 
+### Se estiver usando Workers Builds/GitHub
+
+Em **Settings → Build**, use exatamente:
+
+```text
+Build command: npx opennextjs-cloudflare build
+Deploy command: npx wrangler deploy
+Non-production deploy command: npx wrangler versions upload
+```
+
+Não use `npm run deploy` no campo **Deploy command** do Workers Builds: esse
+script é para publicação direta pelo terminal e já contém build + deploy. O
+Workers Builds já possui uma etapa própria de deploy.
+
+### Se estiver publicando pelo terminal
+
 ```bash
 npm run deploy
 ```
