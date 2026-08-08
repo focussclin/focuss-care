@@ -3,9 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import {
-  ArrowDownLeft,
   ArrowRight,
-  ArrowUpRight,
   Building2,
   Bot,
   Clock3,
@@ -21,16 +19,14 @@ import {
   Send,
   Sparkles,
   UserRound,
-  WalletCards,
   Workflow,
 } from 'lucide-react'
-import { useState, type CSSProperties, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { SearchField } from '@/components/ui/search-field'
-import { SelectField } from '@/components/ui/select-field'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils/cn'
@@ -52,25 +48,6 @@ function Notice({ children, tone = 'info' }: { children: string; tone?: 'info' |
 }
 
 
-
-const transactions = [
-  { date: '07 ago', description: 'Consulta · Marina Costa', category: 'Atendimentos', value: 'R$ 280,00', kind: 'income' },
-  { date: '06 ago', description: 'Assinatura de software', category: 'Operação', value: 'R$ 189,90', kind: 'expense' },
-  { date: '05 ago', description: 'Consulta · João Almeida', category: 'Atendimentos', value: 'R$ 320,00', kind: 'income' },
-  { date: '04 ago', description: 'Materiais clínicos', category: 'Insumos', value: 'R$ 460,00', kind: 'expense' },
-]
-
-export function FinanceiroScreen() {
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Gestão da clínica" title="Financeiro" description="Tenha clareza sobre receitas, despesas e recebimentos pendentes." actions={<Button disabled title="O registro financeiro será habilitado com a integração do módulo"><Plus aria-hidden className="size-4" /> Nova movimentação</Button>} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-aux text-muted">Visão de agosto de 2026</p><SelectField label="Período" hideLabel options={[{ value: 'month', label: 'Este mês' }, { value: 'quarter', label: 'Este trimestre' }, { value: 'year', label: 'Este ano' }]} className="sm:w-44" /></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Receitas" value="R$ 18.420" icon={ArrowUpRight} trend="+12%" /><StatCard label="A receber" value="R$ 4.860" icon={Clock3} tone="attention" /><StatCard label="Despesas" value="R$ 6.280" icon={ArrowDownLeft} /><StatCard label="Saldo do período" value="R$ 12.140" icon={WalletCards} trend="+9%" /></div>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]"><Card className="overflow-hidden"><CardHeader title="Fluxo do período" description="Receitas e despesas por semana" /><div className="px-5 pb-6"><div className="flex h-56 items-end gap-2 border-b border-l border-border-card px-2 pb-0 pt-5 sm:gap-4">{[['01', 48, 20], ['08', 70, 28], ['15', 58, 34], ['22', 82, 38], ['29', 65, 30]].map(([label, income, expense]) => <div key={String(label)} className="relative flex h-full flex-1 items-end justify-center gap-1.5"><div className="h-[var(--bar)] w-3 rounded-t-md bg-brand" style={{ '--bar': `${income}%` } as CSSProperties} title={`Receitas na semana ${label}`} /><div className="h-[var(--bar)] w-3 rounded-t-md bg-brand-accent/70" style={{ '--bar': `${expense}%` } as CSSProperties} title={`Despesas na semana ${label}`} /><span className="absolute -bottom-7 text-label text-muted">{label}</span></div>)}</div><div className="mt-8 flex items-center gap-5 text-label text-muted"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-brand" />Receitas</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-brand-accent" />Despesas</span></div></div></Card><Card><CardHeader title="Recebimentos pendentes" action={<span className="text-label font-semibold text-attention">12 em aberto</span>} /><div className="space-y-4 px-5 pb-5"><div className="flex items-center justify-between gap-3"><div><p className="text-aux font-semibold text-foreground">Consultas particulares</p><p className="text-label text-muted">8 cobranças</p></div><span className="text-aux font-semibold text-foreground">R$ 3.240</span></div><div className="flex items-center justify-between gap-3"><div><p className="text-aux font-semibold text-foreground">Convênios</p><p className="text-label text-muted">4 guias aguardando</p></div><span className="text-aux font-semibold text-foreground">R$ 1.620</span></div><div className="rounded-xl bg-attention-surface p-3 text-label leading-5 text-attention">Revise os recebimentos com vencimento nesta semana.</div></div></Card></div>
-      <Card className="overflow-hidden"><CardHeader title="Últimas movimentações" action={<Button size="md" variant="ghost" disabled title="Filtros financeiros em breve">Ver todas</Button>} /><div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[680px] text-left"><thead className="border-y border-border-card bg-background text-label font-semibold text-muted"><tr><th className="px-5 py-3">Data</th><th className="px-5 py-3">Descrição</th><th className="px-5 py-3">Categoria</th><th className="px-5 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-border-card">{transactions.map((item) => <tr key={item.description} className="text-aux hover:bg-row-hover"><td className="px-5 py-4 text-muted">{item.date}</td><td className="px-5 py-4 font-semibold text-foreground">{item.description}</td><td className="px-5 py-4 text-muted">{item.category}</td><td className={cn('px-5 py-4 text-right font-semibold', item.kind === 'income' ? 'text-status-positive' : 'text-danger')}>{item.kind === 'income' ? '+' : '-'} {item.value}</td></tr>)}</tbody></table></div><div className="divide-y divide-border-card md:hidden">{transactions.map((item) => <div key={item.description} className="flex items-center justify-between gap-3 p-4"><div><p className="text-aux font-semibold text-foreground">{item.description}</p><p className="mt-1 text-label text-muted">{item.date} · {item.category}</p></div><span className={cn('text-aux font-semibold', item.kind === 'income' ? 'text-status-positive' : 'text-danger')}>{item.kind === 'income' ? '+' : '-'} {item.value}</span></div>)}</div></Card>
-    </div>
-  )
-}
 
 const conversations = [
   { id: 'conv-1', name: 'Marina Costa', preview: 'Confirmado para hoje às 09:00', time: '09:12', unread: 2, patientId: 'pat-1' },

@@ -426,7 +426,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **R-01** | **Prontuário versionado append-only** | Claude | **Review** |
 | **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
 | **C-01** | **Configurações da clínica** | Claude | **Review** |
-| B-01 | Financeiro — fatura, pagamento, caixa | Claude | Backlog |
+| **B-01** | **Financeiro — cobrança, pagamento, caixa** | Claude | **Review** |
 | V-01 | Convênios — operadoras, guias, glosas | Claude | Backlog |
 | **T-01** | **Relatórios e dashboard sem mock** | Claude | **Review** |
 
@@ -447,7 +447,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Configurações | C-01 | **Removida** |
 | Atendimentos | E-01 | **Removida** |
 | Prontuários | R-01 | **Removida** |
-| Financeiro | B-01 | Backlog |
+| Financeiro | B-01 | **Removida** |
 | Convênios | V-01 | Backlog |
 | Relatórios | T-01 | **Removida** |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
@@ -604,6 +604,57 @@ recorte por papel e "encerrou o atendimento de Fulano" é informação de saúde
 - **Relatório truncado avisa.** A leitura tem teto de 5.000 linhas; atingi-lo
   troca o número por uma amostra, e a tela diz isso. Truncar em silêncio é o pior
   erro possível num painel — o número parece completo e a decisão é tomada.
+
+### O que B-01 entregou, e as três RPCs que não pôde chamar
+
+| Operação | Estado |
+|---|---|
+| **Cobrança** com itens, desconto e vencimento | **Entregue.** Nasce em `draft`; totais recalculados no servidor |
+| **Cancelamento** de cobrança | **Entregue.** Preserva a linha; recusa se já houve pagamento |
+| **Pagamento**, total ou parcial, em sete formas | **Entregue.** Recusa valor acima do saldo; `paid_cents` recalculado da soma |
+| **Caixa**: abrir, lançar entrada/saída, fechar com contagem | **Entregue.** Pagamento em espécie vira lançamento automático |
+| **Emissão fiscal numerada** | **Bloqueado.** Ver abaixo |
+| **Contas a pagar / despesas** (`payables`) | **Fora de escopo.** Nenhuma tela grava; despesa zero diria que a clínica não tem custo |
+| **Repasse a profissional** (`professional_payouts`) | **Bloqueado.** `preview_professional_payout` tem a mesma limitação |
+
+**Três RPCs financeiras aparecem em `database.types.ts` como
+`Args: Record<string, unknown>`** — ou seja, o gerador **não resolveu a
+assinatura**: `issue_invoice`, `close_cash_session` e
+`preview_professional_payout`. Chamá-las seria adivinhar nomes de parâmetro em
+operações que mexem em dinheiro.
+
+Consequências, uma a uma:
+
+- **`issue_invoice`** — a fatia entrega COBRANÇA, não documento fiscal. A
+  cobrança nasce em `draft` e sem `number`, e a tela diz isso onde estaria o
+  botão de emitir. Marcar `issued` sem numerar alegaria uma emissão que não
+  aconteceu, e numeração fiscal que pula ou repete é problema com a prefeitura.
+- **`next_document_number(p_kind)`** é tipada, mas `document_sequences.kind` é
+  texto livre e o valor válido não é legível daqui — o mesmo bloqueio, por outro
+  caminho.
+- **`close_cash_session`** — o adapter calcula e grava direto, com
+  `eq('status','open')` no `where` para que dois fechamentos concorrentes não
+  gravem valores diferentes. O desvio está documentado no método.
+
+Reconciliar com:
+
+```sql
+select proname, pg_get_function_arguments(oid)
+  from pg_proc
+ where proname in ('issue_invoice','close_cash_session','preview_professional_payout');
+
+select distinct kind from public.document_sequences;
+```
+
+**Duas regras de dinheiro que o adapter impõe**, e que valem para V-01:
+
+- **Nenhum total vem do cliente.** O formulário envia quantidade e preço
+  unitário; subtotal e total são recalculados no servidor. Quem controla o total
+  controla quanto o paciente deve, e o formulário roda no navegador dele.
+- **`paid_cents` é recalculado da soma dos pagamentos, nunca incrementado.**
+  Somar sobre o valor anterior transforma uma requisição repetida em dinheiro
+  duplicado; recalcular faz a repetição ser inócua e conserta divergência
+  deixada por falha anterior.
 
 ---
 
