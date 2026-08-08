@@ -23,11 +23,31 @@ export const clinicMessages = {
   slugReserved: 'Este endereço não está disponível. Escolha outro.',
   slugTaken: 'Este endereço já está em uso. Escolha outro.',
   invalidFields: 'Revise os campos destacados e tente novamente.',
-  alreadyHasClinic: 'Sua conta já está vinculada a uma clínica.',
+  alreadyHasClinic: 'Sua conta já é responsável por uma clínica.',
   sessionExpired: 'Sua sessão expirou. Entre novamente para continuar.',
   claimsStale:
     'A clínica foi criada, mas sua sessão precisa ser renovada antes de continuar.',
   unexpected: 'Não foi possível criar a clínica agora. Tente novamente.',
+} as const
+
+/**
+ * Mensagens da TROCA de clínica (I-03).
+ *
+ * Separadas de `clinicMessages` porque aquelas falam todas de criação — reusar
+ * `unexpected` de lá diria "não foi possível criar a clínica" para quem só
+ * tentou trocar.
+ */
+export const switchClinicMessages = {
+  /**
+   * Clínica inexistente e clínica sem vínculo dão na mesma resposta, de
+   * propósito: distinguir as duas entregaria um oráculo de existência de
+   * clínica por tentativa e erro.
+   */
+  clinicUnavailable: 'Esta clínica não está disponível para a sua conta.',
+  sessionExpired: 'Sua sessão expirou. Entre novamente para continuar.',
+  claimsStale:
+    'A clínica foi trocada, mas sua sessão precisa ser renovada. Entre novamente.',
+  unexpected: 'Não foi possível trocar de clínica agora. Tente novamente.',
 } as const
 
 /**

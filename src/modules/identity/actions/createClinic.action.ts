@@ -92,11 +92,26 @@ export async function createClinicAction(
     return { ok: false, error: clinicMessages.sessionExpired }
   }
 
-  const { data: existingMembership, error: membershipError } = await supabase
+  /*
+   * Uma assinatura, uma clínica — e uma clínica por dono.
+   *
+   * O filtro é por `role = 'owner'`, não por vínculo qualquer. A diferença não é
+   * sutil: `memberships` é o que liga usuário a clínica, e um profissional
+   * CONVIDADO para a clínica de outra pessoa tem vínculo ativo lá. Barrar por
+   * vínculo qualquer significaria que aceitar um convite tira de você, para
+   * sempre, o direito de abrir a sua própria clínica — e ninguém desconfiaria
+   * disso ao aceitar.
+   *
+   * O que a regra proíbe é uma conta ser responsável por duas clínicas (e, com
+   * `subscriptions.clinic_id`, cobrar uma assinatura por duas). Ser membro de
+   * várias continua valendo, e é para isso que existe a troca de clínica (I-03).
+   */
+  const { data: ownedClinic, error: membershipError } = await supabase
     .from('memberships')
     .select('id')
     .eq('user_id', userData.user.id)
     .eq('status', 'active')
+    .eq('role', 'owner')
     .limit(1)
     .maybeSingle()
 
@@ -105,7 +120,7 @@ export async function createClinicAction(
     return { ok: false, error: clinicMessages.unexpected }
   }
 
-  if (existingMembership) {
+  if (ownedClinic) {
     return { ok: false, error: clinicMessages.alreadyHasClinic }
   }
 

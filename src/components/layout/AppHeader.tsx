@@ -3,6 +3,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Bell, ChevronDown, Command, Menu, Search, UserRound } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
+import type { ReactNode } from 'react'
 import { useFormStatus } from 'react-dom'
 
 import { Avatar } from '@/components/ui/avatar'
@@ -16,6 +17,8 @@ interface AppHeaderProps {
   userRole: string
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  /** Seletor de clinica (I-03), quando ha mais de um vinculo. */
+  clinicSwitcher?: ReactNode
   onMenuClick: () => void
 }
 
@@ -35,7 +38,13 @@ const titles: Record<string, { title: string; description: string }> = {
   '/configuracoes': { title: 'Configurações', description: 'Preferências do espaço' },
 }
 
-export function AppHeader({ userName, userRole, clinicName, onMenuClick }: AppHeaderProps) {
+export function AppHeader({
+  userName,
+  userRole,
+  clinicName,
+  clinicSwitcher,
+  onMenuClick,
+}: AppHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
   const context =
@@ -65,6 +74,11 @@ export function AppHeader({ userName, userRole, clinicName, onMenuClick }: AppHe
             <p className="hidden truncate text-label text-muted lg:block">{context.description}</p>
           </div>
         </div>
+
+        {/* Troca de clinica: so aparece com mais de um vinculo (I-03) */}
+        {clinicSwitcher ? (
+          <div className="hidden min-w-0 shrink md:block">{clinicSwitcher}</div>
+        ) : null}
 
         <div className="mx-auto hidden w-full max-w-[420px] items-center gap-2 rounded-xl border border-border-card bg-background px-3 text-muted transition-colors focus-within:border-brand/45 focus-within:bg-surface focus-within:shadow-[0_0_0_3px_rgba(37,99,166,0.1)] sm:flex">
           <Search aria-hidden className="size-4 shrink-0" />

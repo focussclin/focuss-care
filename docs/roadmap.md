@@ -81,14 +81,14 @@ esse é o critério de saída dele.
 |---|---|---|---|
 | D1 | `createAction` existia como dívida; F-01 criou `modules/_shared/application/createAction.ts`. Primeiro chamador runtime ainda pendente (P-A6). | **Em Review** | P-01, primeira mutação tenant-scoped |
 | D2 | `audit_log` existia no banco sem escritas no código; F-01 criou `recordAuditEvent` e integrou `clinic.created`. Policy remota de INSERT ainda não verificada (P-A1). | **Em Review** | Confirmar RLS no Supabase e cobrir com F-04 |
-| D3 | Sem `lib/cache/tags.ts`; nenhuma chave de cache com `clinic_id`. Nenhum `use cache` em uso. | **Crítica** | Fase 1 |
+| D3 | `lib/cache/tags.ts` existe (F-02): fábrica única e tipada, toda tag com `clinic_id`, invalidação por tag ligada ao `createAction`. **Continua sem nenhum `use cache` em uso** — nenhum dado clínico foi cacheado (P-C1 de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md) §8.6). | **Em Review** | Infra paga; o uso entra com a primeira leitura cacheável tenant-scoped |
 | D4 | ESLint é só `next/core-web-vitals` + `typescript`. **`eslint-plugin-boundaries` não instalado** → as 6 regras de arquitetura da §10 de `02-estrutura-de-pastas.md` não são verificadas. | Alta | Fase 1 |
 | D5 | **Zero testes.** Nenhum runner, nenhum arquivo de teste, `supabase/tests/` não existe. | Alta | Fase 1 (harness) → contínuo |
 | D6 | Sem script `typecheck` no `package.json`; sem CI (`.github/workflows/` ausente). | Alta | Fase 1 |
 | D7 | `supabase/migrations/` **vazio** — o schema remoto não está versionado no repo. Não há como reproduzir o banco nem revisar mudança de schema em PR. | Alta | Fase 2 |
 | D8 | Modo demo (`data-source.ts` cai para mock quando falta vínculo) mascara bug de tenancy: usuário sem clínica vê dados fictícios em vez de ser levado ao onboarding. | Alta | Fase 1 (feature 01) |
 | D9 | `OperationsScreens.tsx` — 11 telas em um arquivo `'use client'`, com estilos inline longos. Ponto de conflito garantido entre agentes. | Média | Diluída por fase |
-| D10 | Sem `unauthorized.tsx` / `forbidden.tsx`; `authInterrupts` e `cacheComponents` não habilitados em `next.config.ts`. | Média | Fase 1 |
+| D10 | **Parcialmente paga:** `cacheComponents: true` habilitada por F-02 (com quatro segmentos em `instant = false` — P-C2). Faltam `unauthorized.tsx` / `forbidden.tsx` e `experimental.authInterrupts`. | Média | Restante em I-05 |
 | D11 | Sem TanStack Query instalado, embora a arquitetura o preveja para interação. | Baixa | Quando a agenda ganhar drag/filtros server-side |
 | D12 | ~~Nenhum `Result`/`Paginated` em `_shared/domain`~~ — **parcialmente paga**: `Result` (F-01) e `Paginated<T>` (P-02a) existem. Falta `Money`/centavos. | Média | `Money` antes do Financeiro |
 | D13 | Documentos `*_DESIGN.md` soltos na raiz (5 arquivos). Deveriam viver em `docs/design/`. | Baixa | Oportunístico |
@@ -238,7 +238,7 @@ declarada antes de abrir o editor.**
 | Flag | Para quê |
 |---|---|
 | `experimental.authInterrupts` | `unauthorized()` / `forbidden()` + telas 401/403 (D10) |
-| `cacheComponents` | Diretivas `use cache`, `use cache: private` (D3) |
+| ~~`cacheComponents`~~ | **Habilitada por F-02.** Substitui `dynamicIO`, `useCache` e `ppr`, removidas no Next 16 |
 | `experimental.taint` | Impedir que objeto sensível chegue a Client Component |
 | `output: 'standalone'` | Deploy em Docker/Coolify |
 
@@ -278,8 +278,8 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 - [ ] Nenhuma nova tabela sem `clinic_id NOT NULL` + RLS `ENABLE` **e** `FORCE`.
 - [ ] Toda policy tem `USING` **e** `WITH CHECK` (só `USING` permite gravar em outra clínica).
 - [ ] `clinic_id` é a **primeira coluna** de todo índice composto.
-- [ ] Toda tag/chave de cache carrega `clinic_id`, gerada por `lib/cache/tags.ts`.
-- [ ] Dado derivado de sessão usa `'use cache: private'` — nunca `'use cache'` puro.
+- [x] Toda tag/chave de cache carrega `clinic_id`, gerada por `lib/cache/tags.ts` (F-02; o tipo `CacheTag` recusa string literal em tempo de compilação).
+- [ ] Dado derivado de sessão usa `'use cache: private'` — nunca `'use cache'` puro. **Nenhum dado está cacheado hoje**; o item passa a valer quando a primeira leitura cacheável entrar.
 - [ ] Mutação passa pelo `createAction` e grava em `audit_log`.
 - [ ] Leitura de prontuário é auditada (quem, quando, qual, de qual IP).
 - [ ] Exclusão é lógica (`deleted_at`), nunca `DELETE`.
@@ -305,7 +305,7 @@ RPCs disponíveis e **ainda não usadas** no código — são o caminho pronto p
 | # | Risco | Sev. | Gate que o bloqueia |
 |---|---|---|---|
 | R1 | Clínica A enxerga dado da clínica B | Crítica | Teste de tenancy no CI para **toda** tabela nova. Sem teste, o PR não entra. |
-| R2 | Cache vazando entre tenants | Crítica | Lint proibindo tag de cache literal; toda tag sai de `cache/tags.ts`. |
+| R2 | Cache vazando entre tenants | Crítica | **Parcial (F-02):** toda tag sai de `cache/tags.ts` e o tipo `CacheTag` recusa string literal no compilador; hoje nada está cacheado. Falta a regra de lint proibindo `next/cache` fora do pipeline (F-03 — P-C4). |
 | R3 | Service role key no bundle | Crítica | `server-only` + regra de import no lint + verificação no CI. |
 | R4 | Escrita sem auditoria ou sem autorização | Crítica | Lint: Server Action que não usa `createAction` reprova. |
 | R5 | Prontuário editável | Crítica | Policy recusa `UPDATE`/`DELETE`; teste prova a recusa. |
@@ -397,7 +397,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | ID | Feature | Dono | Status | Nota |
 |---|---|---|---|---|
 | F-01 | `createAction` + `Result` + auditoria | Claude | **Review** | Implementado e exercitado por P-01; P-A1 (policy remota de `audit_log`) e cobertura automatizada seguem abertos. |
-| F-02 | `lib/cache/tags.ts` + flags do Next 16 | Claude | **Ready** | D3, D10 |
+| F-02 | `lib/cache/tags.ts` + flags do Next 16 | Claude | **Review** | D3 e parte de D10. Fábrica, `cacheComponents` e invalidação por tag no `createAction` entregues e testadas (§8 de [`06-acoes-e-auditoria.md`](./06-acoes-e-auditoria.md)). **Nenhum dado clínico cacheado** — as tags existem sem consumidor até uma leitura cacheável tenant-scoped ser criada (P-C1). |
 | F-03 | `eslint-plugin-boundaries` com as 6 regras | Claude | **Ready** | D4 |
 | F-04 | Harness de teste + script `typecheck` + CI | Claude | **Ready** | D5, D6 |
 | F-05 | Versionar schema remoto em `supabase/migrations/` | Claude / rev. Codex | Backlog | D7 |
@@ -408,7 +408,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 |---|---|---|---|---|
 | **I-01** | **Onboarding real + sessão/tenant na casca** | Claude | **Review** | §14 · implementação e pendências em [`05-onboarding-e-sessao.md`](./05-onboarding-e-sessao.md). CA7 depende da policy de `audit_log`; CA8 e CA1 (testes) seguem abertos e dependem de verificação do banco/F-04. |
 | I-02 | Cadastro de conta funcional (`signUp`) | Claude | **Review** | Entregue junto de I-01 |
-| I-03 | Seletor de clínica (`switch_clinic`) | Claude | Backlog | Depois de I-01 |
+| **I-03** | **Seletor de clínica (`switch_clinic`)** | Claude | **Review** | Regra de produto: **uma assinatura = uma clínica**, e cada conta cria uma só. Vários vínculos existem pelo convite (I-04) — ver §13.1 |
 | I-04 | Convites (`accept_invitation`) + revogação de sessão | Claude | Backlog | R6 |
 | I-05 | Matriz papel × ação + `unauthorized`/`forbidden` | Claude / Codex | Backlog | D10 |
 
@@ -452,6 +452,27 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | Relatórios | T-01 | Backlog |
 | WhatsApp / Chat IA / Automações | W-01, AI-*, AU-01 | Blocked |
 
+### 13.1 Uma assinatura, uma clínica — e o que isso NÃO significa
+
+Decisão de produto de **07/08/2026**. São duas cardinalidades diferentes, e
+confundi-las custa caro nos dois sentidos:
+
+| Relação | Cardinalidade | Onde vive |
+|---|---|---|
+| Assinatura → clínica | **1:1** | `subscriptions.clinic_id` |
+| Conta → clínica que ela **cria** | **1:1** | Guard em `createClinicAction` |
+| Usuário → clínica de que ele **participa** | **N:N** | `memberships` |
+
+A regra proíbe **plano multi-unidade** (uma assinatura cobrindo uma rede) e
+**uma conta responsável por duas clínicas**. Ela **não** proíbe o profissional
+que atende em dois consultórios: ele é convidado para o segundo, que tem
+assinatura própria, paga por outro dono.
+
+**Consequência que já valeu uma correção:** o guard do `createClinicAction`
+recusava quem tivesse *qualquer* vínculo ativo. Isso significava que aceitar um
+convite tirava da pessoa, para sempre, o direito de abrir a própria clínica — e
+ninguém desconfiaria disso ao aceitar. O filtro passou a ser por `role = 'owner'`.
+
 ### O que trava P-02b
 
 P-02a entregou listagem paginada, busca e filtro de status no servidor **sem tocar
@@ -462,7 +483,7 @@ no banco**. O resto depende de coisas que não são código de aplicação:
 | B1 | Sem acesso SQL ao banco remoto (não há `DATABASE_URL` nem access token; `supabase/migrations/` está vazio — D7) | Índices, extensões e **colação de `patients.full_name`** não são verificáveis. Se a colação for não determinística, o keyset precisa mudar para `(created_at, id)` |
 | B2 | Migration exige aprovação do Codex e PR isolado (§7.4) | `pg_trgm` + `unaccent` e o índice `(clinic_id, full_name, id) where deleted_at is null`. Sem eles a busca infixa é **correta e O(n) por clínica** |
 | B3 | Filtro "Última visita (30/90 dias)" deriva de `appointments` | Não é expressável em keyset sobre `patients` via PostgREST — "mais de 90 dias" é anti-join. Exige `last_visit_at` denormalizado ou RPC. **O controle está desabilitado na tela, não fingindo funcionar** |
-| B4 | F-02 (cache tags com `clinic_id`) não existe — D3 | A listagem não pode ser cacheada: `use cache` sem tag por clínica é o R2 |
+| B4 | **Destravado como infraestrutura, ainda aberto como decisão.** F-02 entregou `lib/cache/tags.ts`, `cacheComponents: true` e a invalidação por tag no `createAction` — a tag por clínica existe e é testada. O que falta não é mais o R2: é o **contrato de cache do dado clínico**. A listagem lê sessão em cookie, `searchParams` e `connection()`, e as três são proibidas em `use cache`; o caminho é `'use cache: private'` com `cacheLife` e decisão de LGPD explícitas | A listagem continua **sem cache**. P-02b decide o contrato ou entrega só índice e filtro |
 
 **P-02 não está Done.** P-02a está em Review; P-02b continua Blocked.
 
@@ -504,9 +525,10 @@ recuperação de senha, marca/tema por clínica.
 
 ### Pré-requisitos
 
-F-01 (`createAction` + auditoria) entrou em Review; F-02 (cache tags) precisa entrar antes
-ou junto da primeira mutação tenant-scoped. F-03 e F-04 entram em paralelo, sem bloquear
-o bootstrap, mas F-04 é necessário para assinar os critérios automatizados.
+F-01 (`createAction` + auditoria) e F-02 (cache tags + `cacheComponents`) entraram em
+Review; as duas já cobrem a primeira mutação tenant-scoped. F-03 e F-04 entram em
+paralelo, sem bloquear o bootstrap, mas F-04 é necessário para assinar os critérios
+automatizados.
 
 ### Critérios de aceite
 

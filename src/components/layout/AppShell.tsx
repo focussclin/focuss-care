@@ -14,10 +14,24 @@ export interface AppShellProps {
   userRole: string
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  /**
+   * Seletor de clinica, quando ha mais de um vinculo (I-03).
+   *
+   * Chega como slot, e nao como lista de clinicas, para que o design system nao
+   * precise conhecer `memberships` nem a Server Action que troca de tenant —
+   * `components/` nao importa `modules/`.
+   */
+  clinicSwitcher?: ReactNode
   children: ReactNode
 }
 
-export function AppShell({ userName, userRole, clinicName, children }: AppShellProps) {
+export function AppShell({
+  userName,
+  userRole,
+  clinicName,
+  clinicSwitcher,
+  children,
+}: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -48,6 +62,7 @@ export function AppShell({ userName, userRole, clinicName, children }: AppShellP
             userName={userName}
             userRole={userRole}
             clinicName={clinicName}
+            clinicSwitcher={clinicSwitcher}
             onMenuClick={() => setDrawerOpen(true)}
           />
           <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
