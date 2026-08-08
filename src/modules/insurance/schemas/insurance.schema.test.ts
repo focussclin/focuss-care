@@ -2,14 +2,17 @@ import { describe, expect, it } from 'vitest'
 
 import {
   answerAuthorizationSchema,
+  createClaimDenialSchema,
   createAuthorizationSchema,
   createPlanSchema,
   storedProceduresSchema,
+  updateClaimDenialSchema,
 } from './insurance.schema'
 
 const AUTHORIZATION = '9019956f-bdd8-4d61-868d-09b02332dad0'
 const CARD = '5f2b1a3c-4d5e-4f60-8a71-9b2c3d4e5f60'
 const PROVIDER = '7e3b0000-0000-4000-8000-00000000b48e'
+const INVOICE = '8f3b0000-0000-4000-8000-000000000000'
 
 /**
  * Contratos de convênio (V-01).
@@ -137,5 +140,49 @@ describe('storedProceduresSchema', () => {
     expect(
       storedProceduresSchema.safeParse([{ description: 'Consulta' }]).success,
     ).toBe(false)
+  })
+})
+
+describe('claim denial schemas', () => {
+  it('converte a glosa para centavos e exige motivo', () => {
+    const result = createClaimDenialSchema.safeParse({
+      invoiceId: INVOICE,
+      amount: '125,50',
+      deniedAt: '2026-08-08',
+      reason: 'Código do procedimento não coberto',
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.amount).toBe(12550)
+  })
+
+  it('recusa valor zerado ou data fora do formato', () => {
+    expect(
+      createClaimDenialSchema.safeParse({
+        invoiceId: INVOICE,
+        amount: '0,00',
+        deniedAt: '08/08/2026',
+        reason: 'Motivo',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('exige valor recuperado apenas ao marcar como recuperada', () => {
+    expect(
+      updateClaimDenialSchema.safeParse({
+        denialId: INVOICE,
+        status: 'recovered',
+        notes: '',
+      }).success,
+    ).toBe(false)
+
+    expect(
+      updateClaimDenialSchema.safeParse({
+        denialId: INVOICE,
+        status: 'recovered',
+        recoveredAmount: '100,00',
+        notes: '',
+      }).success,
+    ).toBe(true)
   })
 })

@@ -8,25 +8,17 @@ import type {
   NewPlanData,
   NewProviderData,
   PatientInsuranceOption,
+  ClaimDenial,
+  ClaimDenialUpdate,
+  ClaimInvoiceOption,
+  NewClaimDenialData,
 } from './Insurance'
 
 /**
  * PORTA dos convênios — feature **V-01**.
  *
- * # O que NÃO está aqui, e por quê
- *
- * **Não há nada sobre GLOSA.** Não é escopo cortado por tempo: **não existe
- * onde guardar**. O schema tem `insurance_authorizations.status = 'denied'`, que
- * é negativa de autorização PRÉVIA — decidida antes do atendimento acontecer. A
- * glosa é outra coisa: a operadora autorizou, o atendimento foi feito, a fatura
- * foi enviada, e o pagamento é recusado depois. Não há tabela, coluna nem status
- * para isso, e `payables` não serve (é conta a pagar da clínica, não recusa de
- * recebimento).
- *
- * Modelar glosa em cima de `denied` misturaria dois fatos com consequências
- * financeiras opostas: uma guia negada impede o atendimento; uma glosa acontece
- * com o atendimento já prestado e vira prejuízo ou recurso. A migration está
- * proposta em `supabase/migrations/20260808_insurance_claim_denials.sql`.
+ * A tabela de glosas é separada de autorizações: uma guia negada impede o
+ * atendimento; uma glosa acontece depois da fatura e vira prejuízo ou recurso.
  *
  * **Não há verificação de elegibilidade.** Consultar se a carteirinha está
  * válida JUNTO À OPERADORA exige integração externa (TISS/portal), que este
@@ -94,4 +86,24 @@ export interface InsuranceRepository {
     authorizationId: string,
     answer: AuthorizationAnswer,
   ): Promise<Authorization>
+
+  listClaimDenials(clinicId: string, limit: number): Promise<ClaimDenial[]>
+
+  /** Faturas de convênio não canceladas, para registrar uma glosa. */
+  listClaimInvoiceOptions(
+    clinicId: string,
+    limit: number,
+  ): Promise<ClaimInvoiceOption[]>
+
+  createClaimDenial(
+    clinicId: string,
+    data: NewClaimDenialData,
+    createdBy: string,
+  ): Promise<ClaimDenial>
+
+  updateClaimDenial(
+    clinicId: string,
+    denialId: string,
+    update: ClaimDenialUpdate,
+  ): Promise<ClaimDenial>
 }

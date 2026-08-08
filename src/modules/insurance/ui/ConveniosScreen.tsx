@@ -28,6 +28,8 @@ import { setProviderActiveAction } from '../actions/providers.action'
 import {
   authorizationStatusLabels,
   insuranceMessages,
+  type ClaimDenialDto,
+  type ClaimInvoiceOptionDto,
   type AuthorizationDto,
   type InsuranceSummaryDto,
   type PatientInsuranceDto,
@@ -35,6 +37,7 @@ import {
   type ProviderDto,
 } from '../schemas/insurance.schema'
 import { AnswerAuthorizationModal } from './AnswerAuthorizationModal'
+import { ClaimDenialsPanel } from './ClaimDenialsPanel'
 import { NewAuthorizationModal } from './NewAuthorizationModal'
 import { NewProviderModal } from './NewProviderModal'
 
@@ -44,6 +47,8 @@ export interface ConveniosScreenProps {
   plans: readonly PlanDto[]
   authorizations: readonly AuthorizationDto[]
   cards: readonly PatientInsuranceDto[]
+  claimDenials: readonly ClaimDenialDto[]
+  claimInvoices: readonly ClaimInvoiceOptionDto[]
   canManage: boolean
   isLive?: boolean
 }
@@ -62,13 +67,7 @@ const statusTone: Record<string, StatusTone> = {
  * operadoras com "842 pacientes" e "14 guias pendentes" estavam escritas no
  * arquivo.
  *
- * # Duas ausências que a tela declara em vez de esconder
- *
- * **Glosas.** Não há onde registrá-las: o schema não tem tabela, coluna nem
- * status para a recusa de pagamento após o faturamento. Guia negada, que
- * aparece aqui, é outra coisa — negativa de autorização, decidida antes do
- * atendimento. Tratar uma como a outra misturaria fatos com consequências
- * financeiras opostas.
+ * # Uma ausência que a tela declara em vez de esconder
  *
  * **Elegibilidade.** A validade exibida é a que a clínica cadastrou. Nenhuma
  * consulta é feita à operadora, e chamar isso de "elegível" faria a recepção
@@ -80,6 +79,8 @@ export function ConveniosScreen({
   plans,
   authorizations,
   cards,
+  claimDenials,
+  claimInvoices,
   canManage,
   isLive = false,
 }: ConveniosScreenProps) {
@@ -349,10 +350,12 @@ export function ConveniosScreen({
         </Card>
       </div>
 
-      <p className="flex items-start gap-2.5 rounded-card border border-border-card bg-surface px-4 py-3 text-aux text-muted">
-        <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
-        {insuranceMessages.glossUnavailable}
-      </p>
+      <ClaimDenialsPanel
+        denials={claimDenials}
+        invoices={claimInvoices}
+        canManage={canManage}
+        isLive={isLive}
+      />
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />

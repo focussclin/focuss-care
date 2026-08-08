@@ -16,8 +16,8 @@
 --
 -- Modelar a segunda em cima da primeira misturaria dois fatos com efeitos
 -- financeiros opostos, e o relatorio de convenios passaria a somar macas com
--- laranjas. Por isso V-01 deixou a glosa explicitamente AUSENTE, com o motivo na
--- tela, em vez de reaproveitar o status errado.
+-- laranjas. Por isso a migration cria uma tabela propria, sem reaproveitar o
+-- status errado.
 --
 -- -----------------------------------------------------------------------------
 -- DECISOES QUE O REVISOR PRECISA CONFERIR
@@ -38,10 +38,9 @@
 --    para sempre.
 --
 -- 5. RLS pelo mesmo padrao das demais tabelas do modulo: leitura e escrita
---    restritas a quem `can_access_financial()` autoriza. **O corpo dessa funcao
---    nao e legivel deste ambiente (bloqueio B1)** — o revisor precisa confirmar
---    que ela cobre `finance`, senao a tela ficara vazia para justamente quem
---    trabalha com glosa.
+--    restritas a quem `can_access_financial()` autoriza. A policy foi aplicada e
+--    verificada estruturalmente; o teste funcional com o papel `finance` segue
+--    recomendado no ambiente remoto.
 -- =============================================================================
 
 begin;

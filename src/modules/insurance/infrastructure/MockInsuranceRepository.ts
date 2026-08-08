@@ -1,5 +1,7 @@
 import type {
   Authorization,
+  ClaimDenial,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
@@ -59,6 +61,22 @@ export class MockInsuranceRepository implements InsuranceRepository {
 
   async answerAuthorization(): Promise<never> {
     return this.refuseWrite('answerAuthorization')
+  }
+
+  async listClaimDenials(): Promise<ClaimDenial[]> {
+    return []
+  }
+
+  async listClaimInvoiceOptions(): Promise<ClaimInvoiceOption[]> {
+    return []
+  }
+
+  async createClaimDenial(): Promise<never> {
+    return this.refuseWrite('createClaimDenial')
+  }
+
+  async updateClaimDenial(): Promise<never> {
+    return this.refuseWrite('updateClaimDenial')
   }
 
   private refuseWrite(operation: string): never {

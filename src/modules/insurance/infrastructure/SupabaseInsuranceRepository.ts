@@ -2,16 +2,25 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import type { AuthorizationStatus, Database, Json } from '@/lib/supabase/database.types'
+import type {
+  AuthorizationStatus,
+  ClaimDenialStatus,
+  Database,
+  Json,
+} from '@/lib/supabase/database.types'
 
 import type {
   Authorization,
   AuthorizationAnswer,
   AuthorizationProcedure,
+  ClaimDenial,
+  ClaimDenialUpdate,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
   NewAuthorizationData,
+  NewClaimDenialData,
   NewPlanData,
   NewProviderData,
   PatientInsuranceOption,
@@ -44,6 +53,27 @@ const AUTHORIZATION_SELECT = `
   )
 `
 
+const CLAIM_DENIAL_SELECT = `
+  id,
+  invoice_id,
+  invoice_item_id,
+  denial_code,
+  reason,
+  amount_cents,
+  status,
+  denied_at,
+  appealed_at,
+  resolved_at,
+  recovered_cents,
+  notes,
+  invoices (
+    number,
+    patients ( full_name ),
+    insurance_plans ( name )
+  ),
+  invoice_items ( description )
+`
+
 interface AuthorizationRow {
   id: string
   patient_id: string
@@ -62,6 +92,27 @@ interface AuthorizationRow {
       insurance_providers: { name: string } | null
     } | null
   } | null
+}
+
+interface ClaimDenialRow {
+  id: string
+  invoice_id: string
+  invoice_item_id: string | null
+  denial_code: string | null
+  reason: string
+  amount_cents: number
+  status: 'received' | 'appealing' | 'recovered' | 'accepted'
+  denied_at: string
+  appealed_at: string | null
+  resolved_at: string | null
+  recovered_cents: number | null
+  notes: string | null
+  invoices: {
+    number: number | null
+    patients: { full_name: string } | null
+    insurance_plans: { name: string } | null
+  } | null
+  invoice_items: { description: string } | null
 }
 
 /**
@@ -166,6 +217,156 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     if (error) throw readFailure('listAuthorizations', error)
 
     return (data as unknown as AuthorizationRow[]).map(toAuthorization)
+  }
+
+  async listClaimDenials(
+    clinicId: string,
+    limit: number,
+  ): Promise<ClaimDenial[]> {
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .select(CLAIM_DENIAL_SELECT)
+      .eq('clinic_id', clinicId)
+      .order('denied_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listClaimDenials', error)
+
+    return (data as unknown as ClaimDenialRow[]).map(toClaimDenial)
+  }
+
+  async listClaimInvoiceOptions(
+    clinicId: string,
+    limit: number,
+  ): Promise<ClaimInvoiceOption[]> {
+    const { data, error } = await this.client
+      .from('invoices')
+      .select(
+        'id, number, total_cents, patients ( full_name ), insurance_plans ( name )',
+      )
+      .eq('clinic_id', clinicId)
+      .eq('payer_type', 'insurance')
+      .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listClaimInvoiceOptions', error)
+
+    const rows = data as unknown as {
+      id: string
+      number: number | null
+      total_cents: number
+      patients: { full_name: string } | null
+      insurance_plans: { name: string } | null
+    }[]
+
+    return rows.map((row) => ({
+      id: row.id,
+      patientName: row.patients?.full_name ?? 'Paciente',
+      invoiceNumber: row.number,
+      totalCents: row.total_cents,
+      label: `Fatura ${row.number ? `nº ${row.number}` : row.id.slice(0, 8)} · ${
+        row.patients?.full_name ?? 'Paciente'
+      } · ${row.insurance_plans?.name ?? 'Convênio'}`,
+    }))
+  }
+
+  async createClaimDenial(
+    clinicId: string,
+    input: NewClaimDenialData,
+    createdBy: string,
+  ): Promise<ClaimDenial> {
+    const { data: invoice, error: invoiceError } = await this.client
+      .from('invoices')
+      .select('id, payer_type, status, total_cents')
+      .eq('clinic_id', clinicId)
+      .eq('id', input.invoiceId)
+      .eq('payer_type', 'insurance')
+      .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
+      .maybeSingle()
+
+    if (invoiceError) throw toWriteError(invoiceError)
+    if (!invoice) throw notFound(input.invoiceId)
+    if (input.amountCents > invoice.total_cents) {
+      throw new InsuranceRepositoryError(
+        'claim-amount-exceeds-invoice',
+        'valor glosado acima do total da fatura',
+      )
+    }
+
+    const { data: row, error } = await this.client
+      .from('insurance_claim_denials')
+      .insert({
+        clinic_id: clinicId,
+        invoice_id: input.invoiceId,
+        denial_code: input.denialCode,
+        reason: input.reason,
+        amount_cents: input.amountCents,
+        status: 'received',
+        denied_at: toDateOnly(input.deniedAt),
+        notes: input.notes,
+        created_by: createdBy,
+      })
+      .select('id')
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return this.requireClaimDenial(clinicId, row.id)
+  }
+
+  async updateClaimDenial(
+    clinicId: string,
+    denialId: string,
+    update: ClaimDenialUpdate,
+  ): Promise<ClaimDenial> {
+    const current = await this.requireClaimDenial(clinicId, denialId)
+    assertClaimTransition(current.status, update.status)
+
+    if (
+      update.status === 'recovered' &&
+      update.recoveredCents > current.amountCents
+    ) {
+      throw new InsuranceRepositoryError(
+        'claim-recovery-exceeds-denial',
+        'valor recuperado acima da glosa',
+      )
+    }
+
+    const now = new Date().toISOString()
+    const patch = {
+      status: update.status,
+      appealed_at:
+        update.status === 'appealing'
+          ? current.appealedAt?.toISOString() ?? now
+          : current.appealedAt?.toISOString() ?? null,
+      resolved_at:
+        update.status === 'recovered' || update.status === 'accepted'
+          ? now
+          : current.resolvedAt?.toISOString() ?? null,
+      recovered_cents:
+        update.status === 'recovered'
+          ? update.recoveredCents
+          : current.recoveredCents,
+      notes: update.notes,
+      updated_at: now,
+    }
+
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .update(patch)
+      .eq('clinic_id', clinicId)
+      .eq('id', denialId)
+      // Compare-and-swap: duas pessoas não podem avançar a mesma glosa
+      // partindo de estados diferentes.
+      .eq('status', current.status)
+      .select('id')
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) throw new InsuranceRepositoryError('claim-already-resolved', 'glosa já encerrada')
+
+    return this.requireClaimDenial(clinicId, denialId)
   }
 
   async listPatientInsurances(
@@ -472,6 +673,23 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
 
     return toAuthorization(data as unknown as AuthorizationRow)
   }
+
+  private async requireClaimDenial(
+    clinicId: string,
+    denialId: string,
+  ): Promise<ClaimDenial> {
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .select(CLAIM_DENIAL_SELECT)
+      .eq('clinic_id', clinicId)
+      .eq('id', denialId)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) throw notFound(denialId)
+
+    return toClaimDenial(data as unknown as ClaimDenialRow)
+  }
 }
 
 function toAuthorization(row: AuthorizationRow): Authorization {
@@ -491,6 +709,56 @@ function toAuthorization(row: AuthorizationRow): Authorization {
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     denialReason: row.denial_reason,
   }
+}
+
+function toClaimDenial(row: ClaimDenialRow): ClaimDenial {
+  return {
+    id: row.id,
+    invoiceId: row.invoice_id,
+    invoiceNumber: row.invoices?.number ?? null,
+    patientName: row.invoices?.patients?.full_name ?? 'Paciente',
+    planName: row.invoices?.insurance_plans?.name ?? 'Convênio',
+    invoiceItemDescription: row.invoice_items?.description ?? null,
+    denialCode: row.denial_code,
+    reason: row.reason,
+    amountCents: row.amount_cents,
+    status: row.status,
+    deniedAt: new Date(`${row.denied_at}T00:00:00`),
+    appealedAt: row.appealed_at ? new Date(row.appealed_at) : null,
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at) : null,
+    recoveredCents: row.recovered_cents,
+    notes: row.notes,
+  }
+}
+
+function assertClaimTransition(
+  current: ClaimDenialStatus,
+  next: ClaimDenialUpdate['status'],
+): void {
+  if (current === 'recovered' || current === 'accepted') {
+    throw new InsuranceRepositoryError(
+      'claim-already-resolved',
+      'glosa ja encerrada',
+    )
+  }
+
+  const valid =
+    (current === 'received' && (next === 'appealing' || next === 'accepted')) ||
+    (current === 'appealing' && (next === 'recovered' || next === 'accepted'))
+
+  if (!valid) {
+    throw new InsuranceRepositoryError(
+      'claim-invalid-transition',
+      `transicao de glosa ${current} para ${next} invalida`,
+    )
+  }
+}
+
+/** `Date` -> `YYYY-MM-DD`, sem deslocar o dia por fuso. */
+function toDateOnly(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 /**

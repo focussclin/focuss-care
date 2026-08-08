@@ -6,6 +6,8 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import {
   toAuthorizationDto,
+  toClaimDenialDto,
+  toClaimInvoiceOptionDto,
   toInsuranceSummaryDto,
   toPatientInsuranceDto,
   toPlanDto,
@@ -21,6 +23,8 @@ export const metadata: Metadata = {
 
 /** Quantas guias a tela carrega. Ver o JSDoc do componente sobre o recorte. */
 const AUTHORIZATION_LIMIT = 50
+const CLAIM_DENIAL_LIMIT = 50
+const CLAIM_INVOICE_LIMIT = 100
 
 export default async function ConveniosPage() {
   await connection()
@@ -38,12 +42,25 @@ export default async function ConveniosPage() {
 
   const source = await getInsuranceRepository()
 
-  const [summary, providers, plans, authorizations, cards] = await Promise.all([
+  const [
+    summary,
+    providers,
+    plans,
+    authorizations,
+    cards,
+    claimDenials,
+    claimInvoices,
+  ] = await Promise.all([
     source.repository.summary(source.clinicId),
     source.repository.listProviders(source.clinicId),
     source.repository.listPlans(source.clinicId),
     source.repository.listAuthorizations(source.clinicId, AUTHORIZATION_LIMIT),
     source.repository.listPatientInsurances(source.clinicId),
+    source.repository.listClaimDenials(source.clinicId, CLAIM_DENIAL_LIMIT),
+    source.repository.listClaimInvoiceOptions(
+      source.clinicId,
+      CLAIM_INVOICE_LIMIT,
+    ),
   ])
 
   return (
@@ -52,7 +69,9 @@ export default async function ConveniosPage() {
       providers={providers.map(toProviderDto)}
       plans={plans.map(toPlanDto)}
       authorizations={authorizations.map(toAuthorizationDto)}
-      cards={cards.map(toPatientInsuranceDto)}
+    cards={cards.map(toPatientInsuranceDto)}
+    claimDenials={claimDenials.map(toClaimDenialDto)}
+    claimInvoices={claimInvoices.map(toClaimInvoiceOptionDto)}
       canManage={can(role, 'insurance.manage')}
       isLive={source.isLive}
     />

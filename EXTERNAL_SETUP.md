@@ -129,7 +129,8 @@ select distinct kind from public.document_sequences;
 As migrations continuam versionadas como histórico reproduzível. A emissão usa
 `create_invitation` e a aceitação usa `accept_invitation`; o teste funcional com
 duas contas é necessário para confirmar no ambiente remoto que os algoritmos de
-hash estão alinhados.
+hash estão alinhados. O módulo de glosas já usa a tabela aplicada, com RLS e
+ciclo de acompanhamento persistido.
 
 ---
 

@@ -1,5 +1,7 @@
 import type {
   Authorization,
+  ClaimDenial,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
@@ -7,6 +9,8 @@ import type {
 } from '../domain/Insurance'
 import type {
   AuthorizationDto,
+  ClaimDenialDto,
+  ClaimInvoiceOptionDto,
   InsuranceSummaryDto,
   PatientInsuranceDto,
   PlanDto,
@@ -83,4 +87,30 @@ export function toInsuranceSummaryDto(
     pendingAuthorizations: summary.pendingAuthorizations,
     deniedAuthorizations: summary.deniedAuthorizations,
   }
+}
+
+export function toClaimDenialDto(denial: ClaimDenial): ClaimDenialDto {
+  return {
+    id: denial.id,
+    invoiceId: denial.invoiceId,
+    invoiceNumber: denial.invoiceNumber,
+    patientName: denial.patientName,
+    planName: denial.planName,
+    invoiceItemDescription: denial.invoiceItemDescription,
+    denialCode: denial.denialCode,
+    reason: denial.reason,
+    amountCents: denial.amountCents,
+    status: denial.status,
+    deniedAt: denial.deniedAt.toISOString(),
+    appealedAt: denial.appealedAt?.toISOString() ?? null,
+    resolvedAt: denial.resolvedAt?.toISOString() ?? null,
+    recoveredCents: denial.recoveredCents,
+    notes: denial.notes,
+  }
+}
+
+export function toClaimInvoiceOptionDto(
+  invoice: ClaimInvoiceOption,
+): ClaimInvoiceOptionDto {
+  return { id: invoice.id, label: invoice.label }
 }

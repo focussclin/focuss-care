@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 755 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 762 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -56,7 +56,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento e caixa funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
-| `insurance` | **EM ANDAMENTO** | Operadoras, planos e guias funcionam; **glosa ausente** (sem tabela) |
+| `insurance` | **EM ANDAMENTO** | Operadoras, planos, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda do dia e atividade — todos contados do banco |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 
@@ -93,7 +93,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 ## 4.0 Auditoria final local — 08/08/2026
 
 Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
-**755 testes em 54 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
+**762 testes em 54 arquivos**, `lint`, `typecheck`, `build` e OpenNext Cloudflare limpos, e smoke HTTP
 das 22 rotas com o servidor de desenvolvimento ativo.
 
 | Verificação | Resultado |
@@ -210,7 +210,7 @@ projeto Supabase.
 | **P-P6** | Policy de `INSERT` de `audit_log` | **RESOLVIDO** — policy aplicada e verificada |
 | **P-INV** | RPC de emissão de convite | **RESOLVIDO no banco**; aplicação emite link seguro. Falta apenas aceite funcional com outra conta |
 | **P-OVL** | Constraint de exclusão em `appointments` | **RESOLVIDO** — constraint aplicada e verificada |
-| **P-GLO** | Tabela de glosas | **RESOLVIDO no banco** — tela completa segue como próxima fatia de produto |
+| **P-GLO** | Tabela e ciclo de glosas | **RESOLVIDO nesta fatia** — registro, recurso, recuperação e aceite persistem |
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
@@ -239,7 +239,6 @@ que não funciona:
 | Emissão fiscal numerada | `/financeiro` | `issue_invoice` com assinatura não resolvida; numeração que pula é problema com a prefeitura |
 | Despesas e contas a pagar | `/financeiro` | `payables` existe, nenhuma tela grava; card em R$ 0,00 diria que a clínica não tem custo |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |
-| Glosas | `/convenios` | Não há tabela; guia negada é outra coisa |
 | Elegibilidade junto à operadora | `/convenios` | Exige integração externa; o que existe é a validade cadastrada |
 | Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |
 | Turnos partidos no expediente | `/configuracoes` | Formato guarda um turno por dia, e a tela avisa antes de salvar |

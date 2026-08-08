@@ -158,7 +158,13 @@ export function NewPasswordForm() {
         {...register('passwordConfirmation')}
       />
 
-      <Button type="submit" size="lg" fullWidth disabled={isPending}>
+      <Button
+        type="submit"
+        size="lg"
+        fullWidth
+        disabled={isPending}
+        aria-label={isPending ? 'Salvando… — salvar nova senha' : 'Salvar nova senha'}
+      >
         {isPending ? 'Salvando…' : 'Salvar nova senha'}
       </Button>
     </form>

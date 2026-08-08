@@ -9,6 +9,14 @@ export type InsuranceWriteFailure =
    * texto usado para recorrer junto à operadora.
    */
   | 'already-answered'
+  /** Uma glosa encerrada não pode ser reaberta nem sobrescrita. */
+  | 'claim-already-resolved'
+  /** O próximo estado não é válido para o estado atual. */
+  | 'claim-invalid-transition'
+  /** A glosa não pode superar o valor faturado. */
+  | 'claim-amount-exceeds-invoice'
+  /** O valor recuperado não pode superar o valor glosado. */
+  | 'claim-recovery-exceeds-denial'
   /** Já existe operadora com este nome ou registro ANS nesta clínica. */
   | 'duplicate'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
