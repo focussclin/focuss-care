@@ -55,7 +55,15 @@ export default async function ProntuariosPage() {
    * Best-effort de propósito — falhar aqui não pode impedir um profissional de
    * ver o prontuário do paciente que está na frente dele.
    */
-  await recordSource.repository.logAccess(recordSource.clinicId, 'all')
+  /*
+   * `null` porque esta tela e a LISTAGEM, nao um paciente.
+   *
+   * Aqui passava a string 'all', e `audit_log.entity_id` e `uuid`: o Postgres
+   * recusava a linha inteira com 22P02 e o evento sumia — a auditoria e
+   * best-effort, entao nada quebrava na tela. A leitura de prontuario
+   * simplesmente nao era registrada.
+   */
+  await recordSource.repository.logAccess(recordSource.clinicId, null)
 
   const [records, patientPage] = await Promise.all([
     recordSource.repository.listRecent(recordSource.clinicId, RECENT_LIMIT),

@@ -81,6 +81,12 @@ export interface MedicalRecordRepository {
    * Existe na porta, e não escondido no adapter, porque é requisito de
    * conformidade e não detalhe de implementação: quem trocar o backend precisa
    * saber que isto tem de continuar acontecendo.
+   *
+   * **`patientId` nulo é a listagem**, não um paciente. A rota `/prontuarios`
+   * mostra os registros recentes da clínica inteira, e ali não há um alvo: o
+   * evento diz que houve leitura, e o escopo vai em `after`. Antes isto era a
+   * string `'all'`, que o Postgres recusava — `entity_id` é `uuid`, e a linha
+   * inteira era descartada em silêncio.
    */
-  logAccess(clinicId: string, patientId: string): Promise<void>
+  logAccess(clinicId: string, patientId: string | null): Promise<void>
 }

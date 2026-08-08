@@ -283,7 +283,10 @@ export class SupabaseMedicalRecordRepository
    * Vale lembrar que hoje NENHUM evento persiste: a policy de `INSERT` de
    * `audit_log` recusa o membro autenticado (P-P6). A migration está proposta.
    */
-  async logAccess(clinicId: string, patientId: string): Promise<void> {
+  async logAccess(
+    clinicId: string,
+    patientId: string | null,
+  ): Promise<void> {
     const { recordAuditEvent } = await import('@/lib/audit/audit-log')
 
     await recordAuditEvent(
@@ -293,7 +296,12 @@ export class SupabaseMedicalRecordRepository
         entityId: patientId,
         // Nenhum conteúdo clínico entra no evento — só o fato de ter havido
         // acesso. O "o quê" está no prontuário; aqui fica o "quem, quando".
-        after: { scope: 'medical_records' },
+        // `target` distingue a leitura da lista da de um paciente — o
+        // `entity_id` nulo sozinho nao diria qual das duas foi.
+        after: {
+          scope: 'medical_records',
+          target: patientId ? 'patient' : 'list',
+        },
       },
       { client: this.client },
     )
