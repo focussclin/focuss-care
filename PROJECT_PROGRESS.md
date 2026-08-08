@@ -164,10 +164,20 @@ dele. Oito telas saíram com suas fatias; as três últimas saíram com o módul
 | `AutomacoesScreen` | AU-01 | Regras reais de `workflows`, e que **nada as executa** |
 
 **As features continuam BLOQUEADAS** — não há worker, provedor de WhatsApp,
-provedor de IA nem executor de automação. O que mudou é que as telas dizem isso
-em vez de simular um canal ligado. A vitrine de automações era o caso mais grave:
-o interruptor funcionava, mudava para "ativa", e não ligava nada — uma clínica
+provedor de IA nem executor de automação, e agora elas têm linha própria na §6
+com o motivo e o caminho de saída. O que mudou é que as telas dizem isso em vez
+de simular um canal ligado. A vitrine de automações era o caso mais grave: o
+interruptor funcionava, mudava para "ativa", e não ligava nada — uma clínica
 confiaria que o lembrete de consulta estava saindo.
+
+**Tentativa de destravar W-01 pela fundação local, em 08/08/2026: descartada.**
+A avaliação está em `EXTERNAL_SETUP.md` §3.1, e o resumo é que as três peças
+candidatas (contrato do provider, porta de fila com envelope de evento, validação
+de `provider_config`) nasceriam **sem chamador**: a primeira adivinharia uma API
+externa não verificada, a segunda precisa de uma decisão de infraestrutura que
+não foi tomada, e a terceira validaria uma coluna que nenhuma linha do código lê
+ou escreve. Nenhum código foi alterado — abstração sem chamador é dívida com cara
+de progresso.
 
 ---
 
@@ -193,6 +203,9 @@ projeto Supabase.
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
+| **W-01** | WhatsApp/Evolution + worker: bloqueado por **aprovação de `docs/04-agente-ia.md`** e por infraestrutura externa (worker, Redis, instância Evolution com credencial) | A clínica não centraliza o WhatsApp. `/whatsapp` mostra o estado do canal e diz o que falta, sem simular conexão | Aprovar o desenho e provisionar worker + Redis + instância. Detalhe em `EXTERNAL_SETUP.md` §3.1 |
+| **AI-01..07** | Agente de IA: mesma aprovação pendente, mais provedor de modelo | Nenhuma sugestão e nenhum envio. `/chat-ia` declara a regra P9 antes de existir recurso | Idem W-01, e depois dele |
+| **AU-01** | Executor de automações | `workflows` tem regras reais e **nada as executa**; a tela diz isso | Depende de W-01 |
 | **P-C2** | `cacheComponents` exige shell estático | **3 segmentos** usam `instant = false` (eram 14, depois 5, depois 4). `/login`, `/recuperar-senha` e `/redefinir-senha` prerenderizam. Os três restantes têm motivo escrito no próprio arquivo e registrado em `src/app/instantOptOuts.test.ts`: dois são portões de sessão que terminam em `redirect`, e convertê-los trocaria um 307 por navegação dependente de JavaScript; o terceiro é a casca autenticada inteira | Depende de mover o portão de sessão para fora da página — não há conversão segura enquanto a decisão de renderizar for a própria página |
 
 ---

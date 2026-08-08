@@ -134,9 +134,9 @@ Registrado para que ninguém saia procurando:
 
 | Serviço | Situação |
 |---|---|
-| Provedor de WhatsApp (Evolution, Cloud API) | **Não configurado e não usado.** A tela `/whatsapp` é vitrine; nenhuma credencial é lida |
+| Provedor de WhatsApp (Evolution, Cloud API) | **Não configurado e não usado.** Nenhuma credencial é lida, e `provider_config` não é escrito nem lido por linha nenhuma do código. `/whatsapp` mostra o estado de conexão vindo de `whatsapp_channels` e declara o que falta — não é mais vitrine |
 | Redis / worker de fila | **Não existe.** Previsto para W-01, sem código no repositório |
-| Provedor de IA | **Não configurado e não usado.** `/chat-ia` é vitrine; nenhuma chamada sai daqui |
+| Provedor de IA | **Não configurado e não usado.** Nenhuma chamada sai daqui; `/chat-ia` mostra que não há provedor e declara a regra P9 — não é mais vitrine |
 | Gateway de pagamento | **Não existe.** B-01 registra pagamento recebido, não processa cobrança |
 | Emissor de NFS-e | **Não existe.** O produto registra cobrança interna, não emite documento fiscal |
 | Storage para logotipo/anexos | **Bucket não verificado.** Por isso não há upload de marca em `/configuracoes` |
@@ -144,6 +144,33 @@ Registrado para que ninguém saia procurando:
 
 Quando algum destes entrar, ele ganha uma seção aqui **e** um adaptador com
 estado de conexão explícito — nunca uma tela que finge estar conectada.
+
+### 3.1 W-01 (WhatsApp/Evolution + worker) — o que falta, em ordem
+
+Avaliado em **08/08/2026** para decidir se dava para começar pela fundação local.
+**Não dá**, e o motivo não é falta de vontade: cada peça da fundação depende de
+algo que não existe aqui, e escrevê-la agora produziria código sem chamador.
+
+| Peça | Por que não pode ser escrita hoje |
+|---|---|
+| Contrato do provider (`createInstance`, `connect`, `send`) | O formato viria do que `docs/04-agente-ia.md` **propõe** sobre a Evolution API, não de contrato oficial verificado nem de credencial para testar. Seria uma interface adivinhada, com zero implementações |
+| Porta de fila + envelope de evento | Redis/BullMQ não estão instalados (e não devem ser, sem a decisão de infra). Uma porta sem adaptador e um envelope que ninguém produz nem consome são código morto que **parece** progresso |
+| Validação de `provider_config` | A regra é boa — a API key nunca pode ir para a coluna, porque `provider_config` sai em backup, log e export. Mas **nada no código escreve ou lê essa coluna**: não há ação "Conectar", nem formulário de canal. Um validador sem chamador se testa contra si mesmo |
+
+**Os dois bloqueios reais, nesta ordem:**
+
+1. **Aprovação de [`docs/04-agente-ia.md`](./docs/04-agente-ia.md)** — o documento é
+   uma proposta de arquitetura, e é ele que decide dois processos no mesmo
+   repositório, uma instância Evolution por clínica e a fila por conversa. Sem a
+   decisão, qualquer contrato escrito agora aposta num desenho que pode mudar.
+2. **Infraestrutura e credenciais** — worker e Redis num serviço próprio, mais
+   uma instância Evolution com URL e API key. A chave vai para o **ambiente do
+   servidor**; em `provider_config` entra só a referência a ela.
+
+O que **já está pronto** e não precisa de migration: `whatsapp_channels`,
+`conversations` e `messages` existem com `clinic_id`, e `messages` tem
+`provider_message_id` — a chave natural de idempotência para não gravar duas
+vezes o mesmo evento reenviado por timeout.
 
 ---
 
