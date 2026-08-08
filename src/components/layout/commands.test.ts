@@ -324,10 +324,22 @@ describe('busca de pacientes', () => {
 })
 
 describe('commandsFor', () => {
-  it('põe a busca em PRIMEIRO lugar', () => {
-    // Quem digitou um nome quer o nome, nao a tela cujo rotulo por acaso tem as
-    // mesmas letras.
-    const results = commandsFor('owner', 'pa')
+  it('põe a busca DEPOIS das telas que casam', () => {
+    /*
+     * A primeira versao a punha em primeiro lugar, e o teste de componente
+     * mostrou o custo: digitar 'financeiro' e apertar Enter levava a uma busca
+     * por paciente chamado 'financeiro', em vez de abrir a tela.
+     */
+    const results = commandsFor('owner', 'financeiro')
+
+    expect(results[0]?.href).toBe('/financeiro')
+    expect(results[results.length - 1]?.id).toBe('buscar-pacientes')
+  })
+
+  it('sem tela casando, a busca fica sozinha em primeiro', () => {
+    // O caso de todo nome de pessoa: nenhuma tela casa, e a busca e a unica
+    // acao util — vira o primeiro item sem precisar de regra especial.
+    const results = commandsFor('owner', 'silva')
 
     expect(results[0]?.id).toBe('buscar-pacientes')
   })

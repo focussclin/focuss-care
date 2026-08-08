@@ -170,8 +170,17 @@ export function patientSearchCommand(
 /**
  * O que a paleta mostra para este papel e esta consulta.
  *
- * A busca vem PRIMEIRO: quem digitou um nome quer o nome, não a tela cujo
- * rótulo por acaso contém as mesmas letras.
+ * # A busca vem por ÚLTIMO, e isso foi corrigido depois
+ *
+ * A primeira versão a punha em primeiro lugar, com o argumento de que quem
+ * digita um nome quer o nome. O teste de componente mostrou o custo: digitar
+ * "financeiro" e apertar `Enter` levava a `/pacientes?q=financeiro` — uma busca
+ * por paciente chamado "financeiro" — em vez de abrir a tela Financeiro.
+ *
+ * A regra certa é mais simples: **tela primeiro, busca depois**. Quando o termo
+ * casa com alguma tela, é quase sempre a tela que se quer; quando não casa com
+ * nenhuma — que é o caso de todo nome de pessoa — a busca fica sozinha na lista
+ * e continua sendo o primeiro item, sem precisar de regra especial.
  */
 export function commandsFor(
   role: MembershipRole | null | undefined,
@@ -180,7 +189,7 @@ export function commandsFor(
   const matches = filterCommands(visibleCommands(role), query)
   const search = patientSearchCommand(role, query)
 
-  return search ? [search, ...matches] : matches
+  return search ? [...matches, search] : matches
 }
 
 /** Sem acento e sem caixa — 'Prontuários' é encontrado por 'prontuarios'. */
