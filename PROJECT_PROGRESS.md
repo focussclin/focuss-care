@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 744 testes em 53 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 754 testes em 54 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 22 rotas.
 
 ---
@@ -63,7 +63,7 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
-| `/` | **COMPLETO** | Estático | Pública |
+| `/` | **COMPLETO** | Estático — redireciona para `/login`; quem já tem sessão segue ao painel pelo proxy | Pública |
 | `/login`, `/cadastro` | **COMPLETO** | Supabase Auth · `/login` prerenderiza; só o aviso de retorno do OAuth é dinâmico. O `?next=` leva de volta ao destino, validado por `safeNextPath` | Pública |
 | `/recuperar-senha` | **COMPLETO** | Supabase Auth (`resetPasswordForEmail`) · responde a mesma frase para conta existente e inexistente | Pública |
 | `/redefinir-senha` | **COMPLETO** | Supabase Auth (`updateUser`) · sessão vinda do link, validada no servidor; `noindex` | Pública no proxy, e o conteúdo depende da sessão do link |
@@ -82,6 +82,39 @@ As 22 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
+
+---
+
+## 4.0 Auditoria final local — 08/08/2026
+
+Rodada completa: `git status` limpo, `git diff --check` sem apontamentos,
+**754 testes em 54 arquivos**, `lint`, `typecheck` e `build` limpos, e smoke HTTP
+das 22 rotas com o servidor de desenvolvimento ativo.
+
+| Verificação | Resultado |
+|---|---|
+| Rotas públicas (`/login`, `/cadastro`, `/recuperar-senha`, `/redefinir-senha`) | **200** |
+| Rotas privadas (14) e `/onboarding` | **307 → `/login?next=<rota>`**, com o destino preservado e escapado |
+| `/` e `/convite/[token]` sem sessão | **307** — a raiz para `/login`; o convite para `/login?next=/convite/<token>` |
+| Segredos versionados | Nenhum. `.gitignore` cobre `.env*`, com exceção só para `.env.example`, que tem valores vazios |
+| Cliente `service_role` | `src/lib/supabase/admin.ts` continua **sem nenhum importador** |
+| `clinicId` em schema de entrada | Nenhum |
+| `TODO`/`FIXME`, `href="#"`, `onClick` vazio | Nenhum |
+| Dados de demonstração fora do fallback | **Duas divergências, corrigidas nesta etapa** — ver abaixo |
+
+**1. O painel podia chamar alguém pelo nome de outra pessoa.** A saudação usava
+`session.status === 'active' ? nome real : nome de exemplo`. Os estados
+`needs-onboarding` e `claims-stale` são pessoas autenticadas, com nome próprio, e
+caíam no lado errado — na prática o layout as redireciona antes, ou seja, a
+proteção era o desvio de outro arquivo e não a decisão desta tela. Agora a
+pergunta é "há usuário nesta sessão?" (`displayNameOf`, em `lib/auth/session.ts`),
+com teste cobrindo os cinco estados e falhando se um sexto aparecer.
+
+**2. O comentário da raiz descrevia um futuro que já chegou.** Dizia que o
+redirecionamento viraria condicional "quando o Supabase Auth entrar" — ele
+entrou. O desvio segue incondicional de propósito, e o motivo agora está escrito:
+`/` é uma das duas rotas totalmente estáticas do produto, e ler sessão ali
+trocaria isso por um salto que o proxy já resolve.
 
 ---
 

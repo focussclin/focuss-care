@@ -6,7 +6,7 @@ import { CalendarCheck, Clock3, Plus, TrendingUp, UserPlus } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { getSessionState } from '@/lib/auth/session'
+import { displayNameOf, getSessionState } from '@/lib/auth/session'
 import { currentUser } from '@/lib/mocks/clinic-data'
 import { addDays, formatEyebrowDate, getGreeting, startOfDay } from '@/lib/utils/date'
 import { getReportingRepository } from '@/modules/reporting/infrastructure/repository'
@@ -77,13 +77,12 @@ export default async function DashboardPage() {
       : undefined
 
   /*
-   * A saudacao e o avatar sao identidade, nao metrica: saem da sessao. O nome do
-   * mock so aparece quando o Supabase nao esta configurado — ai a aplicacao
-   * inteira e demonstracao local.
+   * A saudacao e o avatar sao identidade, nao metrica: saem da sessao. O nome de
+   * demonstracao so aparece quando NAO HA usuario — ou seja, quando o Supabase
+   * nao esta configurado e a aplicacao inteira e demonstracao local.
    */
   const session = await getSessionState()
-  const displayName =
-    session.status === 'active' ? session.user.displayName : currentUser.name
+  const displayName = displayNameOf(session, currentUser.name)
 
   return (
     <div className="flex flex-col gap-6">
