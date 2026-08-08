@@ -2,6 +2,7 @@
 
 import { rolesWith } from '@/lib/auth/permissions'
 import { cacheTags } from '@/lib/cache/tags'
+import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -51,7 +52,17 @@ const runCancelAppointment = createAction<
   ],
   // O relatorio conta atendimentos por desfecho no periodo — criar, remarcar
   // e cancelar mudam esses numeros.
-  revalidatePaths: ['/agenda', '/dashboard', '/relatorios'],
+  /*
+   * A ficha e o historico do paciente listam os atendimentos dele — mudar a
+   * agenda muda as duas telas. O caminho sai de `output.patientId`, que veio do
+   * repositorio depois da RLS.
+   */
+  revalidatePaths: (_scope, output) => [
+    '/agenda',
+    '/dashboard',
+    '/relatorios',
+    ...patientPaths(output.patientId),
+  ],
 
   handler: async (input, context) => {
     const repository = appointmentRepositoryFor(context.supabase)

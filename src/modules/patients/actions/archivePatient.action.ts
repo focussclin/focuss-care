@@ -1,6 +1,7 @@
 'use server'
 
 import { cacheTags } from '@/lib/cache/tags'
+import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -53,7 +54,12 @@ const runArchivePatient = createAction<ArchivePatientInput, PatientDto>({
   ],
   // Arquivar mexe em `is_active`, que e exatamente o filtro de 'pacientes
   // ativos' do relatorio. O painel nao muda: ele conta por `created_at`.
-  revalidatePaths: ['/pacientes', '/relatorios'],
+  // A ficha mostra o status; o relatorio conta 'pacientes ativos'.
+  revalidatePaths: (_scope, output) => [
+    '/pacientes',
+    '/relatorios',
+    ...patientPaths(output.id),
+  ],
 
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)

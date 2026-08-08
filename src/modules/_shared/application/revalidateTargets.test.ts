@@ -70,8 +70,18 @@ function readRevalidations(): ActionRevalidation[] {
       const paths: string[] = []
       const typed: { path: string; type: string }[] = []
 
-      // Cada bloco `revalidatePaths: [...]` do arquivo.
-      for (const block of source.matchAll(/revalidatePaths:\s*\[([\s\S]*?)\]/g)) {
+      /*
+       * Cada bloco `revalidatePaths: [...]` do arquivo, nas DUAS formas.
+       *
+       * Desde que caminhos passaram a depender do resultado — a ficha de um
+       * paciente precisa do id —, `revalidatePaths` tambem aceita
+       * `(scope, output) => [...]`. Sem o trecho opcional da assinatura abaixo,
+       * esta varredura ficaria cega justamente para as actions mais novas, e
+       * passaria verde sem verificar nada.
+       */
+      for (const block of source.matchAll(
+        /revalidatePaths:\s*(?:\([^)]*\)\s*=>\s*)?\[([\s\S]*?)\]/g,
+      )) {
         const body = block[1]
 
         for (const entry of body.matchAll(
@@ -103,7 +113,27 @@ describe('varredura das Server Actions', () => {
   it('encontra as actions do produto', () => {
     // Guarda contra o pior modo de falha deste arquivo: a leitura parar de
     // achar os arquivos e todos os testes abaixo passarem sobre lista vazia.
-    expect(revalidations.length).toBeGreaterThanOrEqual(15)
+    expect(revalidations.length).toBeGreaterThanOrEqual(25)
+  })
+
+  it('enxerga também a forma com callback', () => {
+    /*
+     * As actions que revalidam a ficha de um paciente usam
+     * `revalidatePaths: (scope, output) => [...]`, porque o caminho depende do
+     * id. Uma varredura que só reconhecesse o array literal passaria verde sem
+     * olhar para elas — e são justamente as que montam URL na mão.
+     */
+    const withCallback = revalidations
+      .map((entry) => entry.file.replace(/\\/g, '/'))
+      .filter((file) =>
+        [
+          'patients/actions/updatePatient',
+          'patients/actions/archivePatient',
+          'scheduling/actions/createAppointment',
+        ].some((needle) => file.includes(needle)),
+      )
+
+    expect(withCallback).toHaveLength(3)
   })
 
   it('todo caminho revalidado existe em src/app', () => {

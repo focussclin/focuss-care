@@ -147,7 +147,26 @@ export interface CreateActionOptions<TInput, TOutput, F extends string = string>
    * nenhum `use cache` no caminho. Tag invalida entrada de `use cache`, que ainda
    * nao existe. Enquanto nao existir, remover daqui apagaria a revalidacao real.
    */
-  revalidatePaths?: readonly RevalidateTarget[]
+  /**
+   * Aceita tambem um callback, para caminho que depende do que foi escrito.
+   *
+   * `/pacientes/[patientId]` so pode ser invalidado por caminho LITERAL — com o
+   * id real —, e o id so existe depois do caso de uso rodar. A alternativa que a
+   * doc oferece, `revalidatePath('/pacientes/[patientId]', 'page')`, invalida a
+   * ficha de TODOS os pacientes da instalacao a cada edicao: correto e caro, e
+   * caro do jeito que ninguem mede.
+   *
+   * O callback recebe o mesmo recorte de `cacheTags`, e pela mesma razao: ve
+   * `scope` (clinica e usuario, derivados no servidor) e `output` (a linha
+   * depois da RLS), nunca a entrada do formulario. Se `input` chegasse aqui, o
+   * navegador escolheria qual rota expirar.
+   */
+  revalidatePaths?:
+    | readonly RevalidateTarget[]
+    | ((
+        scope: ActionCacheScope,
+        output: TOutput,
+      ) => readonly RevalidateTarget[])
   /**
    * Evento de auditoria do sucesso. Devolva null para nao auditar.
    *
@@ -279,7 +298,12 @@ export function createAction<TInput, TOutput, F extends string = string>(
         updateTag(tag)
       }
 
-      for (const target of options.revalidatePaths ?? []) {
+      const targets =
+        typeof options.revalidatePaths === 'function'
+          ? options.revalidatePaths(scope, output)
+          : (options.revalidatePaths ?? [])
+
+      for (const target of targets) {
         if (typeof target === 'string') {
           revalidatePath(target)
         } else {
