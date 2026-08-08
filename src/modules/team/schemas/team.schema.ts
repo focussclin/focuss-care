@@ -113,3 +113,147 @@ export interface PendingInvitationDto {
   role: string
   expiresAt: string
 }
+
+// ---------------------------------------------------------------------------
+// Vínculo trabalhista e ausências — feature S-02
+// ---------------------------------------------------------------------------
+
+export const employeeMessages = {
+  nameRequired: 'Informe o nome do funcionário.',
+  contractRequired: 'Escolha o tipo de contrato.',
+  employeeRequired: 'Selecione o funcionário.',
+  datesRequired: 'Informe as datas de início e fim.',
+  datesInverted: 'A data de fim precisa ser igual ou depois da de início.',
+  /**
+   * Recusa de responder ausência já respondida.
+   *
+   * Reescrever apaga quem decidiu e quando — e é esse registro que a clínica
+   * precisa ter se a ausência virar questionamento trabalhista.
+   */
+  alreadyAnswered:
+    'Esta ausência já foi respondida. Registre uma nova solicitação em vez de sobrescrever a decisão anterior.',
+  /** Texto exibido onde estaria a escala de trabalho. */
+  schedulesUnavailable:
+    'Escalas de trabalho ainda não são geridas aqui: a tabela guarda o dia da semana como número, e a convenção usada (domingo em zero ou em sete) não pôde ser verificada. Errar entre as duas desloca a semana em um dia e põe alguém para trabalhar na data errada.',
+} as const
+
+/** Tipos de contrato do enum `contract_type`, com o nome que a clínica usa. */
+export const contractTypeOptions = [
+  { value: 'clt', label: 'CLT' },
+  { value: 'pj', label: 'Pessoa jurídica' },
+  { value: 'autonomo', label: 'Autônomo' },
+  { value: 'estagio', label: 'Estágio' },
+  { value: 'temporario', label: 'Temporário' },
+] as const
+
+/** Tipos de ausência do enum `time_off_kind`. */
+export const timeOffKindOptions = [
+  { value: 'ferias', label: 'Férias' },
+  { value: 'atestado', label: 'Atestado' },
+  { value: 'folga', label: 'Folga' },
+  { value: 'licenca', label: 'Licença' },
+  { value: 'falta', label: 'Falta' },
+  { value: 'banco_horas', label: 'Banco de horas' },
+] as const
+
+export const timeOffStatusLabels: Record<string, string> = {
+  requested: 'Aguardando decisão',
+  approved: 'Aprovada',
+  denied: 'Negada',
+  canceled: 'Cancelada',
+}
+
+export const createEmployeeSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, employeeMessages.nameRequired)
+    .max(120, teamMessages.invalidFields),
+  roleTitle: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value)),
+  contractType: z.enum([
+    'clt',
+    'pj',
+    'autonomo',
+    'estagio',
+    'temporario',
+  ]),
+  /** Liga o funcionário a um cadastro de profissional, quando ele atende. */
+  professionalId: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value)),
+})
+
+export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>
+
+const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, employeeMessages.datesRequired)
+
+export const createTimeOffSchema = z
+  .object({
+    employeeId: z.uuid(employeeMessages.employeeRequired),
+    kind: z.enum([
+      'ferias',
+      'atestado',
+      'folga',
+      'licenca',
+      'falta',
+      'banco_horas',
+    ]),
+    startsOn: dateOnly,
+    endsOn: dateOnly,
+    reason: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() ?? '')
+      .transform((value) => (value === '' ? null : value)),
+  })
+  .superRefine((value, ctx) => {
+    // Comparação de texto funciona em 'YYYY-MM-DD' e evita fuso no meio do
+    // caminho — a data aqui é dia de calendário, não instante.
+    if (value.endsOn < value.startsOn) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['endsOn'],
+        message: employeeMessages.datesInverted,
+      })
+    }
+  })
+
+export type CreateTimeOffInput = z.infer<typeof createTimeOffSchema>
+
+export const answerTimeOffSchema = z.object({
+  timeOffId: z.uuid(teamMessages.unexpected),
+  approved: z.boolean(),
+})
+
+export type AnswerTimeOffInput = z.infer<typeof answerTimeOffSchema>
+
+export interface EmployeeDto {
+  id: string
+  fullName: string
+  roleTitle: string | null
+  contractType: string
+  isActive: boolean
+}
+
+export interface TimeOffDto {
+  id: string
+  employeeName: string
+  kind: string
+  status: string
+  startsOn: string
+  endsOn: string
+  /**
+   * O motivo NÃO viaja.
+   *
+   * `time_off.reason` é texto livre e, em atestado e licença, costuma dizer a
+   * condição de saúde da pessoa. A tela de equipe é vista por quem administra,
+   * não por quem cuida — o campo continua na tabela, onde a RLS o protege.
+   */
+  answeredAt: string | null
+}

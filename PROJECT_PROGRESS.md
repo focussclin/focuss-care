@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 421 testes em 33 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 430 testes em 34 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -19,8 +19,8 @@
 |---|---|---|
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 16 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
-| **PENDENTE** | Não implementado, e nada bloqueia começar | 1 |
-| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |
+| **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
+| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
 
 ---
 
@@ -47,7 +47,7 @@
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
-| `team` | **EM ANDAMENTO** | Vínculos, papéis e revogação funcionam; **emissão de convite ausente** (RPC bloqueada) |
+| `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários e ausências funcionam; **convite e escalas ausentes** (RPC e P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento e caixa funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
@@ -127,7 +127,7 @@ aplicada, nenhum corpo de RPC é legível, nenhuma policy é verificável.
 
 | Item | Por que ainda não |
 |---|---|
-| Escalas e ausências (`work_schedules`, `time_off`) | Pendem de `employees` — o vínculo trabalhista, entidade que o produto não modela |
+| _(vazio)_ | Toda pendência local sem bloqueio foi entregue. O que resta depende de acesso ao banco ou de integração externa — ver §6 |
 
 ---
 
@@ -147,6 +147,8 @@ que não funciona:
 | Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |
 | Turnos partidos no expediente | `/configuracoes` | Formato guarda um turno por dia, e a tela avisa antes de salvar |
 | Disponibilidade por profissional | `/agenda` | Convenção de `weekday` não verificável; adivinhar recusaria agendamento legítimo |
+| Escalas de trabalho | `/equipe` | Mesmo `weekday` de `work_schedules`: errar desloca a semana e põe alguém para trabalhar no dia errado |
+| Salário e CPF de funcionário | `/equipe` | Colunas existem; o produto não tem folha, e guardá-los agora seria acumular risco sem contrapartida |
 
 ---
 

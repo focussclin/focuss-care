@@ -64,6 +64,33 @@ export class MockTeamRepository implements TeamRepository {
     return this.refuseWrite('revoke')
   }
 
+  /**
+   * Sem funcionario e sem ausencia na demonstracao.
+   *
+   * Diferente da equipe, que deriva dos profissionais ficticios, nao ha vinculo
+   * trabalhista de exemplo em `clinic-data` — e inventar um faria a tela
+   * oferecer registrar ferias de alguem que nao existe.
+   */
+  async listEmployees(): Promise<[]> {
+    return []
+  }
+
+  async listTimeOff(): Promise<[]> {
+    return []
+  }
+
+  async createEmployee(): Promise<never> {
+    return this.refuseWrite('createEmployee')
+  }
+
+  async createTimeOff(): Promise<never> {
+    return this.refuseWrite('createTimeOff')
+  }
+
+  async answerTimeOff(): Promise<never> {
+    return this.refuseWrite('answerTimeOff')
+  }
+
   private refuseWrite(operation: string): never {
     throw new TeamRepositoryError(
       'unavailable',

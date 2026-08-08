@@ -26,6 +26,9 @@ export const metadata: Metadata = {
  */
 export const instant = false
 
+/** Quantas ausências a tela carrega. Histórico completo é relatório, não tela. */
+const TIME_OFF_LIMIT = 50
+
 export default async function EquipePage() {
   await connection()
 
@@ -45,9 +48,11 @@ export default async function EquipePage() {
     getSessionState(),
   ])
 
-  const [members, invitations] = await Promise.all([
+  const [members, invitations, employees, timeOff] = await Promise.all([
     teamSource.repository.listMembers(teamSource.clinicId),
     teamSource.repository.listPendingInvitations(teamSource.clinicId),
+    teamSource.repository.listEmployees(teamSource.clinicId),
+    teamSource.repository.listTimeOff(teamSource.clinicId, TIME_OFF_LIMIT),
   ])
 
   return (
@@ -59,6 +64,26 @@ export default async function EquipePage() {
       // controle de acesso.
       currentUserId={session.status === 'active' ? session.user.id : null}
       canManage={can(role, 'team.manage')}
+      employees={employees.map((employee) => ({
+        id: employee.id,
+        fullName: employee.fullName,
+        roleTitle: employee.roleTitle,
+        contractType: employee.contractType,
+        isActive: employee.isActive,
+      }))}
+      /*
+       * `reason` NÃO é mapeado: em atestado e licença ele costuma dizer a
+       * condição de saúde da pessoa, e esta tela é de administração.
+       */
+      timeOff={timeOff.map((entry) => ({
+        id: entry.id,
+        employeeName: entry.employeeName,
+        kind: entry.kind,
+        status: entry.status,
+        startsOn: entry.startsOn.toISOString(),
+        endsOn: entry.endsOn.toISOString(),
+        answeredAt: entry.answeredAt?.toISOString() ?? null,
+      }))}
       isLive={teamSource.isLive}
     />
   )

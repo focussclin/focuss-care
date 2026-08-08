@@ -2,8 +2,20 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import type { Database, MembershipRole } from '@/lib/supabase/database.types'
+import type {
+  ContractType,
+  Database,
+  MembershipRole,
+  TimeOffKind,
+  TimeOffStatus,
+} from '@/lib/supabase/database.types'
 
+import type {
+  Employee,
+  NewEmployeeData,
+  NewTimeOffData,
+  TimeOff,
+} from '../domain/Employee'
 import type {
   MembershipStatus,
   PendingInvitation,
@@ -204,6 +216,162 @@ export class SupabaseTeamRepository implements TeamRepository {
     return this.hydrate(clinicId, row as unknown as MemberJoinRow)
   }
 
+  // ---------------------------------------------------------------------------
+  // Vínculo trabalhista e ausências — feature S-02
+  // ---------------------------------------------------------------------------
+
+  async listEmployees(clinicId: string): Promise<Employee[]> {
+    const { data, error } = await this.client
+      .from('employees')
+      .select('id, full_name, role_title, contract_type, is_active, professional_id')
+      .eq('clinic_id', clinicId)
+      .order('full_name', { ascending: true })
+      .limit(200)
+
+    if (error) throw readFailure('listEmployees', error)
+
+    /*
+     * `salary_cents` e `cpf` NÃO estão no select, de propósito.
+     *
+     * Salário é o dado mais sensível de uma folha e o produto não tem folha;
+     * trazê-lo para o servidor de aplicação — e daí para um log — seria acumular
+     * risco por uma funcionalidade que ninguém pediu.
+     */
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      fullName: row.full_name,
+      roleTitle: row.role_title,
+      contractType: row.contract_type as ContractType,
+      isActive: row.is_active,
+      professionalId: row.professional_id,
+    }))
+  }
+
+  async createEmployee(
+    clinicId: string,
+    data: NewEmployeeData,
+  ): Promise<Employee> {
+    const { data: row, error } = await this.client
+      .from('employees')
+      .insert({
+        clinic_id: clinicId,
+        full_name: data.fullName,
+        role_title: data.roleTitle,
+        contract_type: data.contractType,
+        professional_id: data.professionalId,
+        is_active: true,
+      })
+      .select('id, full_name, role_title, contract_type, is_active, professional_id')
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return {
+      id: row.id,
+      fullName: row.full_name,
+      roleTitle: row.role_title,
+      contractType: row.contract_type as ContractType,
+      isActive: row.is_active,
+      professionalId: row.professional_id,
+    }
+  }
+
+  async listTimeOff(clinicId: string, limit: number): Promise<TimeOff[]> {
+    const { data, error } = await this.client
+      .from('time_off')
+      .select(
+        'id, employee_id, kind, status, starts_on, ends_on, reason, approved_at, employees ( full_name )',
+      )
+      .eq('clinic_id', clinicId)
+      .order('starts_on', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listTimeOff', error)
+
+    const rows = data as unknown as {
+      id: string
+      employee_id: string
+      kind: TimeOffKind
+      status: TimeOffStatus
+      starts_on: string
+      ends_on: string
+      reason: string | null
+      approved_at: string | null
+      employees: { full_name: string } | null
+    }[]
+
+    return rows.map(toTimeOff)
+  }
+
+  async createTimeOff(
+    clinicId: string,
+    data: NewTimeOffData,
+  ): Promise<TimeOff> {
+    const { data: row, error } = await this.client
+      .from('time_off')
+      .insert({
+        clinic_id: clinicId,
+        employee_id: data.employeeId,
+        kind: data.kind,
+        // Nasce pendente: quem pede e quem aprova sao pessoas diferentes.
+        status: 'requested',
+        starts_on: toDateOnly(data.startsOn),
+        ends_on: toDateOnly(data.endsOn),
+        reason: data.reason,
+      })
+      .select(
+        'id, employee_id, kind, status, starts_on, ends_on, reason, approved_at, employees ( full_name )',
+      )
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return toTimeOff(row as never)
+  }
+
+  async answerTimeOff(
+    clinicId: string,
+    timeOffId: string,
+    approved: boolean,
+    answeredBy: string,
+  ): Promise<TimeOff> {
+    const now = new Date().toISOString()
+
+    const { data, error } = await this.client
+      .from('time_off')
+      .update({
+        status: approved ? 'approved' : 'denied',
+        approved_by: answeredBy,
+        approved_at: now,
+        updated_at: now,
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', timeOffId)
+      /*
+       * Só pendente aceita resposta.
+       *
+       * Reescrever uma decisão já tomada apaga quem a tomou e quando — e é
+       * exatamente esse registro que uma clínica precisa ter se a ausência
+       * virar questionamento trabalhista. O filtro também impede que duas
+       * pessoas respondendo ao mesmo tempo se sobrescrevam.
+       */
+      .eq('status', 'requested')
+      .select(
+        'id, employee_id, kind, status, starts_on, ends_on, reason, approved_at, employees ( full_name )',
+      )
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) {
+      throw new TeamRepositoryError(
+        'not-found',
+        `ausencia ${timeOffId} nao esta pendente nesta clinica`,
+      )
+    }
+
+    return toTimeOff(data as never)
+  }
+
   private async requireMembership(
     clinicId: string,
     membershipId: string,
@@ -268,6 +436,39 @@ export class SupabaseTeamRepository implements TeamRepository {
       createdAt: new Date(row.created_at),
     }
   }
+}
+
+function toTimeOff(row: {
+  id: string
+  employee_id: string
+  kind: TimeOffKind
+  status: TimeOffStatus
+  starts_on: string
+  ends_on: string
+  reason: string | null
+  approved_at: string | null
+  employees: { full_name: string } | null
+}): TimeOff {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    employeeName: row.employees?.full_name ?? 'Funcionário',
+    kind: row.kind,
+    status: row.status,
+    // `date` do Postgres, sem fuso: 'T00:00:00' evita o recuo de um dia que
+    // `new Date('2026-08-10')` produz ao interpretar como UTC.
+    startsOn: new Date(`${row.starts_on}T00:00:00`),
+    endsOn: new Date(`${row.ends_on}T00:00:00`),
+    reason: row.reason,
+    answeredAt: row.approved_at ? new Date(row.approved_at) : null,
+  }
+}
+
+/** `Date` -> 'YYYY-MM-DD' local. `starts_on`/`ends_on` são `date`. */
+function toDateOnly(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function notFound(membershipId: string): TeamRepositoryError {

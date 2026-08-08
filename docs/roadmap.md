@@ -431,6 +431,7 @@ Tudo aquém disso é protótipo, e protótipo entra no board como `In Progress`,
 | **E-01** | **Atendimentos — check-in, fila, encerramento** | Claude | **Review** |
 | **R-01** | **Prontuário versionado append-only** | Claude | **Review** |
 | **S-01** | **Equipe — vínculos, papéis, revogação** | Claude | **Review** |
+| **S-02** | **Equipe — funcionários e ausências** | Claude | **Review** |
 | **C-01** | **Configurações da clínica** | Claude | **Review** |
 | **B-01** | **Financeiro — cobrança, pagamento, caixa** | Claude | **Review** |
 | **V-01** | **Convênios — operadoras, planos, guias** | Claude | **Review** |

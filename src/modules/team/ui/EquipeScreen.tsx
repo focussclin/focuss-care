@@ -1,6 +1,6 @@
 'use client'
 
-import { Info, MailPlus, ShieldOff, Users } from 'lucide-react'
+import { MailPlus, ShieldOff, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 
@@ -17,10 +17,13 @@ import { revokeMembershipAction } from '../actions/revokeMembership.action'
 import {
   roleOptions,
   teamMessages,
+  type EmployeeDto,
   type PendingInvitationDto,
   type TeamMemberDto,
+  type TimeOffDto,
 } from '../schemas/team.schema'
 import { RevokeAccessDialog } from './RevokeAccessDialog'
+import { StaffPanel } from './StaffPanel'
 
 export interface EquipeScreenProps {
   members: readonly TeamMemberDto[]
@@ -28,6 +31,9 @@ export interface EquipeScreenProps {
   /** `memberships.user_id` da sessão — para a tela não oferecer auto-revogação. */
   currentUserId: string | null
   canManage: boolean
+  /** Vinculo trabalhista e ausencias (S-02). */
+  employees: readonly EmployeeDto[]
+  timeOff: readonly TimeOffDto[]
   isLive?: boolean
 }
 
@@ -63,6 +69,8 @@ export function EquipeScreen({
   invitations,
   currentUserId,
   canManage,
+  employees,
+  timeOff,
   isLive = false,
 }: EquipeScreenProps) {
   const router = useRouter()
@@ -307,11 +315,18 @@ export function EquipeScreen({
         </section>
       ) : null}
 
-      <p className="flex items-start gap-2.5 text-label text-muted">
-        <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-        Escalas de trabalho e ausências ainda não são gerenciadas aqui: elas
-        dependem do cadastro trabalhista, que o produto ainda não modela.
-      </p>
+      {/*
+        Funcionários e ausências (S-02).
+        S-01 dizia que dependiam de `employees`, "entidade que o produto não
+        modela" — modela agora, no mínimo necessário. A escala continua fora, e
+        o painel explica por quê.
+      */}
+      <StaffPanel
+        employees={employees}
+        timeOff={timeOff}
+        canManage={canManage}
+        isLive={isLive}
+      />
 
       <RevokeAccessDialog
         member={revoking}
