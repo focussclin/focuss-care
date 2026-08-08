@@ -1,12 +1,21 @@
 import type { Metadata } from 'next'
+import { connection } from 'next/server'
 
-import { ChatIaScreen } from '@/modules/workspace/ui/OperationsScreens'
+import { getIntegrationRepository } from '@/modules/integrations/infrastructure/repository'
+import { ChatIaScreen } from '@/modules/integrations/ui/ChatIaScreen'
 
 export const metadata: Metadata = {
-  title: 'Assistente Focuss',
-  description: 'Encontre informações e organize tarefas com apoio da IA.',
+  title: 'Assistente com IA',
+  description: 'Estado do assistente e a regra que vale antes dele existir.',
 }
 
-export default function ChatIaPage() {
-  return <ChatIaScreen />
+export const instant = false
+
+export default async function ChatIaPage() {
+  await connection()
+
+  const source = await getIntegrationRepository()
+  const overview = await source.repository.overview(source.clinicId)
+
+  return <ChatIaScreen status={overview.ai} />
 }

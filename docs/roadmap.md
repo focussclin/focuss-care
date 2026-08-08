@@ -75,10 +75,11 @@ cada tela migra para `src/modules/<módulo>/ui/` com container + view + reposit�
 e sai deste arquivo. **O arquivo desaparece quando o último módulo for implementado** —
 esse é o critério de saída dele.
 
-**Situação em 08/08/2026: restam três.** `WhatsappScreen`, `ChatIaScreen` e
-`AutomacoesScreen` — as três dependem de W-01/AI-*/AU-01, que estão **Blocked**
-aguardando a aprovação de `04-agente-ia.md`. As outras oito saíram com suas
-fatias (I-01, E-01, R-01, S-01, C-01, T-01, B-01, V-01).
+**Situação em 08/08/2026: o arquivo NÃO EXISTE MAIS.** As onze telas saíram —
+oito com suas fatias (I-01, E-01, R-01, S-01, C-01, T-01, B-01, V-01) e as três
+últimas com o módulo `integrations`, que trocou dados literais por estado de
+conexão lido do banco. W-01, AI-* e AU-01 continuam **Blocked**; a diferença é
+que as telas agora dizem isso em vez de simular um canal ligado.
 
 ### 2.4 Dívida técnica catalogada
 

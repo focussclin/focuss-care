@@ -1,14 +1,14 @@
 # Focuss Care — estado real do produto
 
 > Levantado contra o código em **08/08/2026**, branch `feat/telas-e-camada-supabase`,
-> commit `8e25111`. Este documento descreve o que **existe e funciona**, não o que
+> commit `0d26f65`+. Este documento descreve o que **existe e funciona**, não o que
 > está planejado — o plano é o [`docs/roadmap.md`](./docs/roadmap.md).
 >
 > Regra de preenchimento: uma linha só é **COMPLETO** se a fatia vertical fecha
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 391 testes em 29 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 407 testes em 31 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 21 rotas.
 
 ---
@@ -18,7 +18,7 @@
 | Status | O que significa | Quantos |
 |---|---|---|
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 15 |
-| **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 3 |
+| **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 2 |
 | **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |
 
@@ -53,7 +53,7 @@
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento e caixa funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos e guias funcionam; **glosa ausente** (sem tabela) |
 | `dashboard` | **COMPLETO** | Cartões, agenda do dia e atividade — todos contados do banco |
-| `workspace` | **EM ANDAMENTO** | Restam 3 telas de vitrine, todas bloqueadas — ver §5 |
+| `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 
 ---
 
@@ -77,25 +77,30 @@ As 21 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + patients) | `invoice.read` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance) | `insurance.manage` |
-| `/whatsapp` | **BLOQUEADO** | **Vitrine** — dados literais no arquivo | Membro |
-| `/chat-ia` | **BLOQUEADO** | **Vitrine** — dados literais no arquivo | Membro |
-| `/automacoes` | **BLOQUEADO** | **Vitrine** — dados literais no arquivo | Membro |
+| `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
+| `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
+| `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
 
 ---
 
-## 5. Vitrines restantes
+## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados
-escritos no arquivo. **Oito saíram** com suas fatias. Restam três, e as três
-dependem da mesma coisa:
+escritos no arquivo. **O arquivo não existe mais**, que era o critério de saída
+dele. Oito telas saíram com suas fatias; as três últimas saíram com o módulo
+`integrations`.
 
-| Tela | Vira | Status | O que bloqueia |
-|---|---|---|---|
-| `WhatsappScreen` | W-01 | **BLOQUEADO** | Worker + Redis + provedor Evolution; nenhum existe no ambiente |
-| `ChatIaScreen` | AI-01..07 | **BLOQUEADO** | Aguarda aprovação de `docs/04-agente-ia.md` (P9: IA sugere, humano assina) |
-| `AutomacoesScreen` | AU-01 | **BLOQUEADO** | Depende de W-01 |
+| Tela | Vira | O que a rota mostra hoje |
+|---|---|---|
+| `WhatsappScreen` | W-01 | Estado do canal lido de `whatsapp_channels`, e o que falta para conectar |
+| `ChatIaScreen` | AI-01..07 | Que nenhum provedor está configurado, e a regra P9 declarada antes do recurso |
+| `AutomacoesScreen` | AU-01 | Regras reais de `workflows`, e que **nada as executa** |
 
-O arquivo desaparece quando a última sair — esse é o critério de saída dele.
+**As features continuam BLOQUEADAS** — não há worker, provedor de WhatsApp,
+provedor de IA nem executor de automação. O que mudou é que as telas dizem isso
+em vez de simular um canal ligado. A vitrine de automações era o caso mais grave:
+o interruptor funcionava, mudava para "ativa", e não ligava nada — uma clínica
+confiaria que o lembrete de consulta estava saindo.
 
 ---
 

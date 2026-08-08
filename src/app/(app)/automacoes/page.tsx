@@ -1,12 +1,21 @@
 import type { Metadata } from 'next'
+import { connection } from 'next/server'
 
-import { AutomacoesScreen } from '@/modules/workspace/ui/OperationsScreens'
+import { getIntegrationRepository } from '@/modules/integrations/infrastructure/repository'
+import { AutomacoesScreen } from '@/modules/integrations/ui/AutomacoesScreen'
 
 export const metadata: Metadata = {
   title: 'Automações',
-  description: 'Crie lembretes e ações para a equipe da clínica.',
+  description: 'Regras cadastradas e o que falta para executá-las.',
 }
 
-export default function AutomacoesPage() {
-  return <AutomacoesScreen />
+export const instant = false
+
+export default async function AutomacoesPage() {
+  await connection()
+
+  const source = await getIntegrationRepository()
+  const overview = await source.repository.overview(source.clinicId)
+
+  return <AutomacoesScreen status={overview.automations} />
 }
