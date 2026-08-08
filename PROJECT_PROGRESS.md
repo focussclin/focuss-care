@@ -22,7 +22,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 | Status | O que significa | Quantos |
 |---|---|---|
-| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 17 |
+| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 18 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
 | **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |

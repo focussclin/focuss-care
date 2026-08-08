@@ -20,10 +20,10 @@ export default async function AuditoriaPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    action?: string
-    action_custom?: string
-    entityType?: string
-    page?: string
+    action?: string | string[]
+    action_custom?: string | string[]
+    entityType?: string | string[]
+    page?: string | string[]
   }>
 }) {
   await connection()
@@ -33,9 +33,9 @@ export default async function AuditoriaPage({
 
   const params = await searchParams
   const parsed = auditLogQuerySchema.parse({
-    action: params.action_custom || params.action,
-    entityType: params.entityType,
-    page: params.page,
+    action: firstValue(params.action_custom) || firstValue(params.action),
+    entityType: firstValue(params.entityType),
+    page: firstValue(params.page),
   })
   const source = await getAuditLogRepository()
   const page = await source.repository.list(source.clinicId, {
@@ -55,4 +55,8 @@ export default async function AuditoriaPage({
       isLive={source.isLive}
     />
   )
+}
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
 }
