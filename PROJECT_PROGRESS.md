@@ -130,6 +130,50 @@ trocaria isso por um salto que o proxy já resolve.
 
 ---
 
+## 4.2 Itens do menu — estado real (08/08/2026)
+
+O menu tem **31 itens: 18 funcionam e 13 continuam desabilitados**. Antes desta
+rodada eram 33 itens, 14 habilitados e 19 apagados.
+
+**Fechados nesta rodada** — quatro telas novas, todas sobre tabela que já
+existia no schema, sem migration e sem dependência externa:
+
+| Item | Rota | Sobre o quê |
+|---|---|---|
+| Display para TV | `/display` | `waiting_queue`, projetada com nome abreviado |
+| Indicadores e BI | `/indicadores` | contagem mensal de `appointments` e `patients` |
+| Assinaturas | `/assinaturas` | `subscriptions` + `plans`, com cotas contadas do uso |
+| Recepção | `/recepcao` | agenda + fila, derivadas na rota |
+
+**Removidos do menu** — dois itens que duplicavam o que já existe: "Fila e
+senhas" e "Check-in digital". A fila é `/atendimentos`, o painel dela é
+`/display`, e check-in feito pelo próprio paciente é o Portal. Item
+permanentemente apagado é promessa vazia, o mesmo motivo que tirou os quatro
+`?tab=`.
+
+**Os 13 que restam.** Nenhum é escopo cortado: cada um depende de algo que não
+existe neste ambiente, e a coluna diz o quê.
+
+| Item | Bloqueio |
+|---|---|
+| Estoque, Compras | Não há `stock_items`, `inventory`, `suppliers` nem `purchase_orders` no schema — exige migration (**B1**) |
+| Salas e recursos | Não há `rooms` nem `resources` — exige migration (**B1**) |
+| CRM e Leads | Não há `leads` — exige migration (**B1**) |
+| Tarefas inteligentes | Não há `tasks` — exige migration (**B1**) |
+| Formulários digitais | Não há `forms` nem `form_responses` — exige migration (**B1**) |
+| Conciliação bancária | Não há `bank_accounts` nem `bank_transactions` — exige migration (**B1**) |
+| Documentos | `patient_documents` existe, mas **não há bucket de Storage**: `listBuckets()` devolveu vazio em 08/08/2026. Sem bucket, o arquivo não tem para onde ir |
+| Inbox de atendimento | `conversations` e `messages` existem e **nada as escreve** — depende da ingestão de W-01 |
+| Portal do paciente, Portal do profissional | Aplicação separada, com autenticação própria |
+| Teleatendimento | Provedor de vídeo — dependência externa |
+| Insights proativos | Provedor de IA e aprovação de `docs/04-agente-ia.md` |
+
+**Seis dos treze dependem só de migration**, que é o bloqueio **B1** (sem acesso
+SQL a este ambiente). São os que destravam mais rápido no dia em que houver
+credencial administrativa.
+
+---
+
 ## 4.1 Auditoria incremental de 08/08/2026
 
 Varredura de rotas, ações e componentes atrás de fluxo inerte, mock fora do

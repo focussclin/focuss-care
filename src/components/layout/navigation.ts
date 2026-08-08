@@ -17,8 +17,6 @@ import {
   MessageCircle,
   MonitorPlay,
   Package,
-  PanelTop,
-  ScanLine,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -84,9 +82,22 @@ export const navItems: readonly NavItem[] = [
   { label: 'Atendimentos', href: '/atendimentos', icon: Stethoscope, section: 'care', permission: 'encounter.read' },
   { label: 'Prontuários', href: '/prontuarios', icon: ClipboardList, section: 'care', permission: 'record.read' },
   { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', permission: 'encounter.read' },
-  { label: 'Fila e senhas', href: '/fila', icon: PanelTop, section: 'care', disabled: true },
-  { label: 'Check-in digital', href: '/check-in', icon: ScanLine, section: 'care', disabled: true },
   { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', permission: 'encounter.read' },
+
+  /*
+   * Dois itens foram REMOVIDOS aqui: "Fila e senhas" e "Check-in digital".
+   *
+   * Os dois descreviam o que `/atendimentos` já faz — a fila com prioridade,
+   * chamada e check-in — e ficariam apagados para sempre, porque não há o que
+   * construir além do que existe. "Senhas" exigiria número de senha, coluna que
+   * `waiting_queue` não tem; "check-in digital" é o paciente dando entrada
+   * sozinho, o que é o Portal do paciente, não esta tela.
+   *
+   * Item permanentemente desabilitado é a mesma promessa vazia que fez os quatro
+   * `?tab=` saírem: duas declarações da mesma ausência, uma delas errada, é pior
+   * que uma só. A fila está em `/atendimentos`, e o painel dela em `/display`.
+   */
+
   { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', disabled: true },
   { label: 'Teleatendimento', href: '/teleatendimento', icon: Video, section: 'care', disabled: true },
 
