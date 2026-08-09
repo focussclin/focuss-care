@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1021 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1023 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -471,6 +471,24 @@ de demonstração continua separado e mantém seus dados de exemplo declarados.
 
 Validação direcionada desta correção: 2 testes; suíte completa com 1021 testes em
 94 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
+
+---
+
+## 4.15 Feature de busca — Pacientes inline na Command Palette (09/08/2026)
+
+O campo de busca do cabeçalho e o atalho `Ctrl/Cmd + K` agora consultam pacientes
+ativos de forma real após dois caracteres, usando a Server Action existente e a
+RLS da clínica ativa. A consulta aguarda 250 ms, cancela respostas obsoletas e
+exibe somente id/nome; selecionar o resultado abre diretamente a ficha 360.
+
+O comando de abrir a lista filtrada `/pacientes?q=…` continua disponível como
+fallback. No modo demonstração não há consulta nem resultado pessoal fictício.
+Atendimentos, prontuários, cobranças e guias permanecem declaradamente fora da
+busca porque ainda não possuem contrato de pesquisa por nome.
+
+Validação direcionada desta fatia: 2 testes; suíte atual com 1023 testes em 94
+arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
 limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---

@@ -13,8 +13,10 @@ import { navItems } from './navigation'
  * que abre um formulário de verdade** e **a busca de pacientes**, que é a única
  * listagem do produto com busca por parâmetro de URL.
  *
- * A busca não consulta nada no navegador — ver `patientSearchCommand`. Ela leva
- * a uma tela que consulta no servidor, com o termo no endereço.
+ * A busca por nome tem dois caminhos seguros: a paleta consulta a Server Action
+ * para mostrar resultados inline, e o comando `patientSearchCommand` leva a
+ * `/pacientes?q=…` quando a pessoa prefere abrir a lista completa. Em ambos os
+ * casos a consulta passa pelo servidor e pela RLS.
  *
  * O campo do cabeçalho prometia "Buscar pacientes, agenda…" e não fazia nada.
  * Hoje a metade da frase que era falsa continua fora: agenda, prontuário,

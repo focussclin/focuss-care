@@ -22,13 +22,20 @@ import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
  */
 
 const push = vi.fn()
+const searchPatientsAction = vi.fn()
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
 }))
 
+vi.mock('@/modules/patients/actions/searchPatients.action', () => ({
+  searchPatientsAction: (input: unknown) => searchPatientsAction(input),
+}))
+
 beforeEach(() => {
   push.mockClear()
+  searchPatientsAction.mockReset()
+  searchPatientsAction.mockResolvedValue({ ok: true, data: [] })
 })
 
 /*
@@ -140,6 +147,33 @@ describe('filtragem', () => {
 
     fireEvent.change(input(), { target: { value: 'ma' } })
     expect(screen.getByText('Buscar pacientes por "ma"')).toBeTruthy()
+  })
+})
+
+describe('busca inline de pacientes', () => {
+  it('consulta pacientes reais e abre a ficha selecionada', async () => {
+    searchPatientsAction.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'patient-1', name: 'Maria Souza' }],
+    })
+
+    renderPalette()
+    fireEvent.change(input(), { target: { value: 'Maria' } })
+
+    const patient = await screen.findByRole('option', { name: 'Maria Souza' })
+    expect(searchPatientsAction).toHaveBeenCalledWith({ query: 'Maria' })
+
+    fireEvent.click(patient)
+    expect(push).toHaveBeenCalledWith('/pacientes/patient-1')
+  })
+
+  it('não consulta o banco no modo demonstração', async () => {
+    renderPalette({ role: undefined })
+    fireEvent.change(input(), { target: { value: 'Maria' } })
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(searchPatientsAction).not.toHaveBeenCalled()
+    expect(screen.getByRole('option', { name: /buscar pacientes por/i })).toBeTruthy()
   })
 })
 

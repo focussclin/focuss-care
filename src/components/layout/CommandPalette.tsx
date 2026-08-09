@@ -7,6 +7,8 @@ import { useEffect, useId, useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils/cn'
 import type { MembershipRole } from '@/lib/supabase/database.types'
+import { can } from '@/lib/auth/permissions'
+import { searchPatientsAction } from '@/modules/patients/actions/searchPatients.action'
 
 import {
   commandsFor,
@@ -27,12 +29,13 @@ export interface CommandPaletteProps {
  *
  * # O que ela faz, e o que ela declara não fazer
  *
- * Navega entre telas, abre os dois formulários que abrem por URL e **busca
- * paciente pelo nome** a partir de dois caracteres.
+ * Navega entre telas, abre os dois formulários que abrem por URL e busca
+ * pacientes reais pelo nome a partir de dois caracteres.
  *
- * A busca não consulta nada aqui: ela leva a `/pacientes?q=…`, e é o servidor
- * que consulta, com a RLS no caminho. Nenhuma linha atravessa o navegador antes
- * de a pessoa escolher.
+ * A busca usa a Server Action de pacientes com debounce e RLS no caminho. Os
+ * resultados exibem apenas id e nome; ao selecionar, a ficha é aberta por URL.
+ * Se a action não estiver disponível, o comando de fallback ainda leva a
+ * `/pacientes?q=…`, onde o servidor consulta a mesma base.
  *
  * **Atendimento, prontuário, cobrança e guia não são pesquisados** — a listagem
  * deles não aceita termo por URL, e um comando que fingisse buscar levaria a uma
@@ -59,13 +62,74 @@ export function CommandPalette({
   const listId = useId()
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
+  const [patientResults, setPatientResults] = useState<
+    readonly { id: string; name: string }[]
+  >([])
+  const [patientSearchPending, setPatientSearchPending] = useState(false)
+  const [patientSearchError, setPatientSearchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const term = query.trim()
+    const canSearchPatients = role !== undefined && role !== null && can(role, 'patient.read')
+
+    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchPatients) return
+
+    let active = true
+
+    const timeout = window.setTimeout(() => {
+      void searchPatientsAction({ query: term })
+        .then((result) => {
+          if (!active) return
+          if (result.ok) {
+            setPatientResults(result.data)
+            return
+          }
+          setPatientResults([])
+          setPatientSearchError(result.error.message)
+        })
+        .catch(() => {
+          if (!active) return
+          setPatientResults([])
+          setPatientSearchError('Não foi possível buscar pacientes agora.')
+        })
+        .finally(() => {
+          if (active) setPatientSearchPending(false)
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+    }
+  }, [open, query, role])
 
   /*
    * A lista inteira depende de papel E consulta: o comando de buscar paciente
    * so existe a partir de dois caracteres, e some quando o campo esvazia — o
    * que tambem cuida do reset ao fechar, ja que fechar limpa a consulta.
    */
-  const results = useMemo(() => commandsFor(role, query), [role, query])
+  const results = useMemo(
+    () => {
+      const commands = commandsFor(role, query)
+      const searchCommand = commands.find(
+        (command) => command.id === 'buscar-pacientes',
+      )
+      const patientCommands = patientResults.map((patient) => ({
+        id: `patient-${patient.id}`,
+        label: patient.name,
+        href: `/pacientes/${patient.id}`,
+        keywords: ['paciente', 'ficha'],
+        group: 'Buscar' as const,
+      }))
+
+      return [
+        ...commands.filter((command) => command.id !== 'buscar-pacientes'),
+        ...patientCommands,
+        ...(searchCommand ? [searchCommand] : []),
+      ]
+    },
+    [patientResults, query, role],
+  )
 
   /*
    * O cabeçalho de grupo é decidido ANTES do render, e não com uma variável
@@ -102,6 +166,20 @@ export function CommandPalette({
     router.push(command.href)
   }
 
+  function updateQuery(value: string) {
+    const term = value.trim()
+    const canSearchPatients =
+      role !== undefined && role !== null && can(role, 'patient.read')
+
+    setQuery(value)
+    setHighlighted(0)
+    setPatientResults([])
+    setPatientSearchError(null)
+    setPatientSearchPending(
+      open && term.length >= MIN_SEARCH_LENGTH && canSearchPatients,
+    )
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -127,6 +205,9 @@ export function CommandPalette({
         if (!next) {
           setQuery('')
           setHighlighted(0)
+          setPatientResults([])
+          setPatientSearchPending(false)
+          setPatientSearchError(null)
         }
         onOpenChange(next)
       }}
@@ -146,10 +227,7 @@ export function CommandPalette({
             <input
               autoFocus
               value={query}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setHighlighted(0)
-              }}
+              onChange={(event) => updateQuery(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Buscar paciente, ir para uma tela ou criar…"
               aria-label="Buscar telas e ações"
@@ -164,8 +242,15 @@ export function CommandPalette({
           {results.length === 0 ? (
             <div className="px-4 py-6">
               <p className="text-aux text-foreground">
-                Nenhuma tela ou ação com esse nome.
+                {patientSearchPending
+                  ? 'Buscando pacientes…'
+                  : 'Nenhuma tela ou ação com esse nome.'}
               </p>
+              {patientSearchError ? (
+                <p role="alert" className="mt-2 text-label text-danger">
+                  {patientSearchError}
+                </p>
+              ) : null}
               {/*
                 O estado vazio precisa dizer o que É pesquisável e o que não é.
 
@@ -237,6 +322,12 @@ export function CommandPalette({
               })}
             </ul>
           )}
+
+          {patientSearchPending && results.length > 0 ? (
+            <p role="status" className="border-t border-border-card px-4 py-2 text-label text-muted">
+              Buscando pacientes…
+            </p>
+          ) : null}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
