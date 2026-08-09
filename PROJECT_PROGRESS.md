@@ -493,6 +493,21 @@ limpos. A inspeção visual pelo navegador continua indisponível neste ambiente
 
 ---
 
+## 4.16 Correção de navegação — Contexto do header por rota (09/08/2026)
+
+O header deixa de cair no título genérico “Dashboard” em rotas que já existiam,
+mas não tinham entrada no mapa de contexto. Indicadores, Recepção, Display,
+CRM, Inbox, Conciliação, Estoque, Compras, Insights, Tarefas, Documentos,
+Formulários, Assinaturas, Auditoria e Salas agora exibem título e descrição
+correspondentes, preservando o comportamento compartilhado de navegação.
+
+Validação desta correção: matriz de comandos com 36 testes, lint, typecheck,
+build Next.js com 42 rotas e OpenNext Cloudflare limpos. O servidor local
+continua acessível em `localhost:3000`; inspeção visual pelo navegador embutido
+continua indisponível neste ambiente.
+
+---
+
 ## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados
