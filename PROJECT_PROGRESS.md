@@ -602,6 +602,20 @@ build Next.js com 42 rotas e OpenNext Cloudflare limpos.
 
 ---
 
+## 4.23 Consistência do cabeçalho do dashboard (09/08/2026)
+
+O dashboard deixou de renderizar um segundo sino desabilitado no cabeçalho da
+página. O centro real de notificações já pertence à casca autenticada e aparece
+uma única vez no `AppHeader`; remover a duplicidade evita dois controles para a
+mesma função e elimina a affordance falsa. O texto da busca global também foi
+atualizado para mencionar pacientes e agendamentos, que são as buscas reais
+disponíveis hoje.
+
+Validação desta fatia: suíte com 1041 testes em 97 arquivos, lint, typecheck e
+build Next.js com 42 rotas limpos.
+
+---
+
 ## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados
