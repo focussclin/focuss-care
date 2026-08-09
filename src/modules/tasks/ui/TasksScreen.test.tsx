@@ -87,10 +87,10 @@ describe('TasksScreen', () => {
     fireEvent.change(screen.getByLabelText('Detalhes'), {
       target: { value: 'Enviar mensagem pela manhã.' },
     })
-    fireEvent.change(screen.getByLabelText('Responsável'), {
+    fireEvent.change(screen.getAllByLabelText('Responsável')[1], {
       target: { value: 'user-1' },
     })
-    fireEvent.change(screen.getByLabelText('Prazo'), {
+    fireEvent.change(screen.getAllByLabelText('Prazo')[1], {
       target: { value: '2026-08-10' },
     })
     fireEvent.change(screen.getByLabelText('Relacionado a'), {

@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 918 testes em 72 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 32 rotas.
+**Validação atual:** 971 testes em 75 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 33 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -66,7 +66,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 27 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 33 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -89,6 +89,7 @@ As 27 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/indicadores` | **COMPLETO** | Banco (reporting) — série de 12 meses contada por `count`, sem transferir linha | `report.read` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
 | `/auditoria` | **COMPLETO** | Banco (`audit_log`) — sem IP, user-agent ou metadados brutos | `audit.read` |
+| `/tarefas` | **EM ANDAMENTO** | Migration `clinic_tasks` pendente; UI e camada de escrita preparadas | Membro quando a tabela existir |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance): operadoras, planos, carteirinhas, guias e glosas | `insurance.manage` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
@@ -221,6 +222,26 @@ intencional: a feature não é considerada completa enquanto a persistência rea
 não puder ser verificada.
 
 Validação desta fatia: 4 testes de UI, lint e typecheck limpos.
+
+---
+
+## 4.4 Feature em andamento — Tarefas (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** A rota `/tarefas`
+agora possui agrupamento por prazo, filtros de responsável/situação, criação,
+edição, conclusão com desfazer e cancelamento auditado. A camada vertical inclui
+schema Zod, Server Actions pelo `createAction`, adapter Supabase tenant-scoped,
+estado de migration pendente e testes de contrato/UI.
+
+O item do menu foi renomeado para **Tarefas**. Ele continua desabilitado até
+`supabase/migrations/20260809_clinic_tasks.sql` ser aplicado e
+`npm run db:types` ser executado. A tela não oferece gravação enquanto o schema
+não sustenta a operação. Geração automática por IA e notificações permanecem
+fora desta fatia.
+
+Validação desta fatia: 53 testes em 3 arquivos, lint, typecheck, build Next.js e
+OpenNext Cloudflare limpos. O servidor local segue acessível em `localhost:3000`;
+inspeção visual pelo navegador embutido não foi possível neste ambiente.
 
 ---
 
