@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils/cn'
 export interface TextFieldProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
   label: string
+  /** Esconde o rótulo visualmente mantendo-o associado para leitores de tela. */
+  hideLabel?: boolean
   /** Mensagem curta abaixo do campo. Presenca dela ja marca o campo como invalido. */
   error?: string
   hint?: string
@@ -22,7 +24,7 @@ export interface TextFieldProps
  */
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
   function TextField(
-    { label, error, hint, trailing, className, ...inputProps },
+    { label, hideLabel = false, error, hint, trailing, className, ...inputProps },
     ref,
   ) {
     const generatedId = useId()
@@ -35,7 +37,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor={inputId}
-          className="text-label font-semibold text-label"
+          className={cn('text-label font-semibold text-label', hideLabel && 'sr-only')}
         >
           {label}
         </label>

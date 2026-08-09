@@ -42,6 +42,8 @@ const BUILT_BUT_HIDDEN: Record<string, string> = {
     'A leitura usa conversations e messages reais, mas a ingestão e o envio dependem do provedor de WhatsApp/worker ainda não configurado. O item permanece bloqueado para não prometer uma caixa de entrada operacional incompleta.',
   '/formularios':
     'O builder e a camada de escrita estão preparados, mas clinic_forms ainda depende da migration 20260809_clinic_forms.sql. O item permanece bloqueado até a persistência real existir.',
+  '/estoque':
+    'O cadastro e a movimentação atômica estão preparados, mas inventory_items e inventory_movements ainda dependem da migration 20260809_inventory.sql. O item permanece bloqueado até a persistência real existir.',
   '/salas-e-recursos':
     'Depende de `supabase/migrations/20260809_rooms.sql`, escrita e revisada mas não aplicada. Com a tabela ausente a tela mostra o estado pendente; habilitar o item prometeria persistência que o banco não sustenta.',
   '/tarefas':

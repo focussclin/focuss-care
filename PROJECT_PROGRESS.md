@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 988 testes em 81 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 37 rotas.
+**Validação atual:** 993 testes em 83 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 38 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -66,7 +66,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 37 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 38 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -96,6 +96,7 @@ As 37 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/inbox` | **EM ANDAMENTO** | Leitura tenant-scoped de `conversations` e `messages`; sem ingestão/envio até W-01 | Membro |
 | `/formularios` | **EM ANDAMENTO** | Migration `clinic_forms` pendente; builder de modelos preparado | `clinic.settings` quando a tabela existir |
 | `/formularios/[formId]/responder` | **EM ANDAMENTO** | Formulário publicado + pacientes ativos; salva rascunho e envio quando a migration existir | `patient.write` na action |
+| `/estoque` | **EM ANDAMENTO** | Migration `inventory` pendente; cadastro, saldo e movimentação atômica preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -161,7 +162,7 @@ existe neste ambiente, e a coluna diz o quê.
 
 | Item | Bloqueio |
 |---|---|
-| Estoque, Compras | Não há `stock_items`, `inventory`, `suppliers` nem `purchase_orders` no schema — exige migration (**B1**) |
+| Estoque, Compras | Migration `20260809_inventory.sql` criada, ainda não aplicada (**B1**); Compras continua sem schema |
 | Salas e recursos | Não há `rooms` nem `resources` — exige migration (**B1**) |
 | CRM e Leads | Migration `20260809_clinic_leads.sql` criada, ainda não aplicada (**B1**) |
 | Tarefas | Migration `20260809_clinic_tasks.sql` criada, ainda não aplicada (**B1**) |
@@ -310,6 +311,28 @@ respostas serão fatias posteriores — não são apresentados como se já funci
 
 Validação desta fatia: 10 testes direcionados, suíte completa com 988 testes em
 81 arquivos, lint, typecheck, build Next.js com 37 rotas e OpenNext Cloudflare
+limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
+navegador embutido não foi possível neste ambiente.
+
+---
+
+## 4.8 Feature em andamento — Estoque (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** `/estoque` possui
+cadastro e edição de itens, SKU, unidade, estoque mínimo, ativação/desativação,
+busca, filtros, cards de saldo, alerta de baixo estoque e histórico recente de
+movimentações. Entradas e saídas passam por `record_inventory_movement`, função
+Postgres que bloqueia a linha do item, valida saldo e grava o movimento de forma
+atômica. Toda entidade inclui `clinic_id`, RLS e referências compostas para
+impedir associação cruzada entre clínicas.
+
+O item permanece desabilitado até `supabase/migrations/20260809_inventory.sql`
+ser aplicada. Depois execute `npm run db:types`, valide concorrência de saídas e
+isolation entre duas clínicas, e só então habilite o item. Compras, fornecedores,
+lotes e validade são módulos posteriores; não foram simulados nesta fatia.
+
+Validação desta fatia: 5 testes direcionados, suíte completa com 993 testes em
+83 arquivos, lint, typecheck, build Next.js com 38 rotas e OpenNext Cloudflare
 limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
 navegador embutido não foi possível neste ambiente.
 

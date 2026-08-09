@@ -360,6 +360,7 @@ describe('nenhuma action revalida rota que não alimenta', () => {
       rooms: ['/salas-e-recursos', '/agenda'],
       leads: ['/crm'],
       forms: ['/formularios'],
+      inventory: ['/estoque'],
       scheduling: [
         '/agenda',
         '/dashboard',

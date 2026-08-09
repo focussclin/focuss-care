@@ -50,6 +50,13 @@ Storage e do fornecedor de assinatura eletrônica; sem essas configurações, o
 app permite rascunho mas bloqueia o envio de formulários que contenham esses
 campos.
 
+**Estoque (09/08/2026):** a migration
+`supabase/migrations/20260809_inventory.sql` foi criada, mas ainda não foi
+aplicada. Ela cria itens, movimentações, RLS e a função atômica de atualização de
+saldo. A tela `/estoque` e as actions já estão preparadas; depois de aplicar,
+execute `npm run db:types`, valide duas clínicas e concorrência de saídas antes
+de habilitar o item no menu. Compras e fornecedores ainda não possuem migration.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.
