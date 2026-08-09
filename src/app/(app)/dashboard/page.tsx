@@ -16,7 +16,6 @@ import { getReportingRepository } from '@/modules/reporting/infrastructure/repos
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { buildFinancialPulse } from '@/modules/dashboard/application/financialPulse'
 import { FinancialPulseCard } from '@/modules/dashboard/ui/FinancialPulseCard'
-import { NotificationBell } from '@/modules/dashboard/ui/NotificationBell'
 import { QuickActionsCard } from '@/modules/dashboard/ui/QuickActionsCard'
 import { RecentActivityCard } from '@/modules/dashboard/ui/RecentActivityCard'
 import { StatCard } from '@/components/ui/stat-card'
@@ -112,8 +111,6 @@ export default async function DashboardPage() {
         description="Aqui está o resumo da sua clínica hoje."
         actions={
           <>
-            <NotificationBell />
-
             <span className="inline-flex size-11 items-center justify-center">
               <Avatar name={displayName} size="md" />
               <span className="sr-only">{displayName}</span>

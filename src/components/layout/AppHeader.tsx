@@ -107,9 +107,8 @@ export function AppHeader({
           Campo que aceita digitação e não faz nada é pior que botão
           desabilitado: a pessoa digita, espera, e conclui que a busca não
           encontrou o paciente. Virou um botão — que é o que ele sempre foi — e
-          abre a paleta de comandos. O texto também mudou: a paleta vai a telas
-          e ações, não procura registros, e prometer o contrário reintroduziria
-          o mesmo engano com outra roupa.
+          abre a paleta de comandos. A paleta navega por telas e ações e também
+          pesquisa pacientes e agendamentos reais quando o usuário tem permissão.
         */}
         <button
           type="button"
@@ -119,7 +118,7 @@ export function AppHeader({
         >
           <Search aria-hidden className="size-4 shrink-0" />
           <span className="h-10 min-w-0 flex-1 content-center truncate text-aux">
-            Buscar paciente ou ir para uma tela…
+            Buscar paciente ou agendamento…
           </span>
           <kbd className="hidden items-center gap-1 rounded-md border border-border-card bg-surface px-1.5 py-0.5 text-[10px] text-muted lg:inline-flex">
             <Command aria-hidden className="size-3" /> K
