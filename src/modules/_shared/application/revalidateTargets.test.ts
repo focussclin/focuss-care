@@ -362,6 +362,7 @@ describe('nenhuma action revalida rota que não alimenta', () => {
       forms: ['/formularios'],
       inventory: ['/estoque'],
       purchases: ['/compras', '/estoque'],
+      reconciliation: ['/conciliacao'],
       scheduling: [
         '/agenda',
         '/dashboard',

@@ -46,6 +46,8 @@ const BUILT_BUT_HIDDEN: Record<string, string> = {
     'O cadastro e a movimentação atômica estão preparados, mas inventory_items e inventory_movements ainda dependem da migration 20260809_inventory.sql. O item permanece bloqueado até a persistência real existir.',
   '/compras':
     'Fornecedores, pedidos e recebimento atômico estão preparados, mas dependem da migration 20260809_purchases.sql aplicada depois de 20260809_inventory.sql. O item permanece bloqueado até o saldo persistir de verdade.',
+  '/conciliacao':
+    'A conciliação manual está preparada, mas bank_accounts, bank_transactions e bank_reconciliations dependem da migration 20260809_bank_reconciliation.sql. O item permanece bloqueado até contas e vínculos persistirem.',
   '/salas-e-recursos':
     'Depende de `supabase/migrations/20260809_rooms.sql`, escrita e revisada mas não aplicada. Com a tabela ausente a tela mostra o estado pendente; habilitar o item prometeria persistência que o banco não sustenta.',
   '/tarefas':

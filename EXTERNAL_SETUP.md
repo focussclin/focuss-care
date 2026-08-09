@@ -67,6 +67,21 @@ isolamento entre clínicas e conferir que recebimentos atualizam o saldo sem
 duplicar movimentos. A criação automática de contas a pagar ainda não faz parte
 desta fatia.
 
+**Conciliação bancária (09/08/2026):** a migration
+`supabase/migrations/20260809_bank_reconciliation.sql` foi criada, mas ainda não
+foi aplicada. Ela cria contas, transações, vínculos de conciliação, RLS e uma
+RPC atômica que relaciona entradas a faturas e saídas a despesas. A tela
+`/conciliacao` permite lançamento manual enquanto o adapter de extrato bancário
+não existe. Depois de aplicar, execute `npm run db:types`, valide isolamento
+entre clínicas, repetição de conciliação e o bloqueio de sentido (entrada não
+pode apontar para despesa; saída não pode apontar para fatura).
+
+**Provedor bancário:** aguardando configuração externa. Nenhuma credencial é
+necessária para o fluxo manual; quando um provedor for escolhido, serão
+necessários apenas o contrato/API oficial, URL e segredo armazenados no ambiente
+do servidor. Senhas bancárias nunca devem ser solicitadas ou armazenadas pelo
+Focuss Care.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.

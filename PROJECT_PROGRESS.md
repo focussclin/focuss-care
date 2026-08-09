@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 998 testes em 85 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 39 rotas.
+**Validação atual:** 1003 testes em 87 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 40 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -97,6 +97,7 @@ As 38 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/formularios` | **EM ANDAMENTO** | Migration `clinic_forms` pendente; builder de modelos preparado | `clinic.settings` quando a tabela existir |
 | `/formularios/[formId]/responder` | **EM ANDAMENTO** | Formulário publicado + pacientes ativos; salva rascunho e envio quando a migration existir | `patient.write` na action |
 | `/estoque` | **EM ANDAMENTO** | Migration `inventory` pendente; cadastro, saldo e movimentação atômica preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
+| `/conciliacao` | **EM ANDAMENTO** | Migration `bank_reconciliation` pendente; contas, transações manuais e vínculos a faturas/despesas preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -361,6 +362,31 @@ será uma próxima decisão para evitar duplicidade de lançamentos.
 
 Validação desta fatia: 5 testes direcionados; suíte completa com 998 testes em
 85 arquivos, lint, typecheck, build Next.js com 39 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
+
+---
+
+## 4.10 Feature em andamento — Conciliação bancária (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** `/conciliacao`
+possui cadastro/ativação de contas, registro manual de entradas e saídas,
+busca, filtros por status/tipo, candidatos reais de faturas e despesas e
+conciliação com vínculo auditável. O sentido é validado: entradas só apontam
+para faturas e saídas só apontam para despesas.
+
+`supabase/migrations/20260809_bank_reconciliation.sql` cria
+`bank_accounts`, `bank_transactions` e `bank_reconciliations`, com RLS,
+referências compostas por `(id, clinic_id)` e a RPC
+`reconcile_bank_transaction`. O vínculo trava a transação, rejeita repetição e
+altera o status para `reconciled` sem apagar o extrato.
+
+O item continua bloqueado até aplicar a migration, regenerar os tipos e validar
+duas clínicas. A importação automática de extratos não foi simulada: depende de
+um provedor bancário que ainda não está configurado; a tela identifica isso
+explicitamente e mantém o fluxo manual útil.
+
+Validação direcionada desta fatia: 5 testes; suíte completa com 1003 testes em
+87 arquivos, lint, typecheck, build Next.js com 40 rotas e OpenNext Cloudflare
 limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---
