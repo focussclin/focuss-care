@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1008 testes em 89 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 41 rotas.
+**Validação atual:** 1012 testes em 91 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 42 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -22,7 +22,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 | Status | O que significa | Quantos |
 |---|---|---|
-| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 18 |
+| **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 19 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
 | **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
@@ -62,12 +62,13 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
+| `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 
 ---
 
 ## 4. Rotas
 
-As 41 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -100,6 +101,7 @@ As 41 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/estoque` | **EM ANDAMENTO** | Migration `inventory` pendente; cadastro, saldo e movimentação atômica preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
 | `/conciliacao` | **EM ANDAMENTO** | Migration `bank_reconciliation` pendente; contas, transações manuais e vínculos a faturas/despesas preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
 | `/documentos` | **BLOQUEADO** | Banco de metadados e Storage privado dependem de `20260809_patient_documents.sql`; catálogo, filtros, upload e download assinado preparados | `patient.read`; upload exige `patient.write` |
+| `/insights` | **COMPLETO** | Reporting (fila, atendimentos, pacientes e distribuição por profissional) + motor de regras explicáveis | `report.read` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -415,6 +417,24 @@ Validação direcionada desta fatia: 5 testes; suíte atual com 1008 testes em 8
 arquivos, lint, typecheck e testes de rotas/revalidação limpos. Build completo e
 OpenNext serão executados antes do commit. A inspeção visual pelo navegador
 continua indisponível neste ambiente.
+
+---
+
+## 4.12 Feature completa — Insights proativos (09/08/2026)
+
+`/insights` agora é uma camada de leitura sobre o reporting existente. O motor
+gera sinais para fila aguardando, taxa de faltas, desaceleração de novos
+pacientes, pressão de cancelamentos e concentração de agenda. Cada insight
+exibe a fonte da métrica e leva para a rota operacional correspondente.
+
+Os critérios são puros, testáveis e explicáveis; não há número aleatório,
+modelo de IA sem provedor ou recomendação clínica. Quando não existe volume
+suficiente, a tela mostra estado vazio em vez de acusar um problema. A rota
+respeita `report.read` e o isolamento tenant-scoped do repositório de reporting.
+
+Validação direcionada desta fatia: 4 testes; suíte completa com 1012 testes em
+91 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---
 

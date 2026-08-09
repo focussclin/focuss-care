@@ -33,6 +33,7 @@ const EXISTING_ROUTES = new Set([
   '/assinaturas',
   '/recepcao',
   '/documentos',
+  '/insights',
 ])
 
 describe('navItems', () => {

@@ -109,7 +109,7 @@ export const navItems: readonly NavItem[] = [
 
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },
-  { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', disabled: true },
+  { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', permission: 'report.read' },
   { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
 
   /*
