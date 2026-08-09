@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1035 testes em 96 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1036 testes em 96 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -566,6 +566,18 @@ Node incompatível com OpenNext/Cloudflare Workers.
 Smoke local validado em `/dashboard`, `/pacientes` e `/agenda` (307) e `/login`
 (200). O build Next.js e `npx opennextjs-cloudflare build` passaram, gerando o
 worker em `.open-next/worker.js`.
+
+---
+
+## 4.21 Notificações financeiras (09/08/2026)
+
+Cobranças criadas, pagamentos registrados e cobranças canceladas agora geram
+avisos persistidos para o usuário que executou a operação, com link para
+`/financeiro`, paciente quando a operação o devolve e valor formatado em BRL.
+Descrições dos itens, observações e motivos não entram no aviso.
+
+Validação desta fatia: 3 testes direcionados, suíte com 1036 testes em 96
+arquivos, lint, typecheck e build Next.js com 42 rotas limpos.
 
 ---
 
