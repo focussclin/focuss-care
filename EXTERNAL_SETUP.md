@@ -82,6 +82,15 @@ necessários apenas o contrato/API oficial, URL e segredo armazenados no ambient
 do servidor. Senhas bancárias nunca devem ser solicitadas ou armazenadas pelo
 Focuss Care.
 
+**Documentos de pacientes (09/08/2026):** a migration
+`supabase/migrations/20260809_patient_documents.sql` foi criada, mas ainda não
+foi aplicada. Ela cria `patient_documents`, RLS tenant-scoped e o bucket privado
+`patient-documents`, com policies de Storage por `clinic_id`. A rota
+`/documentos`, o upload real, os downloads assinados e a auditoria já estão no
+código; a tela permanece bloqueada até a migration existir no projeto remoto.
+Depois de aplicar, execute `npm run db:types`, verifique o bucket e valide
+upload/download com usuários de duas clínicas.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.

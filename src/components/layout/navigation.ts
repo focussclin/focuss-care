@@ -127,7 +127,7 @@ export const navItems: readonly NavItem[] = [
 
   { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management', permission: 'team.read' },
   { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management', permission: 'report.read' },
-  { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', disabled: true },
+  { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', permission: 'patient.read' },
   { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', disabled: true },
   { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', permission: 'clinic.settings' },
   { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', permission: 'audit.read' },

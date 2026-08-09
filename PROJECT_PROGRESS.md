@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1003 testes em 87 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 40 rotas.
+**Validação atual:** 1008 testes em 89 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 41 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -25,7 +25,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 18 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
-| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 8 |
+| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
 
 ---
 
@@ -61,12 +61,13 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
+| `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 
 ---
 
 ## 4. Rotas
 
-As 38 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 41 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -98,6 +99,7 @@ As 38 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/formularios/[formId]/responder` | **EM ANDAMENTO** | Formulário publicado + pacientes ativos; salva rascunho e envio quando a migration existir | `patient.write` na action |
 | `/estoque` | **EM ANDAMENTO** | Migration `inventory` pendente; cadastro, saldo e movimentação atômica preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
 | `/conciliacao` | **EM ANDAMENTO** | Migration `bank_reconciliation` pendente; contas, transações manuais e vínculos a faturas/despesas preparados | `invoice.read`; escrita exige `clinic.settings`/`invoice.write` |
+| `/documentos` | **BLOQUEADO** | Banco de metadados e Storage privado dependem de `20260809_patient_documents.sql`; catálogo, filtros, upload e download assinado preparados | `patient.read`; upload exige `patient.write` |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -388,6 +390,31 @@ explicitamente e mantém o fluxo manual útil.
 Validação direcionada desta fatia: 5 testes; suíte completa com 1003 testes em
 87 arquivos, lint, typecheck, build Next.js com 40 rotas e OpenNext Cloudflare
 limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
+
+---
+
+## 4.11 Feature bloqueada — Documentos (09/08/2026)
+
+**Implementação local concluída; ativação do banco e do Storage pendente.**
+`/documentos` possui catálogo tenant-scoped, busca por arquivo/paciente, filtros
+por tipo e paciente, upload multipart real, validação de MIME/tamanho, limpeza
+de objeto órfão, link de download assinado por 60 segundos e auditoria de envio
+e download. O modo demonstração não fabrica arquivos pessoais.
+
+`supabase/migrations/20260809_patient_documents.sql` cria (ou prepara) os
+metadados de `patient_documents`, RLS, chave composta paciente-clínica e o
+bucket privado `patient-documents`, com policies de Storage limitadas ao
+primeiro segmento `clinic_id` do caminho.
+
+O item só deve ser considerado ativo depois de aplicar a migration, regenerar
+`database.types.ts`, validar o bucket e testar duas clínicas. A URL assinada
+não é persistida nem exposta em logs; o Storage continua sem `service_role` no
+frontend.
+
+Validação direcionada desta fatia: 5 testes; suíte atual com 1008 testes em 89
+arquivos, lint, typecheck e testes de rotas/revalidação limpos. Build completo e
+OpenNext serão executados antes do commit. A inspeção visual pelo navegador
+continua indisponível neste ambiente.
 
 ---
 
