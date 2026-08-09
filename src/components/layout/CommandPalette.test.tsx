@@ -22,6 +22,7 @@ import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
  */
 
 const push = vi.fn()
+const searchInvoicesAction = vi.fn()
 const searchPatientsAction = vi.fn()
 const searchAppointmentsAction = vi.fn()
 
@@ -33,12 +34,18 @@ vi.mock('@/modules/patients/actions/searchPatients.action', () => ({
   searchPatientsAction: (input: unknown) => searchPatientsAction(input),
 }))
 
+vi.mock('@/modules/billing/actions/searchInvoices.action', () => ({
+  searchInvoicesAction: (input: unknown) => searchInvoicesAction(input),
+}))
+
 vi.mock('@/modules/scheduling/actions/searchAppointments.action', () => ({
   searchAppointmentsAction: (input: unknown) => searchAppointmentsAction(input),
 }))
 
 beforeEach(() => {
   push.mockClear()
+  searchInvoicesAction.mockReset()
+  searchInvoicesAction.mockResolvedValue({ ok: true, data: [] })
   searchPatientsAction.mockReset()
   searchPatientsAction.mockResolvedValue({ ok: true, data: [] })
   searchAppointmentsAction.mockReset()
@@ -201,6 +208,33 @@ describe('busca inline de pacientes', () => {
     expect(push).toHaveBeenCalledWith('/agenda')
   })
 
+  it('consulta cobranças reais e retorna para o financeiro', async () => {
+    searchInvoicesAction.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'invoice-1',
+          patientName: 'Maria Souza',
+          totalCents: 12500,
+          paidCents: 5000,
+          status: 'partially_paid',
+          createdAt: '2026-08-09T13:00:00.000Z',
+        },
+      ],
+    })
+
+    renderPalette()
+    fireEvent.change(input(), { target: { value: 'Maria' } })
+
+    const invoice = await screen.findByRole('option', {
+      name: /Maria Souza.*R\$\s*125,00/,
+    })
+    expect(searchInvoicesAction).toHaveBeenCalledWith({ query: 'Maria' })
+
+    fireEvent.click(invoice)
+    expect(push).toHaveBeenCalledWith('/financeiro')
+  })
+
   it('não consulta o banco no modo demonstração', async () => {
     renderPalette({ role: undefined })
     fireEvent.change(input(), { target: { value: 'Maria' } })
@@ -208,6 +242,7 @@ describe('busca inline de pacientes', () => {
     await new Promise((resolve) => setTimeout(resolve, 300))
     expect(searchPatientsAction).not.toHaveBeenCalled()
     expect(searchAppointmentsAction).not.toHaveBeenCalled()
+    expect(searchInvoicesAction).not.toHaveBeenCalled()
     expect(screen.getByRole('option', { name: /buscar pacientes por/i })).toBeTruthy()
   })
 })

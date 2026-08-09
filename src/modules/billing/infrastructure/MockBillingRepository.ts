@@ -20,6 +20,10 @@ import { BillingRepositoryError } from '../domain/BillingRepositoryError'
  * A tela vazia diz a verdade: sem banco, não há financeiro.
  */
 export class MockBillingRepository implements BillingRepository {
+  async searchInvoicesByPatientName(): Promise<Invoice[]> {
+    return []
+  }
+
   async listPayables(): Promise<Payable[]> {
     return []
   }

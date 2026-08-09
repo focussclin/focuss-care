@@ -108,7 +108,8 @@ export function AppHeader({
           desabilitado: a pessoa digita, espera, e conclui que a busca não
           encontrou o paciente. Virou um botão — que é o que ele sempre foi — e
           abre a paleta de comandos. A paleta navega por telas e ações e também
-          pesquisa pacientes e agendamentos reais quando o usuário tem permissão.
+          pesquisa pacientes, agendamentos e cobranças reais quando o usuário
+          tem permissão.
         */}
         <button
           type="button"
@@ -118,7 +119,7 @@ export function AppHeader({
         >
           <Search aria-hidden className="size-4 shrink-0" />
           <span className="h-10 min-w-0 flex-1 content-center truncate text-aux">
-            Buscar paciente ou agendamento…
+            Buscar paciente, cobrança ou agendamento…
           </span>
           <kbd className="hidden items-center gap-1 rounded-md border border-border-card bg-surface px-1.5 py-0.5 text-[10px] text-muted lg:inline-flex">
             <Command aria-hidden className="size-3" /> K

@@ -40,6 +40,13 @@ import type {
  * clínica e nunca aceita do navegador o valor que será baixado.
  */
 export interface BillingRepository {
+  /** Cobranças encontradas pelo nome do paciente, para a busca global. */
+  searchInvoicesByPatientName(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Invoice[]>
+
   /** Despesas com vencimento até o limite informado, incluindo atrasadas. */
   listPayables(clinicId: string, through: Date): Promise<Payable[]>
 

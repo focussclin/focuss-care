@@ -8,6 +8,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils/cn'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 import { can } from '@/lib/auth/permissions'
+import { searchInvoicesAction } from '@/modules/billing/actions/searchInvoices.action'
 import { searchPatientsAction } from '@/modules/patients/actions/searchPatients.action'
 import { searchAppointmentsAction } from '@/modules/scheduling/actions/searchAppointments.action'
 
@@ -31,14 +32,15 @@ export interface CommandPaletteProps {
  * # O que ela faz, e o que ela declara não fazer
  *
  * Navega entre telas, abre os dois formulários que abrem por URL e busca
- * pacientes e agendamentos reais pelo nome a partir de dois caracteres.
+ * pacientes, agendamentos e cobranças reais pelo nome do paciente a partir de
+ * dois caracteres.
  *
  * As buscas usam Server Actions com debounce e RLS no caminho. O resultado de
  * paciente abre a ficha; o resultado de agendamento leva à agenda.
  * Se a action não estiver disponível, o comando de fallback ainda leva a
  * `/pacientes?q=…`, onde o servidor consulta a mesma base.
  *
- * **Prontuário, cobrança e guia não são pesquisados** — essas listagens não têm
+ * **Prontuário e guia não são pesquisados** — essas listagens ainda não têm
  * contrato de termo. O estado vazio deixa o limite explícito.
  *
  * # Acessibilidade
@@ -77,6 +79,18 @@ export function CommandPalette({
   >([])
   const [appointmentSearchPending, setAppointmentSearchPending] = useState(false)
   const [appointmentSearchError, setAppointmentSearchError] = useState<string | null>(null)
+  const [invoiceResults, setInvoiceResults] = useState<
+    readonly {
+      id: string
+      patientName: string
+      totalCents: number
+      paidCents: number
+      status: string
+      createdAt: string
+    }[]
+  >([])
+  const [invoiceSearchPending, setInvoiceSearchPending] = useState(false)
+  const [invoiceSearchError, setInvoiceSearchError] = useState<string | null>(null)
 
   useEffect(() => {
     const term = query.trim()
@@ -104,6 +118,42 @@ export function CommandPalette({
         })
         .finally(() => {
           if (active) setPatientSearchPending(false)
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+    }
+  }, [open, query, role])
+
+  useEffect(() => {
+    const term = query.trim()
+    const canSearchInvoices =
+      role !== undefined && role !== null && can(role, 'invoice.read')
+
+    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchInvoices) return
+
+    let active = true
+
+    const timeout = window.setTimeout(() => {
+      void searchInvoicesAction({ query: term })
+        .then((result) => {
+          if (!active) return
+          if (result.ok) {
+            setInvoiceResults(result.data)
+            return
+          }
+          setInvoiceResults([])
+          setInvoiceSearchError(result.error.message)
+        })
+        .catch(() => {
+          if (!active) return
+          setInvoiceResults([])
+          setInvoiceSearchError('Não foi possível buscar cobranças agora.')
+        })
+        .finally(() => {
+          if (active) setInvoiceSearchPending(false)
         })
     }, 250)
 
@@ -174,15 +224,23 @@ export function CommandPalette({
         keywords: ['agendamento', 'atendimento', appointment.type, appointment.professionalName],
         group: 'Buscar' as const,
       }))
+      const invoiceCommands = invoiceResults.map((invoice) => ({
+        id: `invoice-${invoice.id}`,
+        label: `${invoice.patientName} · ${formatCents(invoice.totalCents)}`,
+        href: '/financeiro',
+        keywords: ['cobrança', 'financeiro', invoice.status],
+        group: 'Buscar' as const,
+      }))
 
       return [
         ...commands.filter((command) => command.id !== 'buscar-pacientes'),
         ...patientCommands,
         ...appointmentCommands,
+        ...invoiceCommands,
         ...(searchCommand ? [searchCommand] : []),
       ]
     },
-    [appointmentResults, patientResults, query, role],
+    [appointmentResults, invoiceResults, patientResults, query, role],
   )
 
   /*
@@ -229,16 +287,25 @@ export function CommandPalette({
     setHighlighted(0)
     setPatientResults([])
     setAppointmentResults([])
+    setInvoiceResults([])
     setPatientSearchError(null)
     setAppointmentSearchError(null)
+    setInvoiceSearchError(null)
     setPatientSearchPending(
       open && term.length >= MIN_SEARCH_LENGTH && canSearchPatients,
     )
     setAppointmentSearchPending(
       open && term.length >= MIN_SEARCH_LENGTH &&
-        role !== undefined &&
+      role !== undefined &&
         role !== null &&
         can(role, 'appointment.read'),
+    )
+    setInvoiceSearchPending(
+      open &&
+        term.length >= MIN_SEARCH_LENGTH &&
+        role !== undefined &&
+        role !== null &&
+        can(role, 'invoice.read'),
     )
   }
 
@@ -269,10 +336,13 @@ export function CommandPalette({
           setHighlighted(0)
           setPatientResults([])
           setAppointmentResults([])
+          setInvoiceResults([])
           setPatientSearchPending(false)
           setAppointmentSearchPending(false)
+          setInvoiceSearchPending(false)
           setPatientSearchError(null)
           setAppointmentSearchError(null)
+          setInvoiceSearchError(null)
         }
         onOpenChange(next)
       }}
@@ -294,7 +364,7 @@ export function CommandPalette({
               value={query}
               onChange={(event) => updateQuery(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Buscar paciente, ir para uma tela ou criar…"
+              placeholder="Buscar paciente, cobrança ou ir para uma tela…"
               aria-label="Buscar telas e ações"
               role="combobox"
               aria-expanded
@@ -307,25 +377,25 @@ export function CommandPalette({
           {results.length === 0 ? (
             <div className="px-4 py-6">
               <p className="text-aux text-foreground">
-                {patientSearchPending || appointmentSearchPending
+                {patientSearchPending || appointmentSearchPending || invoiceSearchPending
                   ? 'Buscando registros…'
                   : 'Nenhuma tela ou ação com esse nome.'}
               </p>
-              {patientSearchError || appointmentSearchError ? (
+              {patientSearchError || appointmentSearchError || invoiceSearchError ? (
                 <p role="alert" className="mt-2 text-label text-danger">
-                  {patientSearchError ?? appointmentSearchError}
+                  {patientSearchError ?? appointmentSearchError ?? invoiceSearchError}
                 </p>
               ) : null}
               {/*
                 O estado vazio precisa dizer o que É pesquisável e o que não é.
 
-                Pacientes e agendamentos são consultados por actions server-side;
-                prontuário, financeiro e convênios ainda não têm busca por termo.
+                Pacientes, agendamentos e cobranças são consultados por actions
+                server-side; prontuário e convênios ainda não têm busca por termo.
               */}
               <p className="mt-1 text-label text-muted">
                 {query.trim().length < MIN_SEARCH_LENGTH
                   ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome.'
-                  : 'Pacientes e agendamentos são pesquisados por aqui. Prontuários, cobranças e guias ainda não são pesquisados pelo nome.'}
+                  : 'Pacientes, agendamentos e cobranças são pesquisados por aqui. Prontuários e guias ainda não são pesquisados pelo nome.'}
               </p>
             </div>
           ) : (
@@ -385,7 +455,7 @@ export function CommandPalette({
             </ul>
           )}
 
-          {(patientSearchPending || appointmentSearchPending) && results.length > 0 ? (
+          {(patientSearchPending || appointmentSearchPending || invoiceSearchPending) && results.length > 0 ? (
             <p role="status" className="border-t border-border-card px-4 py-2 text-label text-muted">
               Buscando registros…
             </p>
@@ -427,4 +497,11 @@ function formatAppointmentDate(value: string): string {
     timeStyle: 'short',
     timeZone: 'America/Sao_Paulo',
   }).format(new Date(value))
+}
+
+function formatCents(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value / 100)
 }

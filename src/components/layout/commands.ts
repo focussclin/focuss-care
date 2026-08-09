@@ -10,18 +10,18 @@ import { navItems } from './navigation'
  * # O que entra aqui, e o que não entra
  *
  * Quatro coisas, e nada além delas: **navegação para rota que existe**,
- * **criação que abre um formulário de verdade**, busca real de pacientes e
- * busca real de agendamentos por paciente.
+ * **criação que abre um formulário de verdade**, busca real de pacientes,
+ * agendamentos e cobranças por paciente.
  *
  * A busca por nome tem dois caminhos seguros: a paleta consulta a Server Action
  * para mostrar resultados inline, e o comando `patientSearchCommand` leva a
  * `/pacientes?q=…` quando a pessoa prefere abrir a lista completa. Em ambos os
  * casos a consulta passa pelo servidor e pela RLS.
  *
- * A agenda é consultada por uma action tenant-scoped que primeiro encontra
- * pacientes ativos e depois carrega seus agendamentos não cancelados. O restante
- * — prontuário, financeiro e convênios — ainda não tem contrato de busca por
- * termo, e o estado vazio da paleta diz isso em vez de simular resultado.
+ * A agenda e o financeiro são consultados por actions tenant-scoped que primeiro
+ * encontram pacientes ativos e depois carregam seus registros. O restante —
+ * prontuário e convênios — ainda não tem contrato de busca por termo, e o estado
+ * vazio da paleta diz isso em vez de simular resultado.
  */
 export interface Command {
   id: string
@@ -133,7 +133,7 @@ export function visibleCommands(
 export const MIN_SEARCH_LENGTH = 2
 
 /**
- * O comando de buscar paciente — **a única busca real da paleta**.
+ * O comando de buscar paciente — o fallback da busca inline.
  *
  * # Por que ele existe, e por que só ele
  *
@@ -142,11 +142,9 @@ export const MIN_SEARCH_LENGTH = 2
  * com o termo já no endereço. Nenhuma linha é lida no navegador, nenhum
  * resultado é inventado, e o que aparece é o que a RLS deixou passar.
  *
- * Agenda, prontuário, financeiro e convênios **não têm** busca equivalente por
- * URL — a listagem deles não aceita termo. Um comando "Buscar atendimentos"
- * levaria a `/agenda` sem filtro nenhum, e a pessoa concluiria que não há
- * atendimento com aquele nome. Por isso a paleta oferece um, não cinco, e o
- * estado vazio diz quais ainda não são pesquisáveis.
+ * Agenda e financeiro já possuem buscas inline por Server Action, e os
+ * resultados levam às telas correspondentes. Prontuário e convênios ainda não
+ * têm contrato de termo; o estado vazio diz isso em vez de simular resultado.
  */
 export function patientSearchCommand(
   role: MembershipRole | null | undefined,

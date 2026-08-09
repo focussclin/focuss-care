@@ -127,6 +127,42 @@ interface PayableRow {
 export class SupabaseBillingRepository implements BillingRepository {
   constructor(private readonly client: Client) {}
 
+  async searchInvoicesByPatientName(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Invoice[]> {
+    const cleanQuery = query.replace(/[\\%_*(),]/g, ' ').trim()
+    if (!cleanQuery) return []
+
+    const { data: patients, error: patientError } = await this.client
+      .from('patients')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('is_active', true)
+      .ilike('full_name', `%${cleanQuery}%`)
+      .limit(Math.min(Math.max(limit * 2, 1), 32))
+
+    if (patientError) {
+      throw readFailure('searchInvoicesByPatientName', patientError)
+    }
+
+    const patientIds = (patients ?? []).map((patient) => patient.id)
+    if (patientIds.length === 0) return []
+
+    const { data, error } = await this.client
+      .from('invoices')
+      .select(INVOICE_SELECT)
+      .eq('clinic_id', clinicId)
+      .in('patient_id', patientIds)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(Math.max(Math.trunc(limit) || 1, 1), 20))
+
+    if (error) throw readFailure('searchInvoicesByPatientName', error)
+
+    return (data as unknown as InvoiceRow[]).map(toInvoice)
+  }
+
   async listPayables(clinicId: string, through: Date): Promise<Payable[]> {
     const { data, error } = await this.client
       .from('payables')
