@@ -21,6 +21,8 @@ export const teamMessages = {
   lastOwner:
     'Esta clínica precisa de pelo menos um responsável. Defina outro responsável antes de alterar este acesso.',
   forbidden: 'Você não tem permissão para gerenciar a equipe.',
+  roleEscalation:
+    'Só quem é proprietário pode conceder o papel de proprietário.',
   notFound: 'Este vínculo não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a ação agora. Tente novamente.',

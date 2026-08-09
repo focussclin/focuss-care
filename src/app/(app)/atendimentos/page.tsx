@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
 
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { startOfDay } from '@/lib/utils/date'
 import {
   toEncounterDto,
@@ -31,6 +34,22 @@ export const metadata: Metadata = {
  */
 export default async function AtendimentosPage() {
   await connection()
+
+  /*
+   * O portao que faltava.
+   *
+   * `/recepcao` e `/display` leem a MESMA fila e as duas exigem
+   * `encounter.read`; esta nao exigia nada. O menu esconde o item de quem nao
+   * tem a permissao, mas menu nao e fronteira: a URL continua digitavel.
+   *
+   * `finance` e o unico papel sem `encounter.read`, e a matriz diz por que:
+   * ele alcanca cobranca, nao agenda nem atendimento. Sem esta linha, um
+   * financeiro convidado so para faturar via a fila do dia inteira — quem esta
+   * na clinica agora e com quem.
+   */
+  const role = await getActiveClinicRole()
+  if (!can(role, 'encounter.read')) forbidden()
+
   const today = startOfDay(new Date())
 
   const [encounterSource, patientSource, appointmentSource] = await Promise.all([

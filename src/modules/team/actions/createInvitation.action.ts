@@ -30,6 +30,24 @@ const runCreateInvitation = createAction<
   revalidatePaths: ['/equipe'],
 
   handler: async (input, context) => {
+    /*
+     * Ninguem convida para um papel que nao tem.
+     *
+     * Mesma escalada que `changeRole` fecha, por outra porta: `admin` tem
+     * `team.manage` e nao tem `record.read`. Sem esta recusa, ele convida um
+     * `owner` para um endereco que controla, aceita em outra sessao e le o
+     * prontuario de todos — o controle de LGPD da matriz de permissoes
+     * contornado por quem ele restringe.
+     *
+     * A RPC `create_invitation` tambem precisa da regra, e ela JA ESTA
+     * APLICADA no banco: `20260809_invitation_role_guard.sql` a substitui. Ate
+     * ser aplicada, esta linha e a unica barreira — e ela ja basta, porque
+     * toda emissao passa por aqui.
+     */
+    if (input.role === 'owner' && context.role !== 'owner') {
+      return err('forbidden', teamMessages.roleEscalation)
+    }
+
     const origin = await getApplicationOrigin()
     if (!origin) return err('unavailable', teamMessages.inviteUnavailable)
 

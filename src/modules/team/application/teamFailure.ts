@@ -27,6 +27,8 @@ export function toTeamFailure<F extends string>(
     switch (cause.reason) {
       case 'self-revoke':
         return err<F>('conflict', teamMessages.selfRevoke)
+      case 'role-escalation':
+        return err<F>('forbidden', teamMessages.roleEscalation)
       case 'last-owner':
         return err<F>('conflict', teamMessages.lastOwner)
       case 'not-found':

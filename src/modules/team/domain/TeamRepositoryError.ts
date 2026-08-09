@@ -21,6 +21,16 @@ export type TeamWriteFailure =
    * assinatura, e o caminho de volta exige mexer direto no banco.
    */
   | 'last-owner'
+  /**
+   * Tentativa de CONCEDER um papel que quem age nao possui.
+   *
+   * `admin` tem `team.manage` e nao tem `record.read` — a matriz de permissoes
+   * exclui `admin` de CLINICAL de proposito, como controle de LGPD. Sem esta
+   * recusa, um `admin` se promove a `owner` (ou convida um `owner` que ele
+   * controla) e passa a ler o prontuario de todo mundo. O controle existia e
+   * era contornavel por quem ele restringia.
+   */
+  | 'role-escalation'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
   | 'not-found'
   /** A policy de RLS recusou. */

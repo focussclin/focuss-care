@@ -256,6 +256,7 @@ describe('changeRole', () => {
         CLINIC,
         MEMBERSHIP,
         'receptionist',
+        'owner',
       ),
     ).rejects.toMatchObject({ reason: 'last-owner' })
 
@@ -272,6 +273,7 @@ describe('changeRole', () => {
     const member = await new SupabaseTeamRepository(fake.client).changeRole(
       CLINIC,
       MEMBERSHIP,
+      'owner',
       'owner',
     )
 
@@ -291,11 +293,77 @@ describe('changeRole', () => {
       CLINIC,
       MEMBERSHIP,
       'finance',
+      'owner',
     )
 
     expect(member.role).toBe('finance')
   })
 
+  it('admin nao consegue conceder owner — nem a si mesmo', async () => {
+    /*
+     * A escalada que isto fecha: `admin` tem `team.manage` e NAO tem
+     * `record.read` — a matriz exclui `admin` de CLINICAL como controle de
+     * LGPD. Sem esta recusa, ele chamava `changeRole` com o proprio vinculo,
+     * virava `owner` e passava a ler o prontuario de todos. O controle era
+     * contornavel exatamente por quem ele restringia.
+     */
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = createFakeClient({
+      target: { user_id: OTHER_USER, role: 'admin' },
+      updated: memberRow({ role: 'owner' }),
+    })
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).changeRole(
+        CLINIC,
+        MEMBERSHIP,
+        'owner',
+        'admin',
+      ),
+    ).rejects.toMatchObject({ reason: 'role-escalation' })
+
+    spy.mockRestore()
+  })
+
+  it('a recusa acontece ANTES de tocar o banco', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = createFakeClient({ target: { user_id: OTHER_USER, role: 'admin' } })
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).changeRole(
+        CLINIC,
+        MEMBERSHIP,
+        'owner',
+        null,
+      ),
+    ).rejects.toMatchObject({ reason: 'role-escalation' })
+
+    // Papel nulo (claims ainda sem o vinculo) tambem nao concede: falha fechada.
+    expect(fake.calls.length).toBe(0)
+
+    spy.mockRestore()
+  })
+
+  it.each(
+    [['admin'], ['receptionist'], ['professional'], ['finance']] as const,
+  )(
+    'owner ainda concede %s',
+    async (papel) => {
+      const fake = createFakeClient({
+        target: { user_id: OTHER_USER, role: 'receptionist' },
+        updated: memberRow({ role: papel }),
+      })
+
+      const member = await new SupabaseTeamRepository(fake.client).changeRole(
+        CLINIC,
+        MEMBERSHIP,
+        papel,
+        'owner',
+      )
+
+      expect(member.role).toBe(papel)
+    },
+  )
   it('vínculo de outra clínica vira not-found', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const fake = createFakeClient({ target: null })
@@ -305,6 +373,7 @@ describe('changeRole', () => {
         CLINIC,
         MEMBERSHIP,
         'admin',
+        'owner',
       ),
     ).rejects.toMatchObject({ reason: 'not-found' })
 

@@ -21,8 +21,13 @@
 --
 --  * `notifications` — o bloco so acrescenta a policy de INSERT.
 --
--- O bucket `patient-documents` foi criado em 09/08/2026 (privado, 20 MB, PDF e
--- imagem). As policies de Storage dependem dele existir.
+-- O bucket `patient-documents` foi criado em 09/08/2026. O bloco de documentos
+-- faz `on conflict (id) do update`, entao ele NORMALIZA as configuracoes do
+-- bucket para as declaradas ali (10 MB e a lista de MIME de la).
+--
+-- INDICES REPETIDOS sao esperados: varios blocos criam
+-- `patients_id_clinic_id_key` e afins, todos com `if not exists`, porque cada
+-- um precisa do alvo para as proprias chaves compostas.
 --
 -- DEPOIS DE APLICAR: `npm run db:types`, remover os shims de tipos em
 -- `*/infrastructure/*Database.ts`, habilitar os itens em `navigation.ts` e
@@ -329,7 +334,22 @@ begin
 end
 $$;
 
--- 2. Tabela ------------------------------------------------------------------
+-- 2. Indices que as chaves compostas exigem -----------------------------------
+--
+-- `id` ja e unico nas tres tabelas, entao estes indices nao mudam cardinalidade
+-- nenhuma: eles so dao ao Postgres o alvo que uma FK composta precisa. Sao
+-- `if not exists` porque outras migrations de 09/08 criam os mesmos.
+
+create unique index if not exists patients_id_clinic_id_key
+  on public.patients (id, clinic_id);
+
+create unique index if not exists appointments_id_clinic_id_key
+  on public.appointments (id, clinic_id);
+
+create unique index if not exists invoices_id_clinic_id_key
+  on public.invoices (id, clinic_id);
+
+-- 3. Tabela ------------------------------------------------------------------
 
 create table if not exists public.clinic_tasks (
   id uuid primary key default gen_random_uuid(),
@@ -348,9 +368,23 @@ create table if not exists public.clinic_tasks (
   created_by uuid references public.profiles(id),
 
   -- Alvo opcional. Ver decisao 1 e 2 no cabecalho.
-  patient_id uuid references public.patients(id),
-  appointment_id uuid references public.appointments(id),
-  invoice_id uuid references public.invoices(id),
+  --
+  -- As FKs sao COMPOSTAS, com o tenant dentro: sem `clinic_id` na referencia,
+  -- o banco aceita uma tarefa desta clinica apontando para o paciente de OUTRA.
+  -- Nao vaza nada (a RLS filtra o join, e o nome volta nulo), mas guarda uma
+  -- linha que nao devia existir — e integridade que o banco sabe garantir nao
+  -- deve depender de a aplicacao lembrar. Mesmo padrao ja usado em
+  -- `clinic_form_responses`, `patient_documents` e `bank_reconciliation`.
+  patient_id uuid,
+  appointment_id uuid,
+  invoice_id uuid,
+
+  foreign key (patient_id, clinic_id)
+    references public.patients (id, clinic_id) on delete restrict,
+  foreign key (appointment_id, clinic_id)
+    references public.appointments (id, clinic_id) on delete restrict,
+  foreign key (invoice_id, clinic_id)
+    references public.invoices (id, clinic_id) on delete restrict,
 
   completed_at timestamptz,
   created_at timestamptz not null default now(),
@@ -371,7 +405,7 @@ create index if not exists clinic_tasks_patient_idx
   on public.clinic_tasks (patient_id)
   where patient_id is not null;
 
--- 3. RLS ---------------------------------------------------------------------
+-- 4. RLS ---------------------------------------------------------------------
 
 alter table public.clinic_tasks enable row level security;
 

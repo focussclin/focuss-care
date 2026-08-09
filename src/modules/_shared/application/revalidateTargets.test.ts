@@ -380,6 +380,11 @@ describe('nenhuma action revalida rota que não alimenta', () => {
        * que não lê o dado é custo sem efeito, e some do radar justamente por
        * não quebrar nada.
        */
+      /*
+       * `integrations` grava credencial de canal, e a unica tela que a mostra e
+       * `/configuracoes`. Nada mais le esse dado.
+       */
+      integrations: ['/configuracoes'],
       tasks: ['/tarefas'],
       team: ['/equipe'],
     }

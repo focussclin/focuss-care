@@ -191,7 +191,23 @@ export class SupabaseTeamRepository implements TeamRepository {
     clinicId: string,
     membershipId: string,
     role: MembershipRole,
+    actorRole: MembershipRole | null,
   ): Promise<TeamMember> {
+    /*
+     * Ninguem concede o papel que nao tem.
+     *
+     * `admin` tem `team.manage` e nao tem `record.read`. Sem esta linha, ele
+     * se promove a `owner` e le o prontuario de todo mundo — o controle de
+     * LGPD da matriz de permissoes era contornavel por quem ele restringia.
+     * Vem ANTES de qualquer leitura: recusar cedo nao toca o banco.
+     */
+    if (role === 'owner' && actorRole !== 'owner') {
+      throw new TeamRepositoryError(
+        'role-escalation',
+        'tentativa de conceder owner sem ser owner',
+      )
+    }
+
     const target = await this.requireMembership(clinicId, membershipId)
 
     // Rebaixar o último dono deixa a clínica sem quem a administre.

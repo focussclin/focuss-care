@@ -50,11 +50,19 @@ export interface TeamRepository {
    * proposital: trocar o próprio papel é legítimo — um sócio que deixa a
    * gestão e vira só profissional faz exatamente isso. O que não pode é a
    * clínica ficar sem dono, e disso cuida a regra do último `owner`.
+   *
+   * **Recebe `actorRole`**, e essa parte NÃO é simétrica com a de cima:
+   * rebaixar-se é legítimo, promover-se não. `admin` tem `team.manage` e não
+   * tem `record.read` — a matriz exclui `admin` de CLINICAL como controle de
+   * LGPD. Sem esta regra, o `admin` se promove a `owner` e passa a ler o
+   * prontuário de todo mundo: o controle era contornável por quem ele
+   * restringia. Só `owner` concede `owner`.
    */
   changeRole(
     clinicId: string,
     membershipId: string,
     role: MembershipRole,
+    actorRole: MembershipRole | null,
   ): Promise<TeamMember>
 
   /**

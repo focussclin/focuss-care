@@ -45,6 +45,9 @@ const runChangeRole = createAction<ChangeRoleInput, TeamMemberDto, 'role'>({
         context.clinicId,
         input.membershipId,
         input.role,
+        // Papel de quem age, resolvido pelo servidor. Nunca vem do cliente:
+        // se viesse, a propria regra que ele alimenta seria contornavel.
+        context.role,
       )
 
       return ok<TeamMemberDto>(toTeamMemberDto(member))
