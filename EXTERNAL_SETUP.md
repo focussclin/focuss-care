@@ -91,6 +91,14 @@ código; a tela permanece bloqueada até a migration existir no projeto remoto.
 Depois de aplicar, execute `npm run db:types`, verifique o bucket e valide
 upload/download com usuários de duas clínicas.
 
+**Tags administrativas de pacientes (09/08/2026):** a migration
+`supabase/migrations/20260809_patient_tags.sql` ainda não foi aplicada. Ela cria
+`patient_tags`, `patient_tag_links`, policies RLS e a RPC idempotente
+`add_patient_tag`. A ficha 360, o painel e as actions já estão preparados, mas
+as escritas permanecem bloqueadas até a migration existir no projeto remoto.
+Depois de aplicar, execute `npm run db:types` e valide leitura e escrita com
+usuários de duas clínicas.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.

@@ -15,16 +15,20 @@ import { getSessionState } from '@/lib/auth/session'
 import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
 import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
 import { toPatientContactDto } from '@/modules/patients/application/toPatientContactDto'
+import { toPatientTagDto } from '@/modules/patients/application/toPatientTagDto'
 import { toIsoDate } from '@/modules/patients/application/toPatientDto'
+import { isPatientTagRepositoryError } from '@/modules/patients/domain/PatientTagRepositoryError'
 import { getMockPatientNotes } from '@/modules/patients/infrastructure/MockPatientRepository'
 import {
   getPatientConsentSource,
   getPatientContactSource,
   getPatientRepository,
+  getPatientTagSource,
 } from '@/modules/patients/infrastructure/repository'
 import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel'
 import { PatientContactsPanel } from '@/modules/patients/ui/PatientContactsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
+import { PatientTagsPanel } from '@/modules/patients/ui/PatientTagsPanel'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
   formatDayHeading,
@@ -105,6 +109,8 @@ export default async function PatientProfilePage({
     getPatientContactSource(),
   ])
 
+  const tagSource = await getPatientTagSource()
+
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
         consentSource.clinicId,
@@ -118,6 +124,20 @@ export default async function PatientProfilePage({
         patient.id,
       )
     : []
+
+  let tags = [] as Awaited<ReturnType<typeof tagSource.repository.listByPatient>>
+  let tagsSchemaPending = false
+  if (tagSource.isLive) {
+    try {
+      tags = await tagSource.repository.listByPatient(tagSource.clinicId, patient.id)
+    } catch (cause) {
+      if (isPatientTagRepositoryError(cause) && cause.reason === 'schema-not-ready') {
+        tagsSchemaPending = true
+      } else {
+        throw cause
+      }
+    }
+  }
 
   const consentRows = buildPatientConsentRows(consents.map(toPatientConsentDto))
   const canManageConsents =
@@ -197,6 +217,14 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          <PatientTagsPanel
+            patientId={patient.id}
+            tags={tags.map(toPatientTagDto)}
+            isLive={tagSource.isLive}
+            canManage={canManageConsents}
+            schemaPending={tagsSchemaPending}
+          />
 
           <PatientContactsPanel
             patientId={patient.id}

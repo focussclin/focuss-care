@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1012 testes em 91 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 42 rotas.
+**Validação atual:** 1019 testes em 93 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -25,7 +25,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | **COMPLETO** | Fatia vertical fechada, persistindo, com teste | 19 |
 | **EM ANDAMENTO** | Parte entregue, parte declaradamente ausente na tela | 4 |
 | **PENDENTE** | Não implementado, e nada bloqueia começar | 0 |
-| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 9 |
+| **BLOQUEADO** | Depende de acesso ao banco, integração externa ou decisão de produto | 10 |
 
 ---
 
@@ -63,6 +63,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
+| `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
 
 ---
 
@@ -80,7 +81,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
 | `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
-| `/pacientes` e subrotas | **COMPLETO** | Banco (patients + patient_contacts + consents) | `patient.read`; alterações exigem `patient.write` |
+| `/pacientes` e subrotas | **COMPLETO** | Banco (patients + patient_contacts + consents); tags administrativas preparadas e aguardando migration | `patient.read`; alterações exigem `patient.write` |
 | `/recepcao` | **COMPLETO** | Banco (scheduling + encounters) — quem falta chegar e quem está atrasado, derivado na rota | `encounter.read` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
@@ -434,6 +435,25 @@ respeita `report.read` e o isolamento tenant-scoped do repositório de reporting
 
 Validação direcionada desta fatia: 4 testes; suíte completa com 1012 testes em
 91 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
+
+---
+
+## 4.13 Feature bloqueada — Tags administrativas de pacientes (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** A ficha 360 em
+`/pacientes/[patientId]` agora possui painel para criar, listar e remover tags
+administrativas. O nome é normalizado pelo schema, a cor usa vocabulário fechado,
+as ações usam o pipeline tenant-scoped e a RLS/RPC da migration, e o modo demo
+não inventa tags pessoais.
+
+`supabase/migrations/20260809_patient_tags.sql` cria catálogo e vínculos com
+chaves compostas por clínica, policies RLS, índice case-insensitive e a RPC
+idempotente `add_patient_tag`. O item só deve ser considerado ativo depois de
+aplicar a migration, regenerar `database.types.ts` e validar duas clínicas.
+
+Validação direcionada desta fatia: 7 testes; suíte completa com 1019 testes em
+93 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
 limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---

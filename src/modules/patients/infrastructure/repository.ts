@@ -10,10 +10,13 @@ import type { Database } from '@/lib/supabase/database.types'
 import type { PatientConsentRepository } from '../domain/PatientConsentRepository'
 import type { PatientContactRepository } from '../domain/PatientContactRepository'
 import type { PatientRepository } from '../domain/PatientRepository'
+import type { PatientTagRepository } from '../domain/PatientTagRepository'
 import { MockPatientRepository } from './MockPatientRepository'
 import { SupabasePatientConsentRepository } from './SupabasePatientConsentRepository'
 import { SupabasePatientContactRepository } from './SupabasePatientContactRepository'
 import { SupabasePatientRepository } from './SupabasePatientRepository'
+import { MockPatientTagRepository } from './MockPatientTagRepository'
+import { SupabasePatientTagRepository } from './SupabasePatientTagRepository'
 
 /**
  * Composicao do modulo: escolhe o adapter conforme o ambiente.
@@ -63,6 +66,40 @@ export function patientRepositoryFor(
   client: SupabaseClient<Database>,
 ): PatientRepository {
   return new SupabasePatientRepository(client)
+}
+
+// ---------------------------------------------------------------------------
+// Tags do paciente (P-04)
+// ---------------------------------------------------------------------------
+
+export async function getPatientTagSource(): Promise<
+  | { repository: PatientTagRepository; clinicId: string; isLive: true }
+  | { repository: PatientTagRepository; clinicId: string; isLive: false }
+> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabasePatientTagRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return {
+    repository: new MockPatientTagRepository(),
+    clinicId: source.clinicId,
+    isLive: false,
+  }
+}
+
+export function patientTagRepositoryFor(
+  client: SupabaseClient<Database>,
+): PatientTagRepository {
+  return new SupabasePatientTagRepository(client)
 }
 
 // ---------------------------------------------------------------------------
