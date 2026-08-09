@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1026 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1028 testes em 95 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -526,6 +526,21 @@ Validação desta fatia: 3 testes adicionais (1026 em 94 arquivos), lint,
 typecheck, build Next.js com 42 rotas, smoke HTTP de `/login` (200) e árvore Git
 limpa. A migration individual e o bloco `APLICAR_TUDO_20260809.sql` ainda
 precisam ser executados no projeto Supabase remoto.
+
+---
+
+## 4.18 Notificações da recepção (09/08/2026)
+
+Os eventos operacionais da fila agora usam o mesmo produtor persistente do
+centro de notificações: check-in, chamada, início e encerramento geram avisos
+para o usuário que realizou a ação, com link para `/atendimentos` e horário no
+fuso `America/Sao_Paulo`. O motivo informado na chegada não atravessa o DTO nem
+entra no aviso.
+
+Validação desta fatia: 2 testes direcionados para os contratos de agenda e
+recepção; suíte completa com 1028 testes em 95 arquivos, lint, typecheck e build
+Next.js com 42 rotas limpos. A migration de inserção própria de notificações
+continua pendente no Supabase remoto.
 
 ---
 
