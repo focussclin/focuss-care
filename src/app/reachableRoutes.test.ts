@@ -38,6 +38,8 @@ const APP_DIR = join(process.cwd(), 'src', 'app')
 const BUILT_BUT_HIDDEN: Record<string, string> = {
   '/salas-e-recursos':
     'Depende de `supabase/migrations/20260809_rooms.sql`, escrita e revisada mas não aplicada. Com a tabela ausente a tela mostra o estado pendente; habilitar o item prometeria persistência que o banco não sustenta.',
+  '/tarefas':
+    'Depende de `supabase/migrations/20260809_clinic_tasks.sql`, escrita e revisada mas não aplicada. Mesmo motivo de `/salas-e-recursos`: a tela declara a pendência em vez de prometer que a tarefa fica salva.',
 }
 
 /**

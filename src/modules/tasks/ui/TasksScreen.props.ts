@@ -10,46 +10,15 @@
  * aplicação.
  */
 
-export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'canceled'
+export type { TaskBucket, TaskStatus } from '../domain/Task'
+export type {
+  TaskDto,
+  TaskFormValues,
+  TaskGroupDto,
+  TaskTargetDto,
+} from '../schemas/task.schema'
 
-/** Agrupamento por prazo, na ordem em que a recepção age. */
-export type TaskBucket = 'overdue' | 'today' | 'week' | 'undated'
-
-export interface TaskTargetDto {
-  /** Rótulo pronto: "Maria Silva", "Atendimento de 12/08", "Fatura #1234". */
-  label: string
-  /** Para onde o link leva. Já validado como caminho interno. */
-  href: string
-}
-
-export interface TaskDto {
-  id: string
-  title: string
-  notes: string | null
-  status: TaskStatus
-  /** Menor número primeiro, como em `waiting_queue.priority`. */
-  priority: number
-  /** Frase relativa pronta: "vence em 2 dias". Null quando não há prazo. */
-  dueLabel: string | null
-  /** Data absoluta para o `title` do elemento. */
-  dueAt: string | null
-  assignee: { id: string; name: string } | null
-  target: TaskTargetDto | null
-}
-
-export interface TaskGroupDto {
-  bucket: TaskBucket
-  tasks: readonly TaskDto[]
-}
-
-export interface TaskFormValues {
-  title: string
-  notes: string
-  assigneeId: string | null
-  dueAt: string | null
-  priority: number
-  patientId: string | null
-}
+import type { TaskFormValues, TaskGroupDto } from '../schemas/task.schema'
 
 export interface TasksScreenProps {
   /** Já agrupadas e ordenadas pela rota. Grupo vazio não é enviado. */
@@ -57,6 +26,12 @@ export interface TasksScreenProps {
 
   /** Equipe elegível como responsável. */
   assignees: readonly { id: string; name: string }[]
+
+  /** Pacientes ativos disponíveis para relacionar uma tarefa. */
+  patients: readonly { id: string; name: string }[]
+
+  /** Usuário da sessão, usado pelo filtro "Minhas". */
+  currentUserId: string | null
 
   onSubmit: (
     values: TaskFormValues,
@@ -75,4 +50,7 @@ export interface TasksScreenProps {
   onCancel: (taskId: string) => Promise<string | null>
 
   isLive: boolean
+
+  /** Verdadeiro quando a interface está pronta, mas a migration ainda não existe no banco. */
+  schemaPending?: boolean
 }

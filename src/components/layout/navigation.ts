@@ -110,7 +110,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },
   { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', disabled: true },
-  { label: 'Tarefas inteligentes', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
+  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
 
   /*
    * "Pagamentos" e "Caixa" foram REMOVIDOS daqui, e não adiados.

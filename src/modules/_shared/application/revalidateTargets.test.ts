@@ -366,6 +366,15 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/pacientes/:seg/historico',
       ],
       settings: ['/', '/configuracoes', '/agenda'],
+      /*
+       * `tasks` invalida SÓ a própria tela.
+       *
+       * Tentador acrescentar `/pacientes/:seg`, já que a tarefa pode apontar
+       * para um paciente — e errado: a ficha não mostra tarefas. Invalidar rota
+       * que não lê o dado é custo sem efeito, e some do radar justamente por
+       * não quebrar nada.
+       */
+      tasks: ['/tarefas'],
       team: ['/equipe'],
     }
 

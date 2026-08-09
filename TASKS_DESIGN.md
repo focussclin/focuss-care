@@ -4,6 +4,10 @@
 > Claude). Depende da migration `supabase/migrations/20260809_clinic_tasks.sql`,
 > escrita e revisada, **ainda não aplicada**.
 
+> **Status em 09/08/2026:** a rota, o adapter tenant-scoped, as actions, as
+> validações e a interface responsiva foram implementados. O item continua
+> bloqueado no menu e sem gravação até a migration ser aplicada no Supabase.
+
 ## Objetivo
 
 Substituir o papel da recepção. "Ligar para a paciente que faltou", "conferir a
