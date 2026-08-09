@@ -6,6 +6,14 @@
 > aplicada. O documento existe para que o desenho comece agora e o código entre
 > no dia em que a tabela existir.
 
+## Status de implementação — 09/08/2026
+
+A tela foi implementada em `src/modules/rooms/ui/RoomsScreen.tsx` com lista
+agrupada, modal acessível, estados de demonstração e de migration pendente,
+criação, edição e ativação controladas por Server Actions. O menu segue
+desabilitado enquanto `20260809_rooms.sql` não estiver aplicada; isso evita
+prometer persistência em uma relação que ainda não existe no banco remoto.
+
 ## Objetivo
 
 Dar à clínica o mapa do que ela tem para ocupar: consultórios, salas de exame e

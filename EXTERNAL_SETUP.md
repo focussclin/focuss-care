@@ -14,6 +14,13 @@ As quatro migrations pendentes do projeto foram aplicadas no Supabase e
 verificadas estruturalmente. O arquivo `src/lib/supabase/database.types.ts`
 foi regenerado a partir do schema remoto e commitado em `851688e`.
 
+**Nova exceção desta etapa (09/08/2026):** a migration
+`supabase/migrations/20260809_rooms.sql` ainda não foi aplicada. A implementação
+de salas e recursos já está no código, mas o menu permanece bloqueado até a
+tabela `rooms`, a coluna `appointments.room_id` e a constraint de conflito de
+recurso existirem no projeto remoto. Depois de aplicar, execute
+`npm run db:types` e publique os tipos regenerados.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.

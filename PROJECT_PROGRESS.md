@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 891 testes em 68 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 23 rotas.
+**Validação atual:** 918 testes em 72 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 32 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -203,6 +203,24 @@ Corrigido com `src/lib/routes/safeNextPath.ts`, usado pela entrada por senha e
 pelo retorno do Google. A validação compara a **origem** depois de resolver a
 entrada, e não uma lista de caracteres proibidos: `//evil.net` e `/\evil.net`
 trocam de origem sem conter "http" nem dois pontos.
+
+---
+
+## 4.3 Feature em andamento — Salas e recursos (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** A rota
+`/salas-e-recursos` agora possui domínio, porta de repositório, adapter Supabase
+tenant-scoped, fallback de demonstração isolado, validação Zod, Server Actions
+com `clinic.settings`, auditoria, estados de erro/loading/empty e tela
+responsiva com criação, edição, desativação e reativação.
+
+O item permanece desabilitado no menu até `supabase/migrations/20260809_rooms.sql`
+ser aplicado e `npm run db:types` ser executado. Se a rota for aberta antes disso,
+ela informa que a migration está pendente e não oferece gravação. Isso é
+intencional: a feature não é considerada completa enquanto a persistência real
+não puder ser verificada.
+
+Validação desta fatia: 4 testes de UI, lint e typecheck limpos.
 
 ---
 

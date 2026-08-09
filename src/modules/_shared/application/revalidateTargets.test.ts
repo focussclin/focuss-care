@@ -357,6 +357,7 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/pacientes/:seg/historico',
       ],
       records: ['/prontuarios'],
+      rooms: ['/salas-e-recursos', '/agenda'],
       scheduling: [
         '/agenda',
         '/dashboard',
