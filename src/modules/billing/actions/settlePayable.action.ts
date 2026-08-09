@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { createBillingNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -27,6 +28,16 @@ const runSettlePayable = createAction<SettlePayableInput, PayableDto, Field>({
     unexpected: billingMessages.unexpected,
   },
   revalidatePaths: ['/financeiro'],
+
+  afterSuccess: async (output, _input, context) => {
+    await createBillingNotification({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      userId: context.userId,
+      kind: 'payable_settled',
+      amountCents: output.paidAmountCents,
+    })
+  },
 
   handler: async (input, context) => {
     try {

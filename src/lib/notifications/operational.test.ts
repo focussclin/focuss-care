@@ -11,6 +11,7 @@ vi.mock('@/modules/notifications/infrastructure/repository', () => ({
 import {
   createAppointmentNotification,
   createBillingNotification,
+  createCashNotification,
   createEncounterNotification,
 } from './operational'
 
@@ -86,6 +87,27 @@ describe('notificaÃ§Ãµes operacionais', () => {
         kind: 'billing.invoice_created',
         title: 'Cobrança criada',
         body: 'Joao Lima • R$\u00a0125,00',
+        link: '/financeiro',
+      }),
+    )
+  })
+
+  it('registra diferença de caixa sem transportar a descrição do lançamento', async () => {
+    await createCashNotification({
+      client,
+      clinicId: CLINIC,
+      userId: USER,
+      kind: 'closed',
+      differenceCents: -2500,
+    })
+
+    expect(createForUser).toHaveBeenCalledExactlyOnceWith(
+      CLINIC,
+      USER,
+      expect.objectContaining({
+        kind: 'billing.cash_closed',
+        title: 'Caixa fechado',
+        body: 'Diferença de -R$ 25,00',
         link: '/financeiro',
       }),
     )

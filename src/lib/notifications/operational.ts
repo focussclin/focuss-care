@@ -27,6 +27,10 @@ export type BillingNotificationKind =
   | 'invoice_created'
   | 'payment_registered'
   | 'invoice_canceled'
+  | 'payable_created'
+  | 'payable_settled'
+
+export type CashNotificationKind = 'opened' | 'entry' | 'closed'
 
 /**
  * Registra um evento operacional para quem executou a aÃ§Ã£o.
@@ -89,6 +93,8 @@ export async function createBillingNotification(input: {
     invoice_created: 'Cobrança criada',
     payment_registered: 'Pagamento registrado',
     invoice_canceled: 'Cobrança cancelada',
+    payable_created: 'Conta a pagar criada',
+    payable_settled: 'Conta a pagar paga',
   }
   const subject = input.patientName ? `${input.patientName} • ` : ''
 
@@ -99,6 +105,38 @@ export async function createBillingNotification(input: {
     kind: `billing.${input.kind}`,
     title: labels[input.kind],
     body: `${subject}${formatCents(input.amountCents)}`,
+    link: '/financeiro',
+  })
+}
+
+export async function createCashNotification(input: {
+  client: Client
+  clinicId: string
+  userId: string
+  kind: CashNotificationKind
+  amountCents?: number
+  entryKind?: string
+  differenceCents?: number
+}): Promise<void> {
+  const body =
+    input.kind === 'opened'
+      ? `Saldo inicial ${formatCents(input.amountCents ?? 0)}`
+      : input.kind === 'entry'
+        ? `${input.entryKind === 'in' ? 'Entrada' : 'Saída'} de ${formatCents(input.amountCents ?? 0)}`
+        : `Diferença de ${formatCents(input.differenceCents ?? 0)}`
+
+  await createOperationalNotification({
+    client: input.client,
+    clinicId: input.clinicId,
+    userId: input.userId,
+    kind: `billing.cash_${input.kind}`,
+    title:
+      input.kind === 'opened'
+        ? 'Caixa aberto'
+        : input.kind === 'entry'
+          ? 'Lançamento no caixa'
+          : 'Caixa fechado',
+    body,
     link: '/financeiro',
   })
 }

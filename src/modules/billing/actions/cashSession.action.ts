@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { createCashNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -47,6 +48,16 @@ const runOpen = createAction<OpenCashSessionInput, SessionResult, 'openingAmount
     roles: rolesWith('cash.manage'),
     messages,
     revalidatePaths: ['/financeiro'],
+
+    afterSuccess: async (output, _input, context) => {
+      await createCashNotification({
+        client: context.supabase,
+        clinicId: context.clinicId,
+        userId: context.userId,
+        kind: 'opened',
+        amountCents: output.openingAmountCents,
+      })
+    },
 
     handler: async (input, context) => {
       const repository = billingRepositoryFor(context.supabase)
@@ -95,6 +106,17 @@ const runEntry = createAction<CashEntryInput, EntryResult, 'amount' | 'descripti
     roles: rolesWith('cash.manage'),
     messages,
     revalidatePaths: ['/financeiro'],
+
+    afterSuccess: async (output, _input, context) => {
+      await createCashNotification({
+        client: context.supabase,
+        clinicId: context.clinicId,
+        userId: context.userId,
+        kind: 'entry',
+        amountCents: output.amountCents,
+        entryKind: output.kind,
+      })
+    },
 
     handler: async (input, context) => {
       const repository = billingRepositoryFor(context.supabase)
@@ -151,6 +173,16 @@ const runClose = createAction<CloseCashSessionInput, CloseResult, 'countedAmount
     roles: rolesWith('cash.manage'),
     messages,
     revalidatePaths: ['/financeiro'],
+
+    afterSuccess: async (output, _input, context) => {
+      await createCashNotification({
+        client: context.supabase,
+        clinicId: context.clinicId,
+        userId: context.userId,
+        kind: 'closed',
+        differenceCents: output.differenceCents,
+      })
+    },
 
     handler: async (input, context) => {
       const repository = billingRepositoryFor(context.supabase)
