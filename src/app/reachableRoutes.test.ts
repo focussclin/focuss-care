@@ -36,6 +36,8 @@ const APP_DIR = join(process.cwd(), 'src', 'app')
  * feature devia ser exposta ou removida, não registrada.
  */
 const BUILT_BUT_HIDDEN: Record<string, string> = {
+  '/crm':
+    'Depende de `supabase/migrations/20260809_clinic_leads.sql`, escrita e revisada mas não aplicada. A tela declara a pendência e mantém o item bloqueado até a persistência do pipeline existir.',
   '/salas-e-recursos':
     'Depende de `supabase/migrations/20260809_rooms.sql`, escrita e revisada mas não aplicada. Com a tabela ausente a tela mostra o estado pendente; habilitar o item prometeria persistência que o banco não sustenta.',
   '/tarefas':

@@ -28,6 +28,12 @@ bloqueado e as escritas são recusadas até a tabela `clinic_tasks`, suas polici
 e referências existirem no projeto remoto. Depois de aplicar, execute
 `npm run db:types` e valide o isolamento entre duas clínicas.
 
+**CRM e Leads (09/08/2026):** a migration
+`supabase/migrations/20260809_clinic_leads.sql` foi criada, mas ainda não foi
+aplicada. Ela cria `clinic_leads`, `lead_events` e as policies RLS do pipeline.
+Depois de aplicá-la, execute `npm run db:types`, valide leitura/escrita com duas
+clínicas e só então habilite o item CRM no menu.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.

@@ -358,6 +358,7 @@ describe('nenhuma action revalida rota que não alimenta', () => {
       ],
       records: ['/prontuarios'],
       rooms: ['/salas-e-recursos', '/agenda'],
+      leads: ['/crm'],
       scheduling: [
         '/agenda',
         '/dashboard',

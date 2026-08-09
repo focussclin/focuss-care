@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 971 testes em 75 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 33 rotas.
+**Validação atual:** 975 testes em 76 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 34 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -92,6 +92,7 @@ As 33 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/tarefas` | **EM ANDAMENTO** | Migration `clinic_tasks` pendente; UI e camada de escrita preparadas | Membro quando a tabela existir |
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance): operadoras, planos, carteirinhas, guias e glosas | `insurance.manage` |
+| `/crm` | **EM ANDAMENTO** | Migration `clinic_leads` pendente; pipeline e camada de escrita preparadas | Membro quando as tabelas existirem |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -159,8 +160,8 @@ existe neste ambiente, e a coluna diz o quê.
 |---|---|
 | Estoque, Compras | Não há `stock_items`, `inventory`, `suppliers` nem `purchase_orders` no schema — exige migration (**B1**) |
 | Salas e recursos | Não há `rooms` nem `resources` — exige migration (**B1**) |
-| CRM e Leads | Não há `leads` — exige migration (**B1**) |
-| Tarefas inteligentes | Não há `tasks` — exige migration (**B1**) |
+| CRM e Leads | Migration `20260809_clinic_leads.sql` criada, ainda não aplicada (**B1**) |
+| Tarefas | Migration `20260809_clinic_tasks.sql` criada, ainda não aplicada (**B1**) |
 | Formulários digitais | Não há `forms` nem `form_responses` — exige migration (**B1**) |
 | Conciliação bancária | Não há `bank_accounts` nem `bank_transactions` — exige migration (**B1**) |
 | Documentos | `patient_documents` existe, mas **não há bucket de Storage**: `listBuckets()` devolveu vazio em 08/08/2026. Sem bucket, o arquivo não tem para onde ir |
@@ -242,6 +243,26 @@ fora desta fatia.
 Validação desta fatia: 53 testes em 3 arquivos, lint, typecheck, build Next.js e
 OpenNext Cloudflare limpos. O servidor local segue acessível em `localhost:3000`;
 inspeção visual pelo navegador embutido não foi possível neste ambiente.
+
+---
+
+## 4.5 Feature em andamento — CRM e Leads (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** `/crm` possui
+pipeline Kanban por sete etapas, busca, filtros por etapa/responsável, criação e
+edição, movimentação rápida, valor potencial em centavos, próxima ação,
+responsável e histórico de mudanças. A camada vertical inclui migration,
+policies RLS, porta, adapter Supabase tenant-scoped, Server Actions pelo
+`createAction`, auditoria e estados de erro/loading/empty.
+
+O item continua desabilitado até `20260809_clinic_leads.sql` ser aplicado e
+`npm run db:types` ser executado. Conversão em paciente, follow-up automático,
+WhatsApp e IA ficam para as integrações correspondentes.
+
+Validação desta fatia: 4 testes de UI, suíte completa com 975 testes em 76
+arquivos, lint, typecheck, build Next.js e OpenNext Cloudflare limpos. O servidor
+local segue acessível em `localhost:3000`; inspeção visual pelo navegador
+embutido não foi possível neste ambiente.
 
 ---
 
