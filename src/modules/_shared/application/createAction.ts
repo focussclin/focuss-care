@@ -177,6 +177,15 @@ export interface CreateActionOptions<TInput, TOutput, F extends string = string>
    * precise ver, e conte que uma excecao aqui vai para o log, nao para a tela.
    */
   audit?: (output: TOutput, input: TInput) => AuditEvent | null
+  /**
+   * Efeito pÃ³s-sucesso, tambÃ©m best-effort e executado em `after()`.
+   * Use para efeitos derivados que nÃ£o podem desfazer a mutaÃ§Ã£o principal.
+   */
+  afterSuccess?: (
+    output: TOutput,
+    input: TInput,
+    context: ActionContext,
+  ) => Promise<void>
 }
 
 /** Textos genericos, em pt-BR, que nunca revelam detalhe de banco. */
@@ -324,6 +333,17 @@ export function createAction<TInput, TOutput, F extends string = string>(
           unstable_rethrow(cause)
 
           console.error('[action] auditoria falhou', {
+            action: options.name,
+            ...describeCause(cause),
+          })
+        }
+
+        try {
+          await options.afterSuccess?.(output, input, context)
+        } catch (cause) {
+          unstable_rethrow(cause)
+
+          console.error('[action] efeito pos-sucesso falhou', {
             action: options.name,
             ...describeCause(cause),
           })

@@ -4,6 +4,26 @@
 --
 -- NAO APLICADA. Revisar no Supabase antes de executar.
 --
+-- ATENCAO — a tabela JA EXISTE no schema remoto (conferido em 09/08/2026 em
+-- `database.types.ts`, gerado do projeto). O `create table if not exists`
+-- abaixo e, portanto, um NO-OP: as colunas ja estao la e batem com as daqui.
+--
+-- O que este arquivo efetivamente aplica sobre uma tabela existente:
+--
+--   * as POLICIES, que SUBSTITUEM as atuais — confira antes o que existe:
+--       select policyname, cmd from pg_policies
+--        where tablename = 'patient_documents';
+--   * os indices;
+--   * as policies de `storage.objects`.
+--
+-- O que ele NAO aplica, justamente por a tabela ja existir: as constraints
+-- declaradas no corpo do `create table` (`storage_path unique` e
+-- `unique (id, clinic_id)`). Se elas forem necessarias, precisam virar
+-- `alter table ... add constraint` proprios.
+--
+-- O bucket `patient-documents` foi criado em 09/08/2026 — privado, limite de
+-- 20 MB, aceitando PDF e imagem. As policies de Storage abaixo dependem dele.
+--
 -- O arquivo armazenado nunca fica público. A aplicação só entrega uma URL
 -- assinada por 60 segundos depois de localizar o metadado dentro da clínica
 -- ativa. O caminho começa com clinic_id para que a policy do Storage tenha a

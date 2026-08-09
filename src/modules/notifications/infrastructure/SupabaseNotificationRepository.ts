@@ -5,7 +5,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, NotificationRow } from '@/lib/supabase/database.types'
 
 import type { Notification } from '../domain/Notification'
-import type { NotificationRepository } from '../domain/NotificationRepository'
+import type {
+  CreateNotificationInput,
+  NotificationRepository,
+} from '../domain/NotificationRepository'
 
 type Client = SupabaseClient<Database>
 
@@ -14,6 +17,29 @@ const MAX_LIMIT = 50
 
 export class SupabaseNotificationRepository implements NotificationRepository {
   constructor(private readonly client: Client) {}
+
+  async createForUser(
+    clinicId: string,
+    userId: string,
+    input: CreateNotificationInput,
+  ): Promise<Notification> {
+    const { data, error } = await this.client
+      .from('notifications')
+      .insert({
+        clinic_id: clinicId,
+        user_id: userId,
+        kind: input.kind,
+        title: input.title,
+        body: input.body ?? null,
+        link: input.link ?? null,
+      })
+      .select(SELECT)
+      .single()
+
+    if (error) throw writeFailure('createForUser', error)
+
+    return toNotification(data as NotificationRow)
+  }
 
   async listForUser(
     clinicId: string,

@@ -2,6 +2,7 @@
 
 import { rolesWith } from '@/lib/auth/permissions'
 import { cacheTags } from '@/lib/cache/tags'
+import { createAppointmentNotification } from '@/lib/notifications/operational'
 import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
@@ -71,6 +72,16 @@ const runRescheduleAppointment = createAction<
     '/relatorios',
     ...patientPaths(output.patientId),
   ],
+
+  afterSuccess: async (output, _input, context) => {
+    await createAppointmentNotification({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      userId: context.userId,
+      kind: 'rescheduled',
+      appointment: output,
+    })
+  },
 
   handler: async (input, context) => {
     const repository = appointmentRepositoryFor(context.supabase)

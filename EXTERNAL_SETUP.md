@@ -103,6 +103,42 @@ A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.
 
+## 0. O caminho mais curto para destravar 8 itens do menu
+
+**Nove migrations estão escritas, revisadas e não aplicadas.** Elas são o único
+bloqueio de oito itens do menu — Salas, Tarefas, CRM, Formulários, Estoque,
+Compras, Conciliação e Documentos. Não falta código: os módulos estão prontos e
+escondidos atrás de itens desabilitados.
+
+**Uma colagem resolve.** `supabase/migrations/APLICAR_TUDO_20260809.sql` reúne as
+nove na ordem segura (`inventory` antes de `purchases`, que a referencia), cada
+uma no seu próprio `begin`/`commit` — uma falha reverte só o bloco que falhou.
+
+1. Painel do Supabase → SQL Editor → colar o arquivo → Run.
+2. `npm run db:types`.
+3. Remover os shims `*/infrastructure/*Database.ts`, habilitar os itens em
+   `navigation.ts` e limpar `BUILT_BUT_HIDDEN` em `reachableRoutes.test.ts`.
+
+**Se preferir que eu aplique**, preciso de UMA destas no `.env.local` — a chave
+secreta atual não serve, porque ela fala com dados e não executa DDL (testado:
+não há RPC de SQL, e a Management API recusa a chave com 401):
+
+| Credencial | Onde obter | O que me permite |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Painel → Account → Access Tokens | Aplicar via Management API |
+| `DATABASE_URL` | Painel → Project Settings → Database → Connection string | Aplicar via conexão direta |
+
+### Storage: o bucket já está criado
+
+`patient-documents` foi criado em 09/08/2026 com a chave secreta — **privado**,
+limite de 20 MB, aceitando apenas PDF e imagem. Documento de paciente é RG, CPF
+e termo assinado: bucket público seria uma URL adivinhável com dado pessoal.
+
+As *policies* de `storage.objects` ainda dependem da migration, porque policy é
+DDL. O bucket sozinho não libera upload.
+
+---
+
 ## 1. Supabase — obrigatório para qualquer dado real
 
 Um único projeto Supabase cobre banco, autenticação e RLS. **É a única dependência

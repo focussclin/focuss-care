@@ -28,6 +28,7 @@ function fakeClient(options: {
   rows?: unknown[]
   count?: number
   marked?: unknown
+  created?: unknown
 }) {
   const calls: Call[] = []
   const from = vi.fn(() => {
@@ -44,6 +45,7 @@ function fakeClient(options: {
       'limit',
       'is',
       'update',
+      'insert',
     ]) {
       query[method] = (...args: unknown[]) => {
         calls.push({ method, args })
@@ -53,6 +55,11 @@ function fakeClient(options: {
 
     query.maybeSingle = async () => ({
       data: options.marked ?? null,
+      error: null,
+    })
+
+    query.single = async () => ({
+      data: options.created ?? row(),
       error: null,
     })
 
@@ -71,6 +78,33 @@ function fakeClient(options: {
 
   return { calls, client: { from } as never }
 }
+
+it('cria um aviso somente para a clÃ­nica e o usuÃ¡rio do contexto', async () => {
+  const fake = fakeClient({ created: row({ kind: 'appointment.created' }) })
+  const repository = new SupabaseNotificationRepository(fake.client)
+
+  const notification = await repository.createForUser(CLINIC, USER, {
+    kind: 'appointment.created',
+    title: 'Agendamento criado',
+    body: 'Maria Souza â€¢ 09/08/2026, 10:00',
+    link: '/agenda',
+  })
+
+  expect(notification.kind).toBe('appointment.created')
+  expect(fake.calls).toContainEqual({
+    method: 'insert',
+    args: [
+      {
+        clinic_id: CLINIC,
+        user_id: USER,
+        kind: 'appointment.created',
+        title: 'Agendamento criado',
+        body: 'Maria Souza â€¢ 09/08/2026, 10:00',
+        link: '/agenda',
+      },
+    ],
+  })
+})
 
 describe('repositório de notificações', () => {
   it('lista e conta somente notificações do usuário na clínica', async () => {

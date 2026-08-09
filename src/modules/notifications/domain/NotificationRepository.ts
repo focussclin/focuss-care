@@ -1,6 +1,19 @@
 import type { Notification } from './Notification'
 
+export interface CreateNotificationInput {
+  kind: string
+  title: string
+  body?: string | null
+  link?: string | null
+}
+
 export interface NotificationRepository {
+  createForUser(
+    clinicId: string,
+    userId: string,
+    input: CreateNotificationInput,
+  ): Promise<Notification>
+
   listForUser(
     clinicId: string,
     userId: string,
