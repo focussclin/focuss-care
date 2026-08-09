@@ -55,7 +55,17 @@ campos.
 aplicada. Ela cria itens, movimentações, RLS e a função atômica de atualização de
 saldo. A tela `/estoque` e as actions já estão preparadas; depois de aplicar,
 execute `npm run db:types`, valide duas clínicas e concorrência de saídas antes
-de habilitar o item no menu. Compras e fornecedores ainda não possuem migration.
+de habilitar o item no menu.
+
+**Compras e fornecedores (09/08/2026):** a migration
+`supabase/migrations/20260809_purchases.sql` foi criada, mas ainda não foi
+aplicada. Ela depende de `20260809_inventory.sql` e cria fornecedores, pedidos,
+linhas, RLS e RPCs para criação, transição de status e recebimento atômico. A
+tela `/compras` e as actions já estão preparadas, mas o item permanece bloqueado
+até aplicar as duas migrations na ordem, executar `npm run db:types`, validar
+isolamento entre clínicas e conferir que recebimentos atualizam o saldo sem
+duplicar movimentos. A criação automática de contas a pagar ainda não faz parte
+desta fatia.
 
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,

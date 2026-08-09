@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 993 testes em 83 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 38 rotas.
+**Validação atual:** 998 testes em 85 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 39 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -162,7 +162,8 @@ existe neste ambiente, e a coluna diz o quê.
 
 | Item | Bloqueio |
 |---|---|
-| Estoque, Compras | Migration `20260809_inventory.sql` criada, ainda não aplicada (**B1**); Compras continua sem schema |
+| Estoque | Migration `20260809_inventory.sql` criada, ainda não aplicada (**B1**) |
+| Compras | Migration `20260809_purchases.sql` criada, depende de Estoque e ainda não aplicada (**B1**) |
 | Salas e recursos | Não há `rooms` nem `resources` — exige migration (**B1**) |
 | CRM e Leads | Migration `20260809_clinic_leads.sql` criada, ainda não aplicada (**B1**) |
 | Tarefas | Migration `20260809_clinic_tasks.sql` criada, ainda não aplicada (**B1**) |
@@ -335,6 +336,32 @@ Validação desta fatia: 5 testes direcionados, suíte completa com 993 testes e
 83 arquivos, lint, typecheck, build Next.js com 38 rotas e OpenNext Cloudflare
 limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
 navegador embutido não foi possível neste ambiente.
+
+---
+
+## 4.9 Feature em andamento — Compras e fornecedores (09/08/2026)
+
+**Implementação local concluída; ativação do banco pendente.** `/compras` possui
+cadastro, edição e arquivamento de fornecedores, criação de pedido com itens do
+Estoque, busca por fornecedor/ID, filtro por status, transições controladas
+(rascunho → solicitado → aprovado → pedido enviado), cancelamento e recebimento
+parcial ou total.
+
+`supabase/migrations/20260809_purchases.sql` cria fornecedores, pedidos e linhas
+com referências compostas por `(id, clinic_id)`, RLS e três RPCs: criação
+atômica do pedido, transição de status e recebimento atômico. O recebimento
+trava a linha e o item do Estoque, atualiza `current_quantity`, grava
+`inventory_movements` e finaliza o status do pedido na mesma transação.
+
+O item continua bloqueado no menu até aplicar primeiro
+`20260809_inventory.sql` e depois `20260809_purchases.sql`, regenerar os tipos e
+validar duas clínicas, concorrência no recebimento e transições inválidas.
+Contas a pagar ainda não são criadas automaticamente: a integração financeira
+será uma próxima decisão para evitar duplicidade de lançamentos.
+
+Validação desta fatia: 5 testes direcionados; suíte completa com 998 testes em
+85 arquivos, lint, typecheck, build Next.js com 39 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---
 
