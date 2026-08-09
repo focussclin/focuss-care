@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1041 testes em 97 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1046 testes em 97 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -53,7 +53,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
-| `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda |
+| `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
@@ -63,7 +63,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
-| `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote e avisos persistidos para criação, remarcação e cancelamento de agenda |
+| `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
 
 ---
@@ -616,6 +616,23 @@ build Next.js com 42 rotas limpos.
 
 ---
 
+## 4.24 Preferência de avisos operacionais (09/08/2026)
+
+Configurações agora expõe e persiste o controle “Receber avisos de agenda,
+recepção e financeiro”. O valor vive em `clinic_settings.notification_prefs`,
+passa por schema Zod e action com `clinic.settings`, é auditado e revalida a
+tela. A leitura é defensiva: JSONB ausente ou inválido mantém avisos ligados.
+
+Os produtores de agenda, recepção e financeiro consultam a preferência antes de
+criar novos avisos; o histórico já criado não é apagado quando a clínica opta
+por silenciar eventos futuros. O padrão de demonstração também permanece
+explícito e não promete persistência.
+
+Validação desta fatia: suíte com 1046 testes em 97 arquivos, lint, typecheck,
+build Next.js com 42 rotas e OpenNext Cloudflare limpos.
+
+---
+
 ## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados
@@ -702,7 +719,7 @@ que não funciona:
 | Geração automática de notificações | `/whatsapp`, `/automacoes` | A agenda já produz avisos persistidos para o usuário da ação; produtores de WhatsApp e automações dependem de executor e integrações externas |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |
 | Elegibilidade junto à operadora | `/convenios` | Exige integração externa; o que existe é a validade cadastrada |
-| Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |
+| Marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — controles seriam recursos falsos |
 | Turnos partidos no expediente | `/configuracoes` | Formato guarda um turno por dia, e a tela avisa antes de salvar |
 | Disponibilidade por profissional | `/agenda` | Convenção de `weekday` não verificável; adivinhar recusaria agendamento legítimo |
 | Escalas de trabalho | `/equipe` | Mesmo `weekday` de `work_schedules`: errar desloca a semana e põe alguém para trabalhar no dia errado |
