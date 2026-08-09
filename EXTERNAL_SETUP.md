@@ -21,6 +21,13 @@ tabela `rooms`, a coluna `appointments.room_id` e a constraint de conflito de
 recurso existirem no projeto remoto. Depois de aplicar, execute
 `npm run db:types` e publique os tipos regenerados.
 
+**Tarefas (09/08/2026):** a migration
+`supabase/migrations/20260809_clinic_tasks.sql` também ainda não foi aplicada.
+A tela `/tarefas`, seus contratos e actions já estão no código, mas o item fica
+bloqueado e as escritas são recusadas até a tabela `clinic_tasks`, suas policies
+e referências existirem no projeto remoto. Depois de aplicar, execute
+`npm run db:types` e valide o isolamento entre duas clínicas.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.
