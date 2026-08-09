@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1028 testes em 95 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1035 testes em 96 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -541,6 +541,18 @@ Validação desta fatia: 2 testes direcionados para os contratos de agenda e
 recepção; suíte completa com 1028 testes em 95 arquivos, lint, typecheck e build
 Next.js com 42 rotas limpos. A migration de inserção própria de notificações
 continua pendente no Supabase remoto.
+
+---
+
+## 4.19 Auditoria de leitura sem ruído de prefetch (09/08/2026)
+
+O carregamento de `/prontuarios` não registra mais `record.read` quando o Next
+está apenas fazendo prefetch por hover ou viewport. A navegação real continua
+registrando a leitura de forma best-effort; se a leitura dos headers falhar, o
+guarda assume acesso para não silenciar uma trilha legítima.
+
+Validação desta correção: 7 testes, suíte atual com 1035 testes em 96 arquivos,
+lint, typecheck e build Next.js com 42 rotas limpos.
 
 ---
 
