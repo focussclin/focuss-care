@@ -23,6 +23,11 @@ export type EncounterNotificationKind =
   | 'started'
   | 'closed'
 
+export type BillingNotificationKind =
+  | 'invoice_created'
+  | 'payment_registered'
+  | 'invoice_canceled'
+
 /**
  * Registra um evento operacional para quem executou a aÃ§Ã£o.
  *
@@ -72,6 +77,32 @@ export async function createEncounterNotification(input: {
   })
 }
 
+export async function createBillingNotification(input: {
+  client: Client
+  clinicId: string
+  userId: string
+  kind: BillingNotificationKind
+  patientName?: string
+  amountCents: number
+}): Promise<void> {
+  const labels: Record<BillingNotificationKind, string> = {
+    invoice_created: 'Cobrança criada',
+    payment_registered: 'Pagamento registrado',
+    invoice_canceled: 'Cobrança cancelada',
+  }
+  const subject = input.patientName ? `${input.patientName} • ` : ''
+
+  await createOperationalNotification({
+    client: input.client,
+    clinicId: input.clinicId,
+    userId: input.userId,
+    kind: `billing.${input.kind}`,
+    title: labels[input.kind],
+    body: `${subject}${formatCents(input.amountCents)}`,
+    link: '/financeiro',
+  })
+}
+
 async function createOperationalNotification(input: {
   client: Client
   clinicId: string
@@ -116,4 +147,11 @@ function formatOperationalDate(value: string): string {
     timeStyle: 'short',
     timeZone: 'America/Sao_Paulo',
   }).format(new Date(value))
+}
+
+function formatCents(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value / 100)
 }

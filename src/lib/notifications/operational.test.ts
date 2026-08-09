@@ -10,6 +10,7 @@ vi.mock('@/modules/notifications/infrastructure/repository', () => ({
 
 import {
   createAppointmentNotification,
+  createBillingNotification,
   createEncounterNotification,
 } from './operational'
 
@@ -64,6 +65,28 @@ describe('notificaÃ§Ãµes operacionais', () => {
         kind: 'appointment.rescheduled',
         title: 'Agendamento remarcado',
         link: '/agenda',
+      }),
+    )
+  })
+
+  it('registra cobrança com valor administrativo e sem descrição clínica', async () => {
+    await createBillingNotification({
+      client,
+      clinicId: CLINIC,
+      userId: USER,
+      kind: 'invoice_created',
+      patientName: 'Joao Lima',
+      amountCents: 12500,
+    })
+
+    expect(createForUser).toHaveBeenCalledExactlyOnceWith(
+      CLINIC,
+      USER,
+      expect.objectContaining({
+        kind: 'billing.invoice_created',
+        title: 'Cobrança criada',
+        body: 'Joao Lima • R$\u00a0125,00',
+        link: '/financeiro',
       }),
     )
   })
