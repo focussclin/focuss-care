@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1037 testes em 96 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1041 testes em 97 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -577,8 +577,28 @@ usuário que executou a operação, com link para `/financeiro`, paciente quando
 operação o devolve e valor formatado em BRL. Descrições dos itens, observações e
 motivos não entram no aviso.
 
-Validação desta fatia: 4 testes direcionados, suíte com 1037 testes em 96
-arquivos, lint, typecheck e build Next.js com 42 rotas limpos.
+Validação desta fatia: 4 testes direcionados, suíte com 1041 testes em 97
+arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
+limpos.
+
+---
+
+## 4.22 Busca global de agendamentos (09/08/2026)
+
+A Command Palette agora consulta agendamentos reais por nome do paciente a partir
+de dois caracteres. A busca passa por uma Server Action com `appointment.read`,
+RLS e limite de resultados; o repositório primeiro encontra pacientes ativos no
+tenant e depois carrega apenas agendamentos não cancelados/não comparecidos.
+Cada resultado exibe paciente e data/hora local e retorna para `/agenda`. O DTO
+não expõe observações, dados clínicos ou detalhes além do necessário para a
+seleção.
+
+Foram adicionados schema, estados de loading/erro, debounce, testes do repositório
+Supabase e teste de integração da paleta. Prontuários, cobranças e guias seguem
+explicitamente fora da busca até existir um contrato de consulta próprio.
+
+Validação desta fatia: suíte com 1041 testes em 97 arquivos, lint, typecheck,
+build Next.js com 42 rotas e OpenNext Cloudflare limpos.
 
 ---
 
