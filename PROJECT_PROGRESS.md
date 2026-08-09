@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1023 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1026 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -63,6 +63,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
+| `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote e avisos persistidos para criação, remarcação e cancelamento de agenda |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
 
 ---
@@ -508,6 +509,26 @@ continua indisponível neste ambiente.
 
 ---
 
+## 4.17 Notificações operacionais da agenda (09/08/2026)
+
+O centro de notificações deixou de ser somente uma leitura passiva. O contrato
+do repositório agora persiste avisos para o usuário autenticado, e o pipeline de
+mutação ganhou `afterSuccess` best-effort para efeitos derivados que não podem
+desfazer a operação principal.
+
+Criar, remarcar e cancelar um agendamento registram um aviso com link para
+`/agenda`, data/hora em `America/Sao_Paulo` e apenas o nome do paciente. Motivos,
+observações e texto clínico não entram no aviso. A policy
+`notifications_insert_own_user` exige simultaneamente a clínica ativa e
+`auth.uid()`, mantendo o isolamento da escrita.
+
+Validação desta fatia: 3 testes adicionais (1026 em 94 arquivos), lint,
+typecheck, build Next.js com 42 rotas, smoke HTTP de `/login` (200) e árvore Git
+limpa. A migration individual e o bloco `APLICAR_TUDO_20260809.sql` ainda
+precisam ser executados no projeto Supabase remoto.
+
+---
+
 ## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados
@@ -591,7 +612,7 @@ que não funciona:
 |---|---|---|
 | Emissão fiscal numerada | `/financeiro` | `issue_invoice` com assinatura não resolvida; numeração que pula é problema com a prefeitura |
 | Repasse a profissional | `/financeiro` | `professional_payouts` existe, mas a RPC de prévia/emissão ainda não tem assinatura verificável |
-| Geração automática de notificações | `/whatsapp`, `/automacoes` | O centro lê e marca avisos persistidos; os produtores automáticos dependem do executor de automações e integrações externas |
+| Geração automática de notificações | `/whatsapp`, `/automacoes` | A agenda já produz avisos persistidos para o usuário da ação; produtores de WhatsApp e automações dependem de executor e integrações externas |
 | Faturamento nos relatórios | `/relatorios` | Mesma razão: R$ 0,00 é verdadeiro como consulta e falso como informação |
 | Elegibilidade junto à operadora | `/convenios` | Exige integração externa; o que existe é a validade cadastrada |
 | Notificações, marca, IA, fuso horário | `/configuracoes` | Colunas existem, nada as consome — preferência gravada sem efeito é recurso falso |
