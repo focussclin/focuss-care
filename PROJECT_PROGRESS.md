@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 978 testes em 77 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 35 rotas.
+**Validação atual:** 983 testes em 79 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 36 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -66,7 +66,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 35 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 36 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -94,6 +94,7 @@ As 35 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance): operadoras, planos, carteirinhas, guias e glosas | `insurance.manage` |
 | `/crm` | **EM ANDAMENTO** | Migration `clinic_leads` pendente; pipeline e camada de escrita preparadas | Membro quando as tabelas existirem |
 | `/inbox` | **EM ANDAMENTO** | Leitura tenant-scoped de `conversations` e `messages`; sem ingestão/envio até W-01 | Membro |
+| `/formularios` | **EM ANDAMENTO** | Migration `clinic_forms` pendente; builder de modelos preparado | `clinic.settings` quando a tabela existir |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -163,7 +164,7 @@ existe neste ambiente, e a coluna diz o quê.
 | Salas e recursos | Não há `rooms` nem `resources` — exige migration (**B1**) |
 | CRM e Leads | Migration `20260809_clinic_leads.sql` criada, ainda não aplicada (**B1**) |
 | Tarefas | Migration `20260809_clinic_tasks.sql` criada, ainda não aplicada (**B1**) |
-| Formulários digitais | Não há `forms` nem `form_responses` — exige migration (**B1**) |
+| Formulários digitais | Migration `20260809_clinic_forms.sql` criada, ainda não aplicada (**B1**); builder local entregue |
 | Conciliação bancária | Não há `bank_accounts` nem `bank_transactions` — exige migration (**B1**) |
 | Documentos | `patient_documents` existe, mas **não há bucket de Storage**: `listBuckets()` devolveu vazio em 08/08/2026. Sem bucket, o arquivo não tem para onde ir |
 | Inbox de atendimento | Leitura tenant-scoped de `conversations` e `messages` entregue; ingestão e envio dependem de W-01 |
@@ -283,6 +284,27 @@ WhatsApp descrito em `EXTERNAL_SETUP.md` §3.1.
 
 Validação da fatia: 3 testes de UI direcionados, suíte completa com 978 testes
 em 77 arquivos, lint, typecheck, build Next.js com 35 rotas e OpenNext Cloudflare
+limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
+navegador embutido não foi possível neste ambiente.
+
+---
+
+## 4.7 Feature em andamento — Formulários digitais (09/08/2026)
+
+**Builder local concluído; ativação do banco pendente.** `/formularios` agora
+possui um modelo de formulário versionável, com tipo, descrição, status, campos
+ordenáveis, obrigatoriedade, ajuda e opções para respostas fechadas. A camada
+vertical inclui `20260809_clinic_forms.sql`, policies RLS para modelos e
+respostas, domínio, adapter Supabase tenant-scoped, actions com
+`clinic.settings`, auditoria e estados de erro/loading/empty.
+
+O item permanece desabilitado até a migration ser aplicada e
+`npm run db:types` ser executado. A tabela de respostas já está preparada na
+migration, mas a coleta, vínculo com paciente/consulta, autosave e assinatura
+serão uma fatia posterior — não são apresentados como se já funcionassem.
+
+Validação desta fatia: 5 testes direcionados, suíte completa com 983 testes em
+79 arquivos, lint, typecheck, build Next.js com 36 rotas e OpenNext Cloudflare
 limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
 navegador embutido não foi possível neste ambiente.
 
