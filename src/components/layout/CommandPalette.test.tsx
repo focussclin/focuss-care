@@ -23,6 +23,7 @@ import { CommandPalette, useCommandPaletteShortcut } from './CommandPalette'
 
 const push = vi.fn()
 const searchPatientsAction = vi.fn()
+const searchAppointmentsAction = vi.fn()
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
@@ -32,10 +33,16 @@ vi.mock('@/modules/patients/actions/searchPatients.action', () => ({
   searchPatientsAction: (input: unknown) => searchPatientsAction(input),
 }))
 
+vi.mock('@/modules/scheduling/actions/searchAppointments.action', () => ({
+  searchAppointmentsAction: (input: unknown) => searchAppointmentsAction(input),
+}))
+
 beforeEach(() => {
   push.mockClear()
   searchPatientsAction.mockReset()
   searchPatientsAction.mockResolvedValue({ ok: true, data: [] })
+  searchAppointmentsAction.mockReset()
+  searchAppointmentsAction.mockResolvedValue({ ok: true, data: [] })
 })
 
 /*
@@ -167,12 +174,40 @@ describe('busca inline de pacientes', () => {
     expect(push).toHaveBeenCalledWith('/pacientes/patient-1')
   })
 
+  it('consulta agendamentos reais e retorna para a agenda', async () => {
+    searchAppointmentsAction.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'appointment-1',
+          patientName: 'Maria Souza',
+          professionalName: 'Dra. Ana',
+          type: 'Consulta',
+          startsAt: '2026-08-09T13:00:00.000Z',
+          status: 'confirmed',
+        },
+      ],
+    })
+
+    renderPalette()
+    fireEvent.change(input(), { target: { value: 'Maria' } })
+
+    const appointment = await screen.findByRole('option', {
+      name: /Maria Souza.*09\/08\/2026/,
+    })
+    expect(searchAppointmentsAction).toHaveBeenCalledWith({ query: 'Maria' })
+
+    fireEvent.click(appointment)
+    expect(push).toHaveBeenCalledWith('/agenda')
+  })
+
   it('não consulta o banco no modo demonstração', async () => {
     renderPalette({ role: undefined })
     fireEvent.change(input(), { target: { value: 'Maria' } })
 
     await new Promise((resolve) => setTimeout(resolve, 300))
     expect(searchPatientsAction).not.toHaveBeenCalled()
+    expect(searchAppointmentsAction).not.toHaveBeenCalled()
     expect(screen.getByRole('option', { name: /buscar pacientes por/i })).toBeTruthy()
   })
 })

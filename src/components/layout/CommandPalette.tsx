@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 import { can } from '@/lib/auth/permissions'
 import { searchPatientsAction } from '@/modules/patients/actions/searchPatients.action'
+import { searchAppointmentsAction } from '@/modules/scheduling/actions/searchAppointments.action'
 
 import {
   commandsFor,
@@ -30,17 +31,15 @@ export interface CommandPaletteProps {
  * # O que ela faz, e o que ela declara não fazer
  *
  * Navega entre telas, abre os dois formulários que abrem por URL e busca
- * pacientes reais pelo nome a partir de dois caracteres.
+ * pacientes e agendamentos reais pelo nome a partir de dois caracteres.
  *
- * A busca usa a Server Action de pacientes com debounce e RLS no caminho. Os
- * resultados exibem apenas id e nome; ao selecionar, a ficha é aberta por URL.
+ * As buscas usam Server Actions com debounce e RLS no caminho. O resultado de
+ * paciente abre a ficha; o resultado de agendamento leva à agenda.
  * Se a action não estiver disponível, o comando de fallback ainda leva a
  * `/pacientes?q=…`, onde o servidor consulta a mesma base.
  *
- * **Atendimento, prontuário, cobrança e guia não são pesquisados** — a listagem
- * deles não aceita termo por URL, e um comando que fingisse buscar levaria a uma
- * tela sem filtro. O estado vazio diz qual é qual, porque silêncio ali faria
- * alguém concluir que o registro não existe quando ninguém chegou a procurar.
+ * **Prontuário, cobrança e guia não são pesquisados** — essas listagens não têm
+ * contrato de termo. O estado vazio deixa o limite explícito.
  *
  * # Acessibilidade
  *
@@ -67,6 +66,17 @@ export function CommandPalette({
   >([])
   const [patientSearchPending, setPatientSearchPending] = useState(false)
   const [patientSearchError, setPatientSearchError] = useState<string | null>(null)
+  const [appointmentResults, setAppointmentResults] = useState<
+    readonly {
+      id: string
+      patientName: string
+      professionalName: string
+      type: string
+      startsAt: string
+    }[]
+  >([])
+  const [appointmentSearchPending, setAppointmentSearchPending] = useState(false)
+  const [appointmentSearchError, setAppointmentSearchError] = useState<string | null>(null)
 
   useEffect(() => {
     const term = query.trim()
@@ -103,6 +113,42 @@ export function CommandPalette({
     }
   }, [open, query, role])
 
+  useEffect(() => {
+    const term = query.trim()
+    const canSearchAppointments =
+      role !== undefined && role !== null && can(role, 'appointment.read')
+
+    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchAppointments) return
+
+    let active = true
+
+    const timeout = window.setTimeout(() => {
+      void searchAppointmentsAction({ query: term })
+        .then((result) => {
+          if (!active) return
+          if (result.ok) {
+            setAppointmentResults(result.data)
+            return
+          }
+          setAppointmentResults([])
+          setAppointmentSearchError(result.error.message)
+        })
+        .catch(() => {
+          if (!active) return
+          setAppointmentResults([])
+          setAppointmentSearchError('Não foi possível buscar atendimentos agora.')
+        })
+        .finally(() => {
+          if (active) setAppointmentSearchPending(false)
+        })
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+    }
+  }, [open, query, role])
+
   /*
    * A lista inteira depende de papel E consulta: o comando de buscar paciente
    * so existe a partir de dois caracteres, e some quando o campo esvazia — o
@@ -121,14 +167,22 @@ export function CommandPalette({
         keywords: ['paciente', 'ficha'],
         group: 'Buscar' as const,
       }))
+      const appointmentCommands = appointmentResults.map((appointment) => ({
+        id: `appointment-${appointment.id}`,
+        label: `${appointment.patientName} · ${formatAppointmentDate(appointment.startsAt)}`,
+        href: '/agenda',
+        keywords: ['agendamento', 'atendimento', appointment.type, appointment.professionalName],
+        group: 'Buscar' as const,
+      }))
 
       return [
         ...commands.filter((command) => command.id !== 'buscar-pacientes'),
         ...patientCommands,
+        ...appointmentCommands,
         ...(searchCommand ? [searchCommand] : []),
       ]
     },
-    [patientResults, query, role],
+    [appointmentResults, patientResults, query, role],
   )
 
   /*
@@ -174,9 +228,17 @@ export function CommandPalette({
     setQuery(value)
     setHighlighted(0)
     setPatientResults([])
+    setAppointmentResults([])
     setPatientSearchError(null)
+    setAppointmentSearchError(null)
     setPatientSearchPending(
       open && term.length >= MIN_SEARCH_LENGTH && canSearchPatients,
+    )
+    setAppointmentSearchPending(
+      open && term.length >= MIN_SEARCH_LENGTH &&
+        role !== undefined &&
+        role !== null &&
+        can(role, 'appointment.read'),
     )
   }
 
@@ -206,8 +268,11 @@ export function CommandPalette({
           setQuery('')
           setHighlighted(0)
           setPatientResults([])
+          setAppointmentResults([])
           setPatientSearchPending(false)
+          setAppointmentSearchPending(false)
           setPatientSearchError(null)
+          setAppointmentSearchError(null)
         }
         onOpenChange(next)
       }}
@@ -242,28 +307,25 @@ export function CommandPalette({
           {results.length === 0 ? (
             <div className="px-4 py-6">
               <p className="text-aux text-foreground">
-                {patientSearchPending
-                  ? 'Buscando pacientes…'
+                {patientSearchPending || appointmentSearchPending
+                  ? 'Buscando registros…'
                   : 'Nenhuma tela ou ação com esse nome.'}
               </p>
-              {patientSearchError ? (
+              {patientSearchError || appointmentSearchError ? (
                 <p role="alert" className="mt-2 text-label text-danger">
-                  {patientSearchError}
+                  {patientSearchError ?? appointmentSearchError}
                 </p>
               ) : null}
               {/*
                 O estado vazio precisa dizer o que É pesquisável e o que não é.
 
-                Paciente já se procura por aqui — a partir de dois caracteres, o
-                comando de busca aparece acima desta mensagem. Agenda,
-                prontuário, financeiro e convênios não têm busca por termo, e
-                omitir isso faria alguém concluir que não existe atendimento com
-                aquele nome quando ninguém chegou a procurar.
+                Pacientes e agendamentos são consultados por actions server-side;
+                prontuário, financeiro e convênios ainda não têm busca por termo.
               */}
               <p className="mt-1 text-label text-muted">
                 {query.trim().length < MIN_SEARCH_LENGTH
                   ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome.'
-                  : 'Pacientes você busca por aqui. Atendimentos, prontuários, cobranças e guias ainda não são pesquisados pelo nome — abra a tela correspondente.'}
+                  : 'Pacientes e agendamentos são pesquisados por aqui. Prontuários, cobranças e guias ainda não são pesquisados pelo nome.'}
               </p>
             </div>
           ) : (
@@ -323,9 +385,9 @@ export function CommandPalette({
             </ul>
           )}
 
-          {patientSearchPending && results.length > 0 ? (
+          {(patientSearchPending || appointmentSearchPending) && results.length > 0 ? (
             <p role="status" className="border-t border-border-card px-4 py-2 text-label text-muted">
-              Buscando pacientes…
+              Buscando registros…
             </p>
           ) : null}
         </DialogPrimitive.Content>
@@ -357,4 +419,12 @@ export function useCommandPaletteShortcut(onOpen: () => void) {
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
   }, [onOpen])
+}
+
+function formatAppointmentDate(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(value))
 }

@@ -9,21 +9,19 @@ import { navItems } from './navigation'
  *
  * # O que entra aqui, e o que não entra
  *
- * Três coisas, e nada além delas: **navegação para rota que existe**, **criação
- * que abre um formulário de verdade** e **a busca de pacientes**, que é a única
- * listagem do produto com busca por parâmetro de URL.
+ * Quatro coisas, e nada além delas: **navegação para rota que existe**,
+ * **criação que abre um formulário de verdade**, busca real de pacientes e
+ * busca real de agendamentos por paciente.
  *
  * A busca por nome tem dois caminhos seguros: a paleta consulta a Server Action
  * para mostrar resultados inline, e o comando `patientSearchCommand` leva a
  * `/pacientes?q=…` quando a pessoa prefere abrir a lista completa. Em ambos os
  * casos a consulta passa pelo servidor e pela RLS.
  *
- * O campo do cabeçalho prometia "Buscar pacientes, agenda…" e não fazia nada.
- * Hoje a metade da frase que era falsa continua fora: agenda, prontuário,
- * financeiro e convênios **não** têm busca por termo, e o estado vazio da
- * paleta diz isso. Trocar um campo inerte por um que responde "nenhum
- * resultado" sobre uma tela que nunca foi pesquisada seria o mesmo engano com
- * outra roupa.
+ * A agenda é consultada por uma action tenant-scoped que primeiro encontra
+ * pacientes ativos e depois carrega seus agendamentos não cancelados. O restante
+ * — prontuário, financeiro e convênios — ainda não tem contrato de busca por
+ * termo, e o estado vazio da paleta diz isso em vez de simular resultado.
  */
 export interface Command {
   id: string

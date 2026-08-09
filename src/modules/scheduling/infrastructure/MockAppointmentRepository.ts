@@ -8,6 +8,21 @@ import { AppointmentRepositoryError } from '../domain/AppointmentRepositoryError
 export class MockAppointmentRepository implements AppointmentRepository {
   constructor(private readonly today: Date) {}
 
+  async searchByPatientName(
+    _clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Appointment[]> {
+    const normalized = query.trim().toLocaleLowerCase('pt-BR')
+
+    return getAppointments(this.today)
+      .filter((appointment) =>
+        appointment.patientName.toLocaleLowerCase('pt-BR').includes(normalized),
+      )
+      .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime())
+      .slice(0, limit)
+  }
+
   async listByRange(
     _clinicId: string,
     from: Date,
