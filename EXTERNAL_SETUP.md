@@ -105,13 +105,13 @@ ao `.env.example` nem ao bundle do navegador.
 
 ## 0. O caminho mais curto para destravar 8 itens do menu
 
-**Nove migrations estão escritas, revisadas e não aplicadas.** Elas são o único
+**Dez migrations estão escritas, revisadas e não aplicadas.** Elas são o único
 bloqueio de oito itens do menu — Salas, Tarefas, CRM, Formulários, Estoque,
 Compras, Conciliação e Documentos. Não falta código: os módulos estão prontos e
 escondidos atrás de itens desabilitados.
 
 **Uma colagem resolve.** `supabase/migrations/APLICAR_TUDO_20260809.sql` reúne as
-nove na ordem segura (`inventory` antes de `purchases`, que a referencia), cada
+dez na ordem segura (`inventory` antes de `purchases`, que a referencia), cada
 uma no seu próprio `begin`/`commit` — uma falha reverte só o bloco que falhou.
 
 1. Painel do Supabase → SQL Editor → colar o arquivo → Run.

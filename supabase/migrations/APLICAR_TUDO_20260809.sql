@@ -1,29 +1,28 @@
 -- =============================================================================
--- APLICAR TUDO — as nove migrations pendentes de 09/08/2026, na ordem segura
+-- APLICAR TUDO — as dez migrations pendentes de 09/08/2026, na ordem segura
 -- =============================================================================
 --
 -- GERADO a partir dos arquivos individuais. Nao edite este arquivo: edite o
--- original e gere de novo. Ele existe para transformar nove colagens no editor
+-- original e gere de novo. Ele existe para transformar dez colagens no editor
 -- SQL do Supabase em UMA.
 --
 -- Cada bloco abaixo tem `begin`/`commit` proprio, entao uma falha reverte APENAS
 -- a migration que falhou — as anteriores permanecem aplicadas. Isso e proposital:
--- uma transacao unica para as nove faria um erro no fim desfazer tudo.
+-- uma transacao unica para as dez faria um erro no fim desfazer tudo.
 --
 -- ORDEM: `purchases` referencia `inventory_items`. Invertida, falha com 42P01.
 -- As demais sao independentes entre si.
 --
--- ANTES DE COLAR, duas coisas conferidas neste repositorio:
+-- DUAS TABELAS JA EXISTEM no schema remoto, e os blocos delas NAO criam nada:
 --
---  1. `patient_documents` JA EXISTE no schema remoto. O `create table if not
---     exists` daquele bloco e um no-op; o que ele efetivamente aplica sao as
---     POLICIES e os indices. Confira as policies atuais antes, porque elas serao
---     substituidas:
---       select policyname, cmd from pg_policies where tablename = 'patient_documents';
+--  * `patient_documents` — o bloco aplica policies, indices e as policies de
+--    `storage.objects`. As policies atuais serao SUBSTITUIDAS; confira antes:
+--      select policyname, cmd from pg_policies where tablename = 'patient_documents';
 --
---  2. O bucket `patient-documents` foi criado em 09/08/2026 (privado, 20 MB,
---     PDF e imagem). As policies de `storage.objects` daquele bloco dependem
---     dele existir.
+--  * `notifications` — o bloco so acrescenta a policy de INSERT.
+--
+-- O bucket `patient-documents` foi criado em 09/08/2026 (privado, 20 MB, PDF e
+-- imagem). As policies de Storage dependem dele existir.
 --
 -- DEPOIS DE APLICAR: `npm run db:types`, remover os shims de tipos em
 -- `*/infrastructure/*Database.ts`, habilitar os itens em `navigation.ts` e
@@ -874,7 +873,7 @@ commit;
 
 
 -- ===========================================================================
--- 20260809_patient_documents.sql — Documentos (exige o bucket patient-documents)
+-- 20260809_patient_documents.sql — Documentos — a tabela JA EXISTE; ver o aviso no bloco
 -- ===========================================================================
 
 -- =============================================================================
@@ -882,6 +881,26 @@ commit;
 -- =============================================================================
 --
 -- NAO APLICADA. Revisar no Supabase antes de executar.
+--
+-- ATENCAO — a tabela JA EXISTE no schema remoto (conferido em 09/08/2026 em
+-- `database.types.ts`, gerado do projeto). O `create table if not exists`
+-- abaixo e, portanto, um NO-OP: as colunas ja estao la e batem com as daqui.
+--
+-- O que este arquivo efetivamente aplica sobre uma tabela existente:
+--
+--   * as POLICIES, que SUBSTITUEM as atuais — confira antes o que existe:
+--       select policyname, cmd from pg_policies
+--        where tablename = 'patient_documents';
+--   * os indices;
+--   * as policies de `storage.objects`.
+--
+-- O que ele NAO aplica, justamente por a tabela ja existir: as constraints
+-- declaradas no corpo do `create table` (`storage_path unique` e
+-- `unique (id, clinic_id)`). Se elas forem necessarias, precisam virar
+-- `alter table ... add constraint` proprios.
+--
+-- O bucket `patient-documents` foi criado em 09/08/2026 — privado, limite de
+-- 20 MB, aceitando PDF e imagem. As policies de Storage abaixo dependem dele.
 --
 -- O arquivo armazenado nunca fica público. A aplicação só entrega uma URL
 -- assinada por 60 segundos depois de localizar o metadado dentro da clínica
@@ -1005,6 +1024,58 @@ commit;
 -- select id, name, public, file_size_limit from storage.buckets
 --   where id = 'patient-documents';
 -- Depois: npm run db:types
+
+
+-- ===========================================================================
+-- 20260809_notifications_insert_policy.sql — Notificacoes — so acrescenta policy de INSERT
+-- ===========================================================================
+
+-- =============================================================================
+-- Notificações operacionais criadas pelo próprio usuário autenticado
+-- =============================================================================
+--
+-- NAO APLICADA. Revisar no Supabase antes de executar.
+--
+-- A tabela `notifications` JA EXISTE no schema remoto — esta migration não cria
+-- nada, só acrescenta a policy de INSERT.
+--
+-- O centro de notificações é recortado por `user_id` no repositório. Esta policy
+-- fecha também a ESCRITA: sem ela, uma action poderia fabricar um aviso para
+-- outro usuário, ou para outra clínica. O recorte de leitura não impede isso —
+-- ele só decide quem vê depois de a linha existir.
+--
+-- `auth.uid()` e não `current_clinic_id()` sozinho: as duas condições respondem
+-- perguntas diferentes, e só as duas juntas fecham o caso de alguém escrever na
+-- clínica certa para a pessoa errada.
+-- =============================================================================
+
+begin;
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_insert_own_user" on public.notifications;
+create policy "notifications_insert_own_user"
+  on public.notifications
+  for insert
+  to authenticated
+  with check (
+    clinic_id = public.current_clinic_id()
+    and user_id = auth.uid()
+  );
+
+commit;
+
+-- -----------------------------------------------------------------------------
+-- Verificar DEPOIS de aplicar
+-- -----------------------------------------------------------------------------
+--
+-- 1. A policy existe e cobre INSERT:
+--      select policyname, cmd from pg_policies
+--       where tablename = 'notifications';
+--
+-- 2. Com duas contas: logado na clínica A, tentar inserir uma notificação com
+--    `user_id` de outra pessoa -> deve ser recusado (42501).
+-- =============================================================================
 
 
 -- ===========================================================================
