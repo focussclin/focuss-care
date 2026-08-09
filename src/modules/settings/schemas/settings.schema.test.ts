@@ -5,6 +5,7 @@ import {
   isValidCnpj,
   updateBusinessHoursSchema,
   updateClinicProfileSchema,
+  updateNotificationPreferencesSchema,
 } from './settings.schema'
 
 const openWeek = [1, 2, 3, 4, 5, 6, 7].map((weekday) => ({
@@ -102,5 +103,20 @@ describe('horário de funcionamento', () => {
     expect(updateBusinessHoursSchema.safeParse({ days: duplicated }).success).toBe(
       false,
     )
+  })
+})
+
+describe('preferências de notificações', () => {
+  it('aceita o estado operacional booleano', () => {
+    expect(updateNotificationPreferencesSchema.parse({ operational: false })).toEqual({
+      operational: false,
+    })
+  })
+
+  it('recusa valores que não podem controlar o produtor de avisos', () => {
+    expect(
+      updateNotificationPreferencesSchema.safeParse({ operational: 'false' })
+        .success,
+    ).toBe(false)
   })
 })

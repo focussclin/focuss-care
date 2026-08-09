@@ -29,9 +29,10 @@ function fakeClient(options: {
   count?: number
   marked?: unknown
   created?: unknown
+  preferences?: unknown
 }) {
   const calls: Call[] = []
-  const from = vi.fn(() => {
+  const from = vi.fn((table: string) => {
     const query: Record<string, unknown> = {}
     const isCountQuery = () =>
       calls.some(
@@ -53,10 +54,10 @@ function fakeClient(options: {
       }
     }
 
-    query.maybeSingle = async () => ({
-      data: options.marked ?? null,
-      error: null,
-    })
+    query.maybeSingle = async () =>
+      table === 'clinic_settings'
+        ? { data: options.preferences ?? null, error: null }
+        : { data: options.marked ?? null, error: null }
 
     query.single = async () => ({
       data: options.created ?? row(),
@@ -107,6 +108,24 @@ it('cria um aviso somente para a clÃ­nica e o usuÃ¡rio do contexto', async (
 })
 
 describe('repositório de notificações', () => {
+  it('lê a preferência operacional da clínica com padrão seguro', async () => {
+    const disabled = new SupabaseNotificationRepository(
+      fakeClient({ preferences: { notification_prefs: { operational: false } } }).client,
+    )
+
+    await expect(disabled.getPreferences(CLINIC)).resolves.toEqual({
+      operational: false,
+    })
+
+    const fallback = new SupabaseNotificationRepository(
+      fakeClient({ preferences: null }).client,
+    )
+
+    await expect(fallback.getPreferences(CLINIC)).resolves.toEqual({
+      operational: true,
+    })
+  })
+
   it('lista e conta somente notificações do usuário na clínica', async () => {
     const fake = fakeClient({ rows: [row()], count: 1 })
     const repository = new SupabaseNotificationRepository(fake.client)

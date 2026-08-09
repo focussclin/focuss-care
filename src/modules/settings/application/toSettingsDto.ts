@@ -46,5 +46,6 @@ export function toClinicSettingsDto(
     days: toBusinessDayDtos(settings.businessHours),
     hoursSource: settings.businessHoursSource,
     durationMinutes: settings.appointmentDefaults.durationMinutes,
+    notificationPreferences: settings.notificationPreferences,
   }
 }

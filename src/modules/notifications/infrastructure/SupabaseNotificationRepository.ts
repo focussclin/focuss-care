@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database, NotificationRow } from '@/lib/supabase/database.types'
+import { parseNotificationPreferences } from '@/lib/notifications/preferences'
 
 import type { Notification } from '../domain/Notification'
 import type {
@@ -17,6 +18,18 @@ const MAX_LIMIT = 50
 
 export class SupabaseNotificationRepository implements NotificationRepository {
   constructor(private readonly client: Client) {}
+
+  async getPreferences(clinicId: string) {
+    const { data, error } = await this.client
+      .from('clinic_settings')
+      .select('notification_prefs')
+      .eq('clinic_id', clinicId)
+      .maybeSingle()
+
+    if (error) throw readFailure('getPreferences', error)
+
+    return parseNotificationPreferences(data?.notification_prefs)
+  }
 
   async createForUser(
     clinicId: string,

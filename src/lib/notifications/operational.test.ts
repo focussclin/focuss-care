@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { createForUser } = vi.hoisted(() => ({
+const { createForUser, getPreferences } = vi.hoisted(() => ({
   createForUser: vi.fn(),
+  getPreferences: vi.fn(() => Promise.resolve({ operational: true })),
 }))
 
 vi.mock('@/modules/notifications/infrastructure/repository', () => ({
-  notificationRepositoryFor: () => ({ createForUser }),
+  notificationRepositoryFor: () => ({ createForUser, getPreferences }),
 }))
 
 import {
@@ -22,6 +23,7 @@ const client = {} as never
 describe('notificaÃ§Ãµes operacionais', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getPreferences.mockResolvedValue({ operational: true })
   })
 
   it('registra chegada sem transportar o motivo da recepÃ§Ã£o', async () => {
@@ -111,5 +113,22 @@ describe('notificaÃ§Ãµes operacionais', () => {
         link: '/financeiro',
       }),
     )
+  })
+
+  it('respeita a preferência que silencia novos avisos operacionais', async () => {
+    getPreferences.mockResolvedValueOnce({ operational: false })
+
+    await createAppointmentNotification({
+      client,
+      clinicId: CLINIC,
+      userId: USER,
+      kind: 'created',
+      appointment: {
+        patientName: 'Joao Lima',
+        startsAt: '2026-08-09T15:30:00.000Z',
+      },
+    })
+
+    expect(createForUser).not.toHaveBeenCalled()
   })
 })

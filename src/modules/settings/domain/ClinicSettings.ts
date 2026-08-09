@@ -4,6 +4,7 @@ import type {
   BusinessHoursSource,
   Weekday,
 } from '@/lib/clinic/business-hours'
+import type { NotificationPreferences } from '@/lib/notifications/preferences'
 
 /**
  * Configuração da clínica — feature **C-01**.
@@ -74,4 +75,5 @@ export interface ClinicSettings {
   businessHours: BusinessHours
   businessHoursSource: BusinessHoursSource
   appointmentDefaults: AppointmentDefaults
+  notificationPreferences: NotificationPreferences
 }

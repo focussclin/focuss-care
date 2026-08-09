@@ -152,6 +152,9 @@ async function createOperationalNotification(input: {
 }): Promise<void> {
   const repository = notificationRepositoryFor(input.client)
 
+  const preferences = await repository.getPreferences(input.clinicId)
+  if (!preferences.operational) return
+
   await repository.createForUser(input.clinicId, input.userId, {
     kind: input.kind,
     title: input.title,

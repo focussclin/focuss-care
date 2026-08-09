@@ -181,6 +181,7 @@ describe('load — horário guardado em jsonb', () => {
       settings: {
         business_hours: { days: storedDays },
         appointment_defaults: { durationMinutes: 45 },
+        notification_prefs: { operational: false },
       },
     })
 
@@ -191,6 +192,7 @@ describe('load — horário guardado em jsonb', () => {
     expect(settings.businessHoursSource).toBe('stored')
     expect(settings.businessHours[0]).toEqual(storedDays[0])
     expect(settings.appointmentDefaults.durationMinutes).toBe(45)
+    expect(settings.notificationPreferences.operational).toBe(false)
   })
 
   it('falha ao ler a preferência não derruba a identidade da clínica', async () => {
@@ -273,9 +275,8 @@ describe('updateBusinessHours', () => {
 
     expect(insert).toBeDefined()
     expect(insert.clinic_id).toBe(CLINIC)
-    // As três colunas NOT NULL que esta fatia não gerencia: vazio é o valor
-    // honesto, e a IA fica desligada porque o módulo dela está bloqueado.
-    expect(insert.notification_prefs).toEqual({})
+    // Avisos começam ativos; branding e IA seguem fora desta fatia.
+    expect(insert.notification_prefs).toEqual({ operational: true })
     expect(insert.branding).toEqual({})
     expect(insert.ai_enabled).toBe(false)
   })
@@ -298,6 +299,36 @@ describe('updateBusinessHours', () => {
     expect(
       fake.ofTable('clinic_settings').some((call) => call.method === 'insert'),
     ).toBe(false)
+  })
+})
+
+describe('updateNotificationPreferences', () => {
+  it('persiste o estado operacional no tenant ativo', async () => {
+    const fake = createFakeClient({
+      settingsUpdate: {
+        business_hours: {},
+        appointment_defaults: {},
+        notification_prefs: { operational: false },
+      },
+    })
+
+    const preferences =
+      await new SupabaseClinicSettingsRepository(
+        fake.client,
+      ).updateNotificationPreferences(CLINIC, { operational: false })
+
+    expect(preferences.operational).toBe(false)
+    expect(fake.ofTable('clinic_settings')).toContainEqual(
+      expect.objectContaining({
+        method: 'eq',
+        args: ['clinic_id', CLINIC],
+      }),
+    )
+    expect(
+      fake
+        .ofTable('clinic_settings')
+        .find((call) => call.method === 'update')?.args[0],
+    ).toMatchObject({ notification_prefs: { operational: false } })
   })
 })
 

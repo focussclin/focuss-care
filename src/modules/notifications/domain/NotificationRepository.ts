@@ -1,4 +1,5 @@
 import type { Notification } from './Notification'
+import type { NotificationPreferences } from '@/lib/notifications/preferences'
 
 export interface CreateNotificationInput {
   kind: string
@@ -8,6 +9,8 @@ export interface CreateNotificationInput {
 }
 
 export interface NotificationRepository {
+  getPreferences(clinicId: string): Promise<NotificationPreferences>
+
   createForUser(
     clinicId: string,
     userId: string,

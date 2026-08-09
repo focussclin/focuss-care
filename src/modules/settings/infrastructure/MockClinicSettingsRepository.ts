@@ -3,6 +3,10 @@ import type {
   BusinessHours,
   ClinicSettings,
 } from '../domain/ClinicSettings'
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from '@/lib/notifications/preferences'
 import type { ClinicSettingsRepository } from '../domain/ClinicSettingsRepository'
 import { ClinicSettingsError } from '../domain/ClinicSettingsError'
 import { DEFAULT_BUSINESS_HOURS } from '@/lib/clinic/business-hours'
@@ -30,6 +34,7 @@ export class MockClinicSettingsRepository implements ClinicSettingsRepository {
       businessHours: DEFAULT_BUSINESS_HOURS,
       businessHoursSource: 'default',
       appointmentDefaults: DEFAULT_APPOINTMENT_DEFAULTS,
+      notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
     }
   }
 
@@ -50,6 +55,10 @@ export class MockClinicSettingsRepository implements ClinicSettingsRepository {
 
   async updateAppointmentDefaults(): Promise<AppointmentDefaults> {
     return this.refuseWrite('updateAppointmentDefaults')
+  }
+
+  async updateNotificationPreferences(): Promise<NotificationPreferences> {
+    return this.refuseWrite('updateNotificationPreferences')
   }
 
   private refuseWrite(operation: string): never {

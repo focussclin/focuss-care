@@ -8,6 +8,7 @@ import type { ClinicSettingsDto } from '../schemas/settings.schema'
 import { AppointmentDefaultsForm } from './AppointmentDefaultsForm'
 import { BusinessHoursForm } from './BusinessHoursForm'
 import { ClinicIdentityForm } from './ClinicIdentityForm'
+import { NotificationPreferencesForm } from './NotificationPreferencesForm'
 
 export interface ConfiguracoesScreenProps {
   settings: ClinicSettingsDto
@@ -37,11 +38,10 @@ export interface ConfiguracoesScreenProps {
  * se **algo a consome** (a duração padrão da agenda e, desde A-02, o horário de
  * funcionamento — a agenda pede confirmação para atendimento fora dele).
  *
- * As colunas `notification_prefs`, `branding` e `ai_enabled` existem em
- * `clinic_settings` e **não** ganharam controle. Um botão que grava preferência
- * de notificação enquanto nenhum caminho envia notificação não é um recurso
- * incompleto — é um recurso falso, e quem o usa para de conferir se o aviso
- * chegou. O rodapé diz isso em vez de deixar a ausência parecer esquecimento.
+ * `notification_prefs` possui um controle porque os produtores de agenda,
+ * recepção e financeiro consultam essa preferência antes de criar avisos. As
+ * colunas `branding` e `ai_enabled` continuam fora da tela: nada no produto as
+ * consome ainda.
  */
 export function ConfiguracoesScreen({
   settings,
@@ -103,6 +103,12 @@ export function ConfiguracoesScreen({
         isLive={isLive}
       />
 
+      <NotificationPreferencesForm
+        operational={settings.notificationPreferences.operational}
+        canManage={canManage}
+        isLive={isLive}
+      />
+
       <Card className="overflow-hidden">
         <CardHeader
           title="Definido na criação da clínica"
@@ -153,10 +159,8 @@ export function ConfiguracoesScreen({
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-        Notificações, aparência, marca e integrações ainda não têm ajuste aqui —
-        não porque falta a tela, mas porque falta o que elas controlariam:
-        nenhum caminho do sistema envia aviso automático nem aplica logotipo
-        ainda.
+        Aparência, marca e integrações ainda não têm ajuste aqui porque nada no
+        produto consome essas configurações ainda.
       </p>
     </div>
   )

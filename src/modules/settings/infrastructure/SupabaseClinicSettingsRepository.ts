@@ -8,6 +8,10 @@ import {
   parseStoredBusinessHours,
 } from '@/lib/clinic/business-hours'
 import type { Database, Json } from '@/lib/supabase/database.types'
+import {
+  parseNotificationPreferences,
+  type NotificationPreferences,
+} from '@/lib/notifications/preferences'
 
 import type {
   AppointmentDefaults,
@@ -24,7 +28,8 @@ import { storedAppointmentDefaultsSchema } from '../schemas/settings.schema'
 type Client = SupabaseClient<Database>
 
 const CLINIC_SELECT = 'id, slug, trade_name, legal_name, cnpj, timezone, locale'
-const SETTINGS_SELECT = 'business_hours, appointment_defaults'
+const SETTINGS_SELECT =
+  'business_hours, appointment_defaults, notification_prefs'
 
 /**
  * Adapter Supabase das configurações — feature **C-01**.
@@ -80,6 +85,9 @@ export class SupabaseClinicSettingsRepository
       businessHoursSource: hours.source,
       appointmentDefaults: parseAppointmentDefaults(
         settingsResult.data?.appointment_defaults,
+      ),
+      notificationPreferences: parseNotificationPreferences(
+        settingsResult.data?.notification_prefs,
       ),
     }
   }
@@ -138,8 +146,19 @@ export class SupabaseClinicSettingsRepository
     return parseAppointmentDefaults(row.appointment_defaults)
   }
 
+  async updateNotificationPreferences(
+    clinicId: string,
+    preferences: NotificationPreferences,
+  ): Promise<NotificationPreferences> {
+    const row = await this.upsertSettings(clinicId, {
+      notification_prefs: { operational: preferences.operational },
+    })
+
+    return parseNotificationPreferences(row.notification_prefs)
+  }
+
   /**
-   * Grava a preferência, criando a linha se ela não existir.
+   * Grava uma preferência de configuração, criando a linha se ela não existir.
    *
    * `clinic_settings.clinic_id` é chave primária, então a linha deveria ter
    * nascido junto com a clínica, em `create_clinic()`. **Deveria** é o mais
@@ -159,8 +178,16 @@ export class SupabaseClinicSettingsRepository
    */
   private async upsertSettings(
     clinicId: string,
-    patch: { business_hours?: Json; appointment_defaults?: Json },
-  ): Promise<{ business_hours: Json; appointment_defaults: Json }> {
+    patch: {
+      business_hours?: Json
+      appointment_defaults?: Json
+      notification_prefs?: Json
+    },
+  ): Promise<{
+    business_hours: Json
+    appointment_defaults: Json
+    notification_prefs: Json
+  }> {
     const now = new Date().toISOString()
 
     const { data, error } = await this.client
@@ -183,12 +210,11 @@ export class SupabaseClinicSettingsRepository
           durationMinutes: DEFAULT_APPOINTMENT_DEFAULTS.durationMinutes,
         },
         /*
-         * As três colunas restantes são NOT NULL e a fatia não as gerencia.
-         * Vazio é o valor honesto: nenhum caminho do produto envia notificação
-         * nem aplica marca, e `ai_enabled: false` mantém desligado um módulo que
-         * ainda está bloqueado no roadmap.
+         * Branding e IA continuam fora desta fatia. Avisos operacionais já têm
+         * controle e começam ligados para não silenciar eventos por omissão.
          */
-        notification_prefs: {},
+        notification_prefs:
+          patch.notification_prefs ?? { operational: true },
         branding: {},
         ai_enabled: false,
         updated_at: now,
