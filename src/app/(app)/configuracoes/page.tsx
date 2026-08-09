@@ -5,6 +5,7 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { getSessionState } from '@/lib/auth/session'
 import { can } from '@/lib/auth/permissions'
 import { getProfileRepository } from '@/modules/identity/infrastructure/repository'
+import { getIntegrationCredentialRepository } from '@/modules/integrations/infrastructure/credentials-repository'
 import { PersonalProfileForm } from '@/modules/identity/ui/PersonalProfileForm'
 import { toClinicSettingsDto } from '@/modules/settings/application/toSettingsDto'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
@@ -31,13 +32,17 @@ export default async function ConfiguracoesPage() {
    */
   const role = await getActiveClinicRole()
 
-  const [source, session, profileRepository] = await Promise.all([
+  const [source, credentialSource, session, profileRepository] = await Promise.all([
     getClinicSettingsRepository(),
+    getIntegrationCredentialRepository(),
     getSessionState(),
     getProfileRepository(),
   ])
 
   const settings = await source.repository.load(source.clinicId)
+  const integrationCredentials = await credentialSource.repository.overview(
+    credentialSource.clinicId,
+  )
 
   /*
    * Composição entre módulos na ROTA (regra 4): `settings` não alcança o
@@ -74,6 +79,7 @@ export default async function ConfiguracoesPage() {
         ) : null
       }
       isLive={source.isLive}
+      integrationCredentials={integrationCredentials}
     />
   )
 }

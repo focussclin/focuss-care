@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1050 testes em 98 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1064 testes em 100 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -60,7 +60,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
-| `integrations` | **EM ANDAMENTO** | Estado de conexão de WhatsApp, IA e automações, lido do banco. **Não envia, não executa, não chama modelo** |
+| `integrations` | **EM ANDAMENTO** | Estado de conexão real + cofre cifrado por clínica para Brevo, Evolution, DeepSeek e calendários. **Ainda não envia, não executa, não chama modelo nem sincroniza agenda** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
@@ -646,6 +646,30 @@ explícito para demonstração e testes do repositório, schema e componente. A
 paleta continua declarando que prontuários e guias não possuem busca por termo.
 
 Validação desta fatia: suíte com 1050 testes em 98 arquivos, lint, typecheck,
+build Next.js com 42 rotas e OpenNext Cloudflare limpos.
+
+---
+
+## 4.26 Cofre seguro de integrações (09/08/2026)
+
+**Concluído:** a tela `/configuracoes` agora possui um painel real para
+credenciais operacionais de Brevo, Evolution API, DeepSeek, Google Calendar e
+Outlook Calendar. A action usa `clinic.settings`, resolve tenant pela sessão,
+valida os campos com Zod, cifra o payload com AES-GCM no servidor, persiste no
+Supabase com RLS owner/admin e registra auditoria sem valores sensíveis.
+
+O painel nunca recebe o payload salvo: após a gravação, limpa os campos e mostra
+somente o status e a data. Estados de demonstração, migration ausente, servidor
+indisponível e falta de `INTEGRATION_ENCRYPTION_KEY` ficam explícitos. Tokens de
+GitHub, Cloudflare, Coolify/VPS e Hostinger foram deliberadamente excluídos por
+serem secrets de infraestrutura, não credenciais de uma clínica.
+
+**Pendente externo:** aplicar `supabase/migrations/20260809_integration_credentials.sql`
+e configurar `INTEGRATION_ENCRYPTION_KEY` em cada ambiente. O cofre não marca
+provedores como conectados enquanto os adapters de envio, OAuth, webhook ou
+worker ainda não existirem.
+
+Validação desta fatia: 1064 testes em 100 arquivos, lint direcionado, typecheck,
 build Next.js com 42 rotas e OpenNext Cloudflare limpos.
 
 ---

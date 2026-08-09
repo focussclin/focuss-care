@@ -99,9 +99,41 @@ as escritas permanecem bloqueadas até a migration existir no projeto remoto.
 Depois de aplicar, execute `npm run db:types` e valide leitura e escrita com
 usuários de duas clínicas.
 
-A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
-Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
-ao `.env.example` nem ao bundle do navegador.
+A chave SMTP usada pelo Supabase Auth deve continuar configurada somente no
+painel do Supabase, em Authentication → Emails → SMTP Settings. Ela não
+pertence ao código do app, ao `.env.example` nem ao bundle do navegador. As
+credenciais da Brevo para integrações da clínica são outra coisa e podem ser
+salvas no cofre de `/configuracoes` depois da preparação abaixo.
+
+## 0.1 Cofre de credenciais de integrações
+
+O painel de Configurações agora possui um cofre server-side para Brevo,
+Evolution API, DeepSeek, Google Calendar e Outlook Calendar. O formulário
+aceita os valores, cifra tudo com AES-GCM e só grava o payload cifrado no
+Supabase. A chave de cifragem não fica no banco e nenhum segredo é devolvido
+para o navegador depois do salvamento.
+
+Para habilitar o cofre em cada ambiente:
+
+1. Gere uma chave nova de 32 bytes, em base64, por ambiente:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+2. Configure o valor como `INTEGRATION_ENCRYPTION_KEY` somente no secret do
+   servidor/Cloudflare e, localmente, no `.env.local` não versionado.
+3. Aplique `supabase/migrations/20260809_integration_credentials.sql` no SQL
+   Editor do Supabase. Ela cria a tabela e restringe leitura/escrita a
+   `owner`/`admin` com RLS.
+4. Execute `npm run db:types` e abra `/configuracoes` com uma conta autorizada.
+5. Cadastre a credencial no card do provedor. Depois de salvar, os campos são
+   apagados e a tela mostra apenas “Configurado” e a data.
+
+O cofre prepara o armazenamento seguro; ele não finge que um provedor já está
+operacional. Evolution, DeepSeek e calendários ainda precisam de seus adapters,
+OAuth/webhooks e workers antes de enviar mensagens, chamar modelos ou
+sincronizar agenda. A tela mostra esse estado em separado.
+
+Não coloque tokens de GitHub, Cloudflare, Coolify/VPS ou Hostinger neste painel.
+Eles controlam a infraestrutura e devem ser cadastrados como secrets do
+provedor de deploy, nunca no banco de uma clínica.
 
 ## 0. O caminho mais curto para destravar 8 itens do menu
 
@@ -261,13 +293,13 @@ Registrado para que ninguém saia procurando:
 
 | Serviço | Situação |
 |---|---|
-| Provedor de WhatsApp (Evolution, Cloud API) | **Não configurado e não usado.** Nenhuma credencial é lida, e `provider_config` não é escrito nem lido por linha nenhuma do código. `/whatsapp` mostra o estado de conexão vindo de `whatsapp_channels` e declara o que falta — não é mais vitrine |
+| Provedor de WhatsApp (Evolution, Cloud API) | **Cofre preparado, adapter ainda não operacional.** A credencial pode ser armazenada cifrada em `/configuracoes`, mas nenhum envio, webhook ou worker lê essa credencial ainda. `/whatsapp` mostra o estado de conexão vindo de `whatsapp_channels` e declara o que falta |
 | Redis / worker de fila | **Não existe.** Previsto para W-01, sem código no repositório |
-| Provedor de IA | **Não configurado e não usado.** Nenhuma chamada sai daqui; `/chat-ia` mostra que não há provedor e declara a regra P9 — não é mais vitrine |
+| Provedor de IA | **Cofre preparado, adapter ainda não operacional.** A credencial DeepSeek pode ser armazenada cifrada, mas nenhuma chamada sai daqui; `/chat-ia` mostra que não há provedor ativo e declara a regra P9 |
 | Gateway de pagamento | **Não existe.** B-01 registra pagamento recebido, não processa cobrança |
 | Emissor de NFS-e | **Não existe.** O produto registra cobrança interna, não emite documento fiscal |
 | Storage para logotipo/anexos | **Bucket não verificado.** Por isso não há upload de marca em `/configuracoes` |
-| SMTP próprio | **Não usado.** E-mail de autenticação sai pelo Supabase |
+| SMTP próprio | **Não usado pelo app.** E-mail de autenticação sai pelo Supabase; a credencial Brevo do cofre só será consumida quando o adapter transacional existir |
 
 Quando algum destes entrar, ele ganha uma seção aqui **e** um adaptador com
 estado de conexão explícito — nunca uma tela que finge estar conectada.

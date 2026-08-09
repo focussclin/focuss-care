@@ -79,6 +79,13 @@ export type ChannelProvider =
   | 'twilio'
   | 'other'
 
+export type IntegrationCredentialProvider =
+  | 'brevo'
+  | 'evolution'
+  | 'deepseek'
+  | 'google_calendar'
+  | 'outlook_calendar'
+
 export type ClaimDenialStatus =
   | 'received'
   | 'appealing'
@@ -959,6 +966,54 @@ export type Database = {
             columns: ['clinic_id']
             isOneToOne: false
             referencedRelation: 'clinics'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      clinic_integration_credentials: {
+        Row: {
+          id: string
+          clinic_id: string
+          provider: IntegrationCredentialProvider
+          encrypted_payload: string
+          key_version: number
+          configured_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          provider: IntegrationCredentialProvider
+          encrypted_payload: string
+          key_version?: number
+          configured_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          provider?: IntegrationCredentialProvider
+          encrypted_payload?: string
+          key_version?: number
+          configured_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'clinic_integration_credentials_clinic_id_fkey'
+            columns: ['clinic_id']
+            isOneToOne: false
+            referencedRelation: 'clinics'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'clinic_integration_credentials_configured_by_fkey'
+            columns: ['configured_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -3970,6 +4025,7 @@ export type AvailabilityRuleRow = Database['public']['Tables']['availability_rul
 export type CashEntryRow = Database['public']['Tables']['cash_entries']['Row']
 export type CashSessionRow = Database['public']['Tables']['cash_sessions']['Row']
 export type ClinicSettingRow = Database['public']['Tables']['clinic_settings']['Row']
+export type ClinicIntegrationCredentialRow = Database['public']['Tables']['clinic_integration_credentials']['Row']
 export type ClinicalAttachmentRow = Database['public']['Tables']['clinical_attachments']['Row']
 export type ClinicRow = Database['public']['Tables']['clinics']['Row']
 export type ConsentRow = Database['public']['Tables']['consents']['Row']

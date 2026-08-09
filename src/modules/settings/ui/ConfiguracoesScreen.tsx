@@ -4,6 +4,11 @@ import type { ReactNode } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Card, CardHeader } from '@/components/ui/card'
 
+import {
+  IntegrationCredentialsPanel,
+  type IntegrationCredentialsPanelProps,
+} from '@/modules/integrations'
+
 import type { ClinicSettingsDto } from '../schemas/settings.schema'
 import { AppointmentDefaultsForm } from './AppointmentDefaultsForm'
 import { BusinessHoursForm } from './BusinessHoursForm'
@@ -23,6 +28,7 @@ export interface ConfiguracoesScreenProps {
    */
   profileSlot?: ReactNode
   isLive?: boolean
+  integrationCredentials: IntegrationCredentialsPanelProps['overview']
 }
 
 /**
@@ -48,6 +54,7 @@ export function ConfiguracoesScreen({
   canManage,
   profileSlot,
   isLive = false,
+  integrationCredentials,
 }: ConfiguracoesScreenProps) {
   return (
     <div className="flex flex-col gap-6">
@@ -109,6 +116,12 @@ export function ConfiguracoesScreen({
         isLive={isLive}
       />
 
+      <IntegrationCredentialsPanel
+        overview={integrationCredentials}
+        canManage={canManage}
+        isLive={isLive}
+      />
+
       <Card className="overflow-hidden">
         <CardHeader
           title="Definido na criação da clínica"
@@ -159,8 +172,8 @@ export function ConfiguracoesScreen({
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-        Aparência, marca e integrações ainda não têm ajuste aqui porque nada no
-        produto consome essas configurações ainda.
+        Aparência e marca continuam somente leitura até existirem consumidores
+        reais para essas configurações.
       </p>
     </div>
   )
