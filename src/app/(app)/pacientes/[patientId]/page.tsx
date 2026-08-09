@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
+import { normalizePatientAdminNote } from '@/modules/patients/application/patientAdminNotes'
 import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
 import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
 import { toPatientContactDto } from '@/modules/patients/application/toPatientContactDto'
@@ -88,6 +89,7 @@ export default async function PatientProfilePage({
     .slice(0, MAX_HISTORY)
 
   const notes = patientSource.isLive ? [] : getMockPatientNotes(today)
+  const adminNote = normalizePatientAdminNote(patient.adminNotes)
 
   /*
    * Consentimentos LGPD (P-03).
@@ -332,9 +334,23 @@ export default async function PatientProfilePage({
           <Card>
             <CardHeader
               title="Observações"
-              description="Notas internas da equipe."
+              description="Notas administrativas da equipe, separadas do prontuário clínico."
             />
-            {notes.length === 0 ? (
+            {patientSource.isLive ? (
+              adminNote ? (
+                <div className="mx-5 mb-5 rounded-field bg-background p-4">
+                  <p className="text-aux text-foreground">{adminNote}</p>
+                  <p className="mt-2 text-label text-muted">
+                    Observação atual do cadastro
+                  </p>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={StickyNote}
+                  title="Nenhuma observação registrada."
+                />
+              )
+            ) : notes.length === 0 ? (
               <EmptyState
                 icon={StickyNote}
                 title="Nenhuma observação registrada."

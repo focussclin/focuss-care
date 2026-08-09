@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1019 testes em 93 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1021 testes em 94 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -81,7 +81,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
 | `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
-| `/pacientes` e subrotas | **COMPLETO** | Banco (patients + patient_contacts + consents); tags administrativas preparadas e aguardando migration | `patient.read`; alterações exigem `patient.write` |
+| `/pacientes` e subrotas | **COMPLETO** | Banco (patients + `admin_notes` + patient_contacts + consents); tags administrativas preparadas e aguardando migration | `patient.read`; alterações exigem `patient.write` |
 | `/recepcao` | **COMPLETO** | Banco (scheduling + encounters) — quem falta chegar e quem está atrasado, derivado na rota | `encounter.read` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
 | `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
@@ -454,6 +454,23 @@ aplicar a migration, regenerar `database.types.ts` e validar duas clínicas.
 
 Validação direcionada desta fatia: 7 testes; suíte completa com 1019 testes em
 93 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
+limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
+
+---
+
+## 4.14 Correção de ficha 360 — Observação administrativa (09/08/2026)
+
+O campo `patients.admin_notes` já era persistido e editável pelo cadastro, mas a
+ficha live descartava o valor e renderizava uma lista vazia; apenas o modo demo
+mostrava observações. A rota agora exibe o texto salvo, normaliza espaços laterais
+e identifica claramente que ele é administrativo, sem misturá-lo ao prontuário
+clínico versionado.
+
+Quando a clínica não possui observação, a ficha mostra estado vazio. O fallback
+de demonstração continua separado e mantém seus dados de exemplo declarados.
+
+Validação direcionada desta correção: 2 testes; suíte completa com 1021 testes em
+94 arquivos, lint, typecheck, build Next.js com 42 rotas e OpenNext Cloudflare
 limpos. A inspeção visual pelo navegador continua indisponível neste ambiente.
 
 ---
