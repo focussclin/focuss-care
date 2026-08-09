@@ -17,6 +17,12 @@ export type AppointmentNotificationKind =
   | 'rescheduled'
   | 'canceled'
 
+export type EncounterNotificationKind =
+  | 'checked_in'
+  | 'called'
+  | 'started'
+  | 'closed'
+
 /**
  * Registra um evento operacional para quem executou a aÃ§Ã£o.
  *
@@ -30,14 +36,59 @@ export async function createAppointmentNotification(input: {
   kind: AppointmentNotificationKind
   appointment: AppointmentNotificationData
 }): Promise<void> {
-  const repository = notificationRepositoryFor(input.client)
   const notification = toAppointmentNotification(input.kind, input.appointment)
 
-  await repository.createForUser(
-    input.clinicId,
-    input.userId,
-    notification,
-  )
+  await createOperationalNotification({
+    client: input.client,
+    clinicId: input.clinicId,
+    userId: input.userId,
+    ...notification,
+  })
+}
+
+export async function createEncounterNotification(input: {
+  client: Client
+  clinicId: string
+  userId: string
+  kind: EncounterNotificationKind
+  patientName: string
+  eventAt: string
+}): Promise<void> {
+  const labels: Record<EncounterNotificationKind, string> = {
+    checked_in: 'chegou na recepção',
+    called: 'foi chamado',
+    started: 'entrou em atendimento',
+    closed: 'teve o atendimento encerrado',
+  }
+
+  await createOperationalNotification({
+    client: input.client,
+    clinicId: input.clinicId,
+    userId: input.userId,
+    kind: `encounter.${input.kind}`,
+    title: 'Atualização da recepção',
+    body: `${input.patientName} ${labels[input.kind]} • ${formatOperationalDate(input.eventAt)}`,
+    link: '/atendimentos',
+  })
+}
+
+async function createOperationalNotification(input: {
+  client: Client
+  clinicId: string
+  userId: string
+  kind: string
+  title: string
+  body: string
+  link: string
+}): Promise<void> {
+  const repository = notificationRepositoryFor(input.client)
+
+  await repository.createForUser(input.clinicId, input.userId, {
+    kind: input.kind,
+    title: input.title,
+    body: input.body,
+    link: input.link,
+  })
 }
 
 function toAppointmentNotification(
@@ -54,12 +105,12 @@ function toAppointmentNotification(
   return {
     kind: `appointment.${kind}`,
     title: `Agendamento ${label}`,
-    body: `${appointment.patientName} â€¢ ${formatAppointmentDate(appointment.startsAt)}`,
+    body: `${appointment.patientName} • ${formatOperationalDate(appointment.startsAt)}`,
     link: '/agenda',
   }
 }
 
-function formatAppointmentDate(value: string): string {
+function formatOperationalDate(value: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',

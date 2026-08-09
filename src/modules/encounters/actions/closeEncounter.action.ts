@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { createEncounterNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -36,6 +37,17 @@ const runCloseEncounter = createAction<CloseEncounterInput, EncounterDto>({
     unexpected: encounterMessages.unexpected,
   },
   revalidatePaths: ['/atendimentos', '/dashboard'],
+
+  afterSuccess: async (output, _input, context) => {
+    await createEncounterNotification({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      userId: context.userId,
+      kind: 'closed',
+      patientName: output.patientName,
+      eventAt: output.endedAt ?? output.startsAt,
+    })
+  },
 
   handler: async (input, context) => {
     const repository = encounterRepositoryFor(context.supabase)
