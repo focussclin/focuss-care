@@ -112,3 +112,36 @@ Ainda **não escritos**, porque dependem de saber o que já existe: sem acesso S
 não dá para verificar quais índices e extensões o banco tem, e criar um índice
 duplicado é custo sem ganho. As quatro consultas de diagnóstico estão em
 `docs/07-cadastro-de-pacientes.md` §8.11.
+
+---
+
+# Propostas pendentes de aplicação
+
+## 5. `20260809_rooms.sql` — **NÃO APLICADA**
+
+**Problema.** "Salas e recursos" é item de menu sem tabela. A consequência não é
+cosmética: a agenda já impede que o mesmo **profissional** tenha dois
+atendimentos sobrepostos (constraint `appointments_no_overlap`, aplicada em
+08/08/2026), e **não impede que dois profissionais sejam mandados para a mesma
+sala no mesmo horário**. Numa clínica com três consultórios e cinco
+profissionais, é o conflito que acontece toda semana — e o único que o sistema
+ainda não vê.
+
+**O que a migration cria.** `public.rooms` (com `kind` distinguindo consultório,
+sala de exame, sala de procedimento e equipamento móvel), a coluna opcional
+`appointments.room_id`, e uma constraint de exclusão parcial que espelha a do
+profissional.
+
+**Por que é seguro aplicar.** `room_id` nasce nulo em todos os atendimentos
+existentes, e a constraint só vale quando ele é preenchido — clínica que não
+controla sala não sente diferença, e **não há backfill nem sobreposição prévia a
+limpar**, ao contrário da constraint de profissional.
+
+**Verificar depois:** as sete checagens listadas no rodapé do arquivo, incluindo
+o caso `d` (marcar sem sala continua funcionando) e o `g` (membro de outra
+clínica lê zero linhas).
+
+**Depois de aplicar, no código:** `npm run db:types`; distinguir sala de
+profissional na tradução do `23P01` em `SupabaseAppointmentRepository` — hoje a
+recepção leria "profissional ocupado" e trocaria a pessoa errada; e habilitar o
+item em `navigation.ts`.
