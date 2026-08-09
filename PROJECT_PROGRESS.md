@@ -556,6 +556,19 @@ lint, typecheck e build Next.js com 42 rotas limpos.
 
 ---
 
+## 4.20 Redirecionamento privado compatível com Cloudflare (09/08/2026)
+
+O layout autenticado voltou a cumprir o contrato de navegação: sessão anônima
+recebe redirect HTTP 307 para `/login`, em vez de uma resposta 401 inline de
+`unauthorized()`. Isso mantém a proteção server-side sem reintroduzir o proxy
+Node incompatível com OpenNext/Cloudflare Workers.
+
+Smoke local validado em `/dashboard`, `/pacientes` e `/agenda` (307) e `/login`
+(200). O build Next.js e `npx opennextjs-cloudflare build` passaram, gerando o
+worker em `.open-next/worker.js`.
+
+---
+
 ## 5. Vitrines — nenhuma resta
 
 `src/modules/workspace/ui/OperationsScreens.tsx` tinha **11 telas** com dados

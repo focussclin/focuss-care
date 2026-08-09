@@ -11,8 +11,8 @@ import { DEFAULT_AFTER_LOGIN, safeNextPath } from '@/lib/routes/safeNextPath'
  *
  * # Por que existe um componente de cliente para montar um link
  *
- * `unauthorized()` serve a página **na URL original** — é essa a vantagem dele
- * sobre `redirect('/login')`. Mas Server Component não lê o próprio caminho:
+ * Uma chamada explícita a `unauthorized()` serve a página **na URL original**.
+ * Server Component não lê o próprio caminho:
  * `usePathname` é hook, e `headers()` não traz o pathname sem middleware, que
  * saiu na migração para Cloudflare Workers.
  *

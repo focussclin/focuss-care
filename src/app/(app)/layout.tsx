@@ -1,4 +1,4 @@
-import { redirect, unauthorized } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { AppShell } from '@/components/layout/AppShell'
@@ -62,32 +62,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSessionState()
 
   /*
-   * Sem sessao: `unauthorized()`, e nao `redirect('/login')`.
-   *
-   * O desvio para `/login` PERDIA O DESTINO. Quando o `proxy.ts` existia, era
-   * ele quem escrevia `/login?next=<rota>`; com a migracao para Cloudflare
-   * Workers o proxy saiu, e a casca passou a mandar todo mundo para um `/login`
-   * pelado. Consequencia: quem abre um link salvo de `/pacientes/<id>`, ou um
-   * link mandado no WhatsApp da clinica, entra e cai no painel — e precisa
-   * procurar de novo o que ja tinha em maos.
-   *
-   * `unauthorized()` nao navega: interrompe a renderizacao e serve
-   * `app/unauthorized.tsx` NA MESMA URL. O endereco continua sendo
-   * `/pacientes/<id>`, entao o destino nao se perde — e e a propria pagina de
-   * 401 que o carrega para o login.
-   *
-   * **O que NAO muda: o status HTTP.** Medido em `next build` + `next start`,
-   * antes e depois: sob `cacheComponents` a resposta ja saia 200, com o desvio
-   * acontecendo no cliente. O 401 aparece no `dev`, e nao no build de producao.
-   * Trocar o portao nao piorou nem melhorou isso; quem quiser status honesto
-   * precisa mover a decisao para fora da renderizacao, e ai volta a discussao
-   * do middleware que saiu com a migracao para Workers.
-   *
-   * `needs-onboarding` e `claims-stale` continuam redirecionando: ali ha sessao
-   * valida, e o problema nao e entrar — e nao ter clinica. Manter o 401 nesses
-   * casos diria "sua sessao expirou" a quem acabou de entrar.
+   * Sem sessao, a rota privada deve devolver o usuario ao login. O proxy foi
+   * removido para manter compatibilidade com Cloudflare Workers; por isso esta
+   * guarda server-side e o redirect HTTP sao a protecao definitiva desta casca.
+   * A origem nao e anexada aqui porque layouts nao recebem o pathname atual de
+   * forma portavel entre Next Node e OpenNext. O login continua sendo seguro e
+   * o usuario pode navegar novamente a partir do destino publico.
    */
-  if (session.status === 'anonymous') unauthorized()
+  if (session.status === 'anonymous') redirect('/login')
   if (session.status === 'needs-onboarding') redirect('/onboarding')
   if (session.status === 'claims-stale') redirect('/onboarding')
 
