@@ -416,3 +416,105 @@ caso:
 
 O backup da §2 é o último recurso, e restaurar dado de saúde por cima de
 operação em andamento é decisão de quem responde pela clínica — não do plantão.
+
+---
+
+## 6. As seis migrations de 09/08/2026 — nenhuma aplicada
+
+Seis módulos completos estão no código e **invisíveis no menu**, cada um atrás de
+uma tabela que não existe no projeto remoto. É o maior bloqueio único do produto
+hoje: não falta código, falta um `apply`.
+
+| Arquivo | Destrava | Estado |
+|---|---|---|
+| `20260809_rooms.sql` | Salas e recursos + conflito de sala na agenda | Escrita e revisada |
+| `20260809_clinic_tasks.sql` | Tarefas | Escrita e revisada |
+| `20260809_clinic_leads.sql` | CRM e Leads | Escrita e revisada |
+| `20260809_clinic_forms.sql` | Formulários digitais | Escrita e revisada |
+| `20260809_inventory.sql` | Estoque | Escrita e revisada |
+| `20260809_purchases.sql` | Compras | Escrita e revisada |
+
+Conferido nos seis arquivos, antes de recomendar a ordem:
+
+- **Nenhuma colisão de nome de enum** entre eles.
+- **Todos os `create table` são idempotentes** (`if not exists`), então repetir a
+  aplicação não quebra.
+
+### 6.1 A ordem importa em um par, e só nele
+
+```
+1. 20260809_rooms.sql          (independente — altera `appointments`)
+2. 20260809_clinic_tasks.sql   (independente)
+3. 20260809_clinic_leads.sql   (independente)
+4. 20260809_clinic_forms.sql   (independente)
+5. 20260809_inventory.sql      ─┐
+6. 20260809_purchases.sql      ─┘ depende de `inventory_items`
+```
+
+**`purchases` referencia `public.inventory_items`.** Aplicá-la antes de
+`inventory` falha com `42P01`, e a transação inteira volta — sem estrago, mas
+com tempo perdido procurando a causa.
+
+Os quatro primeiros são independentes entre si; a ordem entre eles é indiferente.
+Recomendo começar por `rooms` mesmo assim: é a única que mexe numa tabela
+existente (`appointments`), e é a que conserta um defeito de hoje em vez de abrir
+domínio novo — se algo der errado no ambiente, é melhor descobrir na primeira.
+
+### 6.2 **Decisão pendente antes de aplicar: quem pode escrever**
+
+Esta é a única questão que eu não resolvo sozinho, e ela vale a leitura.
+
+**Cinco das seis liberam escrita para QUALQUER membro da clínica** — a policy é
+só `clinic_id = current_clinic_id()`. Apenas `rooms` restringe a `owner`/`admin`.
+
+Na prática isso significa que, do jeito que estão:
+
+| Tabela | Quem pode escrever hoje | Faz sentido? |
+|---|---|---|
+| `clinic_tasks` | Qualquer membro | **Sim.** Tarefa é coordenação de equipe; a recepção é quem mais gera |
+| `clinic_forms` | Qualquer membro | Provavelmente sim para responder; **duvidoso para criar formulário**, que é configuração |
+| `clinic_leads` | Qualquer membro | **Duvidoso.** Pipeline comercial exposto a quem só marca consulta |
+| `inventory_items` / `inventory_movements` | Qualquer membro | **Duvidoso.** Ajuste de estoque é ajuste de patrimônio |
+| `purchase_*` | Qualquer membro | **Não.** Pedido de compra é compromisso financeiro |
+
+O schema já tem `can_access_financial()` e `has_clinic_role(p_roles)` — a segunda
+com essa assinatura exata, **sem `clinic_id`** (ela usa a clínica ativa do JWT;
+conferido em `database.types.ts`). Apertar as policies depois é uma migration
+curta, mas **afrouxar depois de alguém já ter usado é pior**: quem escreveu uma
+linha que a policy nova recusa fica com dado que não consegue mais editar.
+
+Recomendação: aplicar `rooms`, `clinic_tasks` e `clinic_forms` como estão, e
+decidir sobre `clinic_leads`, `inventory` e `purchases` antes de aplicá-las.
+
+### 6.3 Verificação depois de cada arquivo
+
+O rodapé de cada `.sql` traz as consultas específicas. As três que valem para
+todos:
+
+```sql
+-- 1. RLS ligada na tabela nova
+select relname, relrowsecurity from pg_class
+ where relname in ('rooms','clinic_tasks','clinic_leads','clinic_forms',
+                   'inventory_items','purchase_orders');
+
+-- 2. As policies existem e cobrem os comandos esperados
+select tablename, policyname, cmd from pg_policies
+ where schemaname = 'public' and tablename like ANY (ARRAY['rooms','clinic_%','inventory_%','purchase_%']);
+
+-- 3. Isolamento entre clínicas — o teste que importa
+--    Logado na clínica A, criar uma linha. Logado na clínica B, listar:
+--    tem que voltar ZERO.
+```
+
+### 6.4 Depois de aplicar, no código
+
+1. `npm run db:types` — regenera `database.types.ts` do schema remoto.
+2. **Remover os shims de tipos.** `rooms/infrastructure/roomsDatabase.ts` e
+   `tasks/infrastructure/tasksDatabase.ts` existem só porque a tabela não estava
+   nos tipos gerados. Mantê-los depois cria uma segunda definição da mesma
+   tabela, e a divergência entre as duas **não dá erro** — só resultado errado.
+3. Habilitar os itens em `navigation.ts` e **remover a entrada correspondente de
+   `BUILT_BUT_HIDDEN`** em `src/app/reachableRoutes.test.ts`. O teste falha de
+   propósito se o item for habilitado sem limpar o registro: é assim que a
+   dívida se fecha em vez de virar comentário velho.
+4. `npm test`, `lint`, `typecheck`, `build`.
