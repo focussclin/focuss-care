@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 975 testes em 76 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 34 rotas.
+**Validação atual:** 978 testes em 77 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 35 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -66,7 +66,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 33 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 35 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -93,6 +93,7 @@ As 33 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/financeiro` | **EM ANDAMENTO** | Banco (billing + payables + patients) | `invoice.read`; escrever despesas exige `payable.write` |
 | `/convenios` | **EM ANDAMENTO** | Banco (insurance): operadoras, planos, carteirinhas, guias e glosas | `insurance.manage` |
 | `/crm` | **EM ANDAMENTO** | Migration `clinic_leads` pendente; pipeline e camada de escrita preparadas | Membro quando as tabelas existirem |
+| `/inbox` | **EM ANDAMENTO** | Leitura tenant-scoped de `conversations` e `messages`; sem ingestão/envio até W-01 | Membro |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -165,7 +166,7 @@ existe neste ambiente, e a coluna diz o quê.
 | Formulários digitais | Não há `forms` nem `form_responses` — exige migration (**B1**) |
 | Conciliação bancária | Não há `bank_accounts` nem `bank_transactions` — exige migration (**B1**) |
 | Documentos | `patient_documents` existe, mas **não há bucket de Storage**: `listBuckets()` devolveu vazio em 08/08/2026. Sem bucket, o arquivo não tem para onde ir |
-| Inbox de atendimento | `conversations` e `messages` existem e **nada as escreve** — depende da ingestão de W-01 |
+| Inbox de atendimento | Leitura tenant-scoped de `conversations` e `messages` entregue; ingestão e envio dependem de W-01 |
 | Portal do paciente, Portal do profissional | Aplicação separada, com autenticação própria |
 | Teleatendimento | Provedor de vídeo — dependência externa |
 | Insights proativos | Provedor de IA e aprovação de `docs/04-agente-ia.md` |
@@ -259,10 +260,31 @@ O item continua desabilitado até `20260809_clinic_leads.sql` ser aplicado e
 `npm run db:types` ser executado. Conversão em paciente, follow-up automático,
 WhatsApp e IA ficam para as integrações correspondentes.
 
-Validação desta fatia: 4 testes de UI, suíte completa com 975 testes em 76
+Validação desta fatia: 4 testes de UI, suíte completa com 978 testes em 77
 arquivos, lint, typecheck, build Next.js e OpenNext Cloudflare limpos. O servidor
 local segue acessível em `localhost:3000`; inspeção visual pelo navegador
 embutido não foi possível neste ambiente.
+
+---
+
+## 4.6 Feature em andamento — Inbox de atendimento (09/08/2026)
+
+**Leitura local concluída; ingestão e envio permanecem bloqueados por integração
+externa.** A rota `/inbox` consulta as tabelas existentes em uma leitura
+tenant-scoped, carrega conversas e mensagens em lote, permite buscar por nome,
+telefone ou paciente, filtrar status e abrir o histórico da conversa com link
+para a ficha do paciente. A tela é responsiva e não fabrica conversas quando a
+base está vazia.
+
+Não existe action de envio, marcar como lida ou alteração de status nesta fatia:
+esses controles não são exibidos como se funcionassem. Recebimento de webhook,
+normalização de mensagens, fila/worker e envio exigem o contrato do provedor de
+WhatsApp descrito em `EXTERNAL_SETUP.md` §3.1.
+
+Validação da fatia: 3 testes de UI direcionados, suíte completa com 978 testes
+em 77 arquivos, lint, typecheck, build Next.js com 35 rotas e OpenNext Cloudflare
+limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
+navegador embutido não foi possível neste ambiente.
 
 ---
 

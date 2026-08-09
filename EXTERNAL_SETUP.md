@@ -34,6 +34,11 @@ aplicada. Ela cria `clinic_leads`, `lead_events` e as policies RLS do pipeline.
 Depois de aplicá-la, execute `npm run db:types`, valide leitura/escrita com duas
 clínicas e só então habilite o item CRM no menu.
 
+**Inbox (09/08/2026):** a leitura da rota `/inbox` já usa `conversations` e
+`messages` com escopo de clínica. O recurso ainda não envia nem recebe mensagens:
+isso depende de W-01 (provedor WhatsApp, webhook e worker). O item permanece fora
+do menu até o contrato do provedor ser escolhido e validado.
+
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,
 ao `.env.example` nem ao bundle do navegador.
