@@ -6,6 +6,7 @@ import {
   getCurrentProfessionalId,
   getActiveClinicRole,
 } from '@/lib/auth/active-clinic'
+import { isPrefetchRender } from '@/lib/audit/access-context'
 import { can } from '@/lib/auth/permissions'
 import { startOfDay } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
@@ -62,8 +63,15 @@ export default async function ProntuariosPage() {
    * recusava a linha inteira com 22P02 e o evento sumia — a auditoria e
    * best-effort, entao nada quebrava na tela. A leitura de prontuario
    * simplesmente nao era registrada.
+   *
+   * PRE-BUSCA nao e acesso. O corpo desta rota tambem roda quando o Next
+   * pre-busca a pagina — passar o mouse no menu bastava para gravar uma leitura
+   * de prontuario. Medido em 09/08/2026: 731 dos 742 eventos de `audit_log`
+   * eram exatamente isso. Ver `lib/audit/access-context.ts`.
    */
-  await recordSource.repository.logAccess(recordSource.clinicId, null)
+  if (!(await isPrefetchRender())) {
+    await recordSource.repository.logAccess(recordSource.clinicId, null)
+  }
 
   const [records, patientPage] = await Promise.all([
     recordSource.repository.listRecent(recordSource.clinicId, RECENT_LIMIT),
