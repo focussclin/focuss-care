@@ -8,8 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 983 testes em 79 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 36 rotas.
+**Validação atual:** 988 testes em 81 arquivos · `lint` limpo · `typecheck` limpo ·
+`build` compila com 37 rotas.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
 aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
@@ -66,7 +66,7 @@ agendamentos e RPC de convites. As cinco verificações estruturais retornaram
 
 ## 4. Rotas
 
-As 36 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
+As 37 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo.
 
 | Rota | Status | Dados | Autorização |
 |---|---|---|---|
@@ -95,6 +95,7 @@ As 36 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/crm` | **EM ANDAMENTO** | Migration `clinic_leads` pendente; pipeline e camada de escrita preparadas | Membro quando as tabelas existirem |
 | `/inbox` | **EM ANDAMENTO** | Leitura tenant-scoped de `conversations` e `messages`; sem ingestão/envio até W-01 | Membro |
 | `/formularios` | **EM ANDAMENTO** | Migration `clinic_forms` pendente; builder de modelos preparado | `clinic.settings` quando a tabela existir |
+| `/formularios/[formId]/responder` | **EM ANDAMENTO** | Formulário publicado + pacientes ativos; salva rascunho e envio quando a migration existir | `patient.write` na action |
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
@@ -291,20 +292,24 @@ navegador embutido não foi possível neste ambiente.
 
 ## 4.7 Feature em andamento — Formulários digitais (09/08/2026)
 
-**Builder local concluído; ativação do banco pendente.** `/formularios` agora
-possui um modelo de formulário versionável, com tipo, descrição, status, campos
-ordenáveis, obrigatoriedade, ajuda e opções para respostas fechadas. A camada
-vertical inclui `20260809_clinic_forms.sql`, policies RLS para modelos e
-respostas, domínio, adapter Supabase tenant-scoped, actions com
-`clinic.settings`, auditoria e estados de erro/loading/empty.
+**Builder e coleta local concluídos; ativação do banco pendente.** `/formularios`
+possui um modelo versionável, com tipo, descrição, status, campos ordenáveis,
+obrigatoriedade, ajuda e opções para respostas fechadas. A rota
+`/formularios/[formId]/responder` permite escolher paciente ativo, salvar
+rascunho e enviar uma resposta de formulário publicado. A camada vertical inclui
+`20260809_clinic_forms.sql`, policies RLS, domínio, adapters Supabase
+tenant-scoped, actions com `clinic.settings`/`patient.write`, auditoria e estados
+de erro/loading/empty.
 
 O item permanece desabilitado até a migration ser aplicada e
 `npm run db:types` ser executado. A tabela de respostas já está preparada na
-migration, mas a coleta, vínculo com paciente/consulta, autosave e assinatura
-serão uma fatia posterior — não são apresentados como se já funcionassem.
+migration. Respostas ficam vinculadas a formulário, paciente e clínica; os campos
+de assinatura/upload permanecem bloqueados até Storage e assinatura eletrônica
+serem configurados. Vínculo com consulta, autosave entre sessões e histórico de
+respostas serão fatias posteriores — não são apresentados como se já funcionassem.
 
-Validação desta fatia: 5 testes direcionados, suíte completa com 983 testes em
-79 arquivos, lint, typecheck, build Next.js com 36 rotas e OpenNext Cloudflare
+Validação desta fatia: 10 testes direcionados, suíte completa com 988 testes em
+81 arquivos, lint, typecheck, build Next.js com 37 rotas e OpenNext Cloudflare
 limpos. O servidor local segue acessível em `localhost:3000`; inspeção visual pelo
 navegador embutido não foi possível neste ambiente.
 

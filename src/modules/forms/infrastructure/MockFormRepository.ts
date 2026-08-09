@@ -7,6 +7,10 @@ export class MockFormRepository implements FormRepository {
     return []
   }
 
+  async findById(): Promise<Form | null> {
+    return null
+  }
+
   async create(): Promise<Form> {
     throw new Error('demo repository is read-only')
   }

@@ -66,6 +66,7 @@ const NOT_MENU_ROUTES = new Set([
   // Subrota alcançada a partir da ficha do paciente, não do menu.
   '/pacientes/[patientId]',
   '/pacientes/[patientId]/historico',
+  '/formularios/[formId]/responder',
 ])
 
 function collectFiles(dir: string, name: string): string[] {

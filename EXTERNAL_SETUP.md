@@ -42,10 +42,13 @@ do menu até o contrato do provedor ser escolhido e validado.
 **Formulários digitais (09/08/2026):** a migration
 `supabase/migrations/20260809_clinic_forms.sql` foi criada, mas ainda não foi
 aplicada. Ela cria `clinic_forms` e prepara `clinic_form_responses` com RLS. O
-builder `/formularios` e suas actions já estão no código, porém o item continua
-bloqueado até a migration existir no projeto remoto. Depois de aplicar, execute
-`npm run db:types`, valide isolamento entre duas clínicas e só então habilite o
-item no menu.
+builder, a coleta vinculada a paciente e as actions já estão no código, porém o
+item continua bloqueado até a migration existir no projeto remoto. Depois de
+aplicar, execute `npm run db:types`, valide isolamento entre duas clínicas e só
+então habilite o item no menu. Assinaturas e uploads continuam dependendo de
+Storage e do fornecedor de assinatura eletrônica; sem essas configurações, o
+app permite rascunho mas bloqueia o envio de formulários que contenham esses
+campos.
 
 A chave SMTP da Brevo deve ser configurada somente no painel do Supabase, em
 Authentication → Emails → SMTP Settings. Ela não pertence ao código do app,

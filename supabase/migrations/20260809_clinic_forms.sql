@@ -35,12 +35,21 @@ create table if not exists public.clinic_forms (
 create index if not exists clinic_forms_list_idx
   on public.clinic_forms (clinic_id, status, updated_at desc);
 
+-- As chaves compostas abaixo tornam o tenant parte da referência futura de
+-- respostas. `id` já é único, portanto os índices não mudam a cardinalidade;
+-- apenas permitem ao Postgres impedir uma referência cruzada.
+create unique index if not exists patients_id_clinic_id_key
+  on public.patients (id, clinic_id);
+
+create unique index if not exists appointments_id_clinic_id_key
+  on public.appointments (id, clinic_id);
+
 create table if not exists public.clinic_form_responses (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references public.clinics(id) on delete cascade,
   form_id uuid not null,
-  patient_id uuid references public.patients(id) on delete set null,
-  appointment_id uuid references public.appointments(id) on delete set null,
+  patient_id uuid not null,
+  appointment_id uuid,
   status text not null default 'draft'
     check (status in ('draft', 'submitted', 'void')),
   answers jsonb not null default '{}'::jsonb,
@@ -51,6 +60,12 @@ create table if not exists public.clinic_form_responses (
 
   foreign key (form_id, clinic_id)
     references public.clinic_forms(id, clinic_id)
+    on delete restrict,
+  foreign key (patient_id, clinic_id)
+    references public.patients(id, clinic_id)
+    on delete restrict,
+  foreign key (appointment_id, clinic_id)
+    references public.appointments(id, clinic_id)
     on delete restrict
 );
 

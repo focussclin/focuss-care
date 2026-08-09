@@ -6,8 +6,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveDataSource } from '@/lib/data-source'
 import type { Database } from '@/lib/supabase/database.types'
 
+import type { FormResponseRepository } from '../domain/FormResponseRepository'
 import type { FormRepository } from '../domain/FormRepository'
 import { MockFormRepository } from './MockFormRepository'
+import { SupabaseFormResponseRepository } from './SupabaseFormResponseRepository'
 import { SupabaseFormRepository } from './SupabaseFormRepository'
 
 export interface FormRepositorySource {
@@ -41,4 +43,10 @@ export function formRepositoryFor(
   client: SupabaseClient<Database>,
 ): FormRepository {
   return new SupabaseFormRepository(client)
+}
+
+export function formResponseRepositoryFor(
+  client: SupabaseClient<Database>,
+): FormResponseRepository {
+  return new SupabaseFormResponseRepository(client)
 }

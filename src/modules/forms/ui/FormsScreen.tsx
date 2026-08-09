@@ -11,6 +11,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 
@@ -327,6 +328,11 @@ export function FormsScreen({
                         Restaurar
                       </Button>
                     )}
+                    {item.status === 'published' ? (
+                      <Button variant="ghost" asChild>
+                        <Link href={`/formularios/${item.id}/responder`}>Coletar resposta</Link>
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </Card>

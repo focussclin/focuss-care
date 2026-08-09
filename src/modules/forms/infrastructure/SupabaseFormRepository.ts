@@ -66,6 +66,18 @@ export class SupabaseFormRepository implements FormRepository {
     return (data ?? []).map((row) => toForm(row as unknown as FormRow))
   }
 
+  async findById(clinicId: string, formId: string): Promise<Form | null> {
+    const { data, error } = await this.client
+      .from('clinic_forms')
+      .select(FORM_SELECT)
+      .eq('clinic_id', clinicId)
+      .eq('id', formId)
+      .maybeSingle()
+
+    if (error) throw toFormError(error)
+    return data ? toForm(data as unknown as FormRow) : null
+  }
+
   async create(
     clinicId: string,
     createdBy: string,
