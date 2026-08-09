@@ -207,9 +207,9 @@ const eslintConfig = defineConfig([
   },
 
   /*
-   * `index.ts` Ã© a porta pÃºblica: suas dependÃªncias internas usam caminhos
-   * relativos do prÃ³prio mÃ³dulo. Impedir aliases de `@/modules/*` evita que a
-   * porta pÃºblica vire um atalho para atravessar outro mÃ³dulo; os consumidores
+   * `index.ts` é a porta pública: suas dependências internas usam caminhos
+   * relativos do próprio módulo. Impedir aliases de `@/modules/*` evita que a
+   * porta pública vire um atalho para atravessar outro módulo; os consumidores
    * continuam importando a porta, por exemplo `@/modules/patients`.
    */
   {
