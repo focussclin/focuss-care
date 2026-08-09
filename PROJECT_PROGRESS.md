@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1046 testes em 97 arquivos · `lint` limpo · `typecheck` limpo ·
+**Validação atual:** 1050 testes em 98 arquivos · `lint` limpo · `typecheck` limpo ·
 `build` compila com 42 rotas · OpenNext Cloudflare limpo.
 
 **Atualização do banco (08/08/2026):** as quatro migrations propostas foram
@@ -629,6 +629,23 @@ por silenciar eventos futuros. O padrão de demonstração também permanece
 explícito e não promete persistência.
 
 Validação desta fatia: suíte com 1046 testes em 97 arquivos, lint, typecheck,
+build Next.js com 42 rotas e OpenNext Cloudflare limpos.
+
+---
+
+## 4.25 Busca global de cobranças (09/08/2026)
+
+A Command Palette agora pesquisa cobranças reais pelo nome do paciente quando o
+usuário possui `invoice.read`. A Server Action consulta primeiro pacientes ativos
+no tenant e depois carrega suas cobranças, devolvendo somente id, paciente,
+valor, valor pago, status e data de criação. O resultado retorna para
+`/financeiro`; nenhuma observação financeira ou dado clínico entra no DTO.
+
+O contrato inclui limite, debounce, sanitização do termo, loading/erro, mock
+explícito para demonstração e testes do repositório, schema e componente. A
+paleta continua declarando que prontuários e guias não possuem busca por termo.
+
+Validação desta fatia: suíte com 1050 testes em 98 arquivos, lint, typecheck,
 build Next.js com 42 rotas e OpenNext Cloudflare limpos.
 
 ---
