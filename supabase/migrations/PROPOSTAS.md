@@ -145,3 +145,34 @@ clínica lê zero linhas).
 profissional na tradução do `23P01` em `SupabaseAppointmentRepository` — hoje a
 recepção leria "profissional ocupado" e trocaria a pessoa errada; e habilitar o
 item em `navigation.ts`.
+
+## 6. `20260809_clinic_tasks.sql` — **NÃO APLICADA**
+
+**Problema.** "Tarefas inteligentes" é item de menu sem tabela, e o adjetivo é o
+que travou a feature: "inteligentes" sugere geração por IA, que depende de W-01,
+de provedor de modelo e da aprovação de `docs/04-agente-ia.md`.
+
+O que a clínica precisa antes disso não depende de IA nenhuma: "ligar para a
+paciente que faltou", "conferir a guia que a operadora devolveu", "cobrar o exame
+que não voltou". Hoje isso vive em papel na recepção, e some junto com o papel.
+
+**O que a migration cria.** `public.clinic_tasks` para a tarefa **humana**, com
+`status` de quatro estados, prioridade, prazo, responsável e alvo opcional
+(paciente, atendimento ou fatura). `source` já nasce com `automation` previsto,
+para que a geração automática — se um dia existir — escreva na mesma tabela sem
+exigir migration nova.
+
+**Decisões que o revisor confere.** O alvo é opcional e usa **colunas separadas
+com chave estrangeira**, não um par genérico `(entity_type, entity_id)`: o par
+não tem FK, então o banco não impede apontar para linha apagada, e um dia a
+tarefa abriria uma ficha que não existe mais. `assigned_to` referencia
+`profiles`, não `professionals`, porque quem executa tarefa administrativa é a
+recepção — que não tem linha em `professionals`.
+
+**Verificar depois:** RLS ativa, tenant cruzado devolvendo zero linhas, INSERT só
+com título funcionando, e `patient_id` inexistente falhando com 23503.
+
+**Depois de aplicar, no código:** `npm run db:types`; módulo `tasks` com a
+escrita pelo `createAction` (é mutação tenant-scoped, entra no pipeline com
+auditoria); e **renomear o item de menu para "Tarefas"**, sem "inteligentes" —
+o adjetivo prometeria a geração automática que esta migration não entrega.
