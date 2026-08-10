@@ -107,6 +107,7 @@ const runRescheduleAppointment = createAction<
          */
         roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
+    blockedWindow: scheduleMessages.blockedWindow,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,

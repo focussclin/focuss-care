@@ -2010,6 +2010,88 @@ em `conversations` e `workflows` — a verificação está no
 
 ---
 
+## 8.25 Feature — Bloqueios e horários extras da agenda (10/08/2026)
+
+`availability_exceptions` estava no schema aplicado e **nada a lia nem
+escrevia**. A tabela guardava bloqueios que não bloqueavam coisa alguma.
+
+### Não é o mesmo bloqueio de S-02
+
+`availability_rules` e `work_schedules` guardam `weekday: integer` e continuam
+travadas por **P-WD**. `availability_exceptions` é `timestamptz` puro
+(`starts_at`, `ends_at`) — **não há convenção a adivinhar**, e foi o que
+permitiu construir esta e não aquelas.
+
+### E não é `time_off`
+
+`time_off`, em `/equipe`, é registro de RH sobre `employees`: quem tirou férias,
+quem aprovou. Isto é sobre `professionals` e sobre a AGENDA. Uma recepcionista
+de férias não bloqueia horário nenhum; um profissional de férias bloqueia. As
+duas parecem a mesma coisa de longe, e nenhuma escreve na tabela da outra.
+
+### As duas espécies fazem coisas opostas
+
+`block` fecha uma janela (feriado, férias, manutenção); `extra` abre uma fora do
+expediente (mutirão, plantão). As duas são avaliadas na mesma guarda de
+`SupabaseAppointmentRepository`, agora `assertWindowIsOpen`:
+
+- **bloqueio recusa**, e a recusa é **definitiva**;
+- **extra dispensa** a pergunta de "fora do expediente", desde que cubra o
+  atendimento **inteiro** — extra das 19h às 21h não autoriza atendimento que
+  termina 22h.
+
+### Bloqueio não é confirmável, e essa é a decisão central
+
+`outside-business-hours` devolve `needs-confirmation` porque é inferência sobre
+o horário padrão: encaixe acontece, e proibi-lo faria a recepção registrar hora
+falsa. `blocked-window` devolve `conflict` porque é o contrário — alguém digitou
+"25/12, clínica fechada". Deixar `allowOutsideBusinessHours` passar por cima
+transformaria a decisão num aviso, e o bloqueio existe exatamente para não
+depender de alguém lembrar. Para marcar assim mesmo, remova o bloqueio.
+
+A mensagem cita de quem é a agenda e o motivo, montada por `describeBlock` a
+partir da própria linha — nunca texto do Postgres.
+
+### Bloquear não move atendimento
+
+Um bloqueio criado por cima de agenda cheia deixaria os atendimentos onde estão,
+dentro de uma janela que diz estar fechada, sem avisar ninguém. A action conta
+os atendimentos vivos na janela **antes** de gravar e recusa se houver algum.
+`extra` não sofre disso: abrir horário não conflita com quem já está marcado.
+
+### `professional_id` nulo é a clínica inteira
+
+A coluna é nullable no banco exatamente para isso. Feriado fecha tudo; férias
+fecham a agenda de uma pessoa. Um atendimento sem profissional só é alcançado
+pelas exceções de clínica.
+
+### Onde mora, e quem pode
+
+Painel em `/configuracoes`, logo abaixo do horário de funcionamento — é a
+exceção a ele. Chega como slot, pelo mesmo desenho do perfil pessoal: exceção é
+do módulo `scheduling` e horário é do `settings` (regra 4).
+
+Leitura para todos: saber quando a clínica estará fechada não expõe dado de
+ninguém. Escrita exige `appointment.write` — quem marca é quem bloqueia. Exigir
+`clinic.settings` deixaria a recepção sem poder fechar a agenda de um
+profissional que ligou doente pela manhã, que é quando o bloqueio serve.
+
+### Falha de leitura NÃO libera
+
+Ao contrário do horário de funcionamento, onde configuração indisponível não
+pode virar clínica que não agenda. Aqui engolir o erro marcaria em cima de um
+bloqueio que existe — e ninguém descobriria antes de o paciente chegar na porta
+fechada.
+
+### Estado
+
+`scheduling` continua **COMPLETO** e ganha esta superfície, com 42 testes novos
+(19 domínio, 9 integração com o agendamento, 14 UI). Escrita recusada por policy
+ausente vira `write-forbidden` apontando `availability_exceptions`; a
+verificação está no `docs/03-banco-de-dados.md` §7.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

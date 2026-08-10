@@ -9,6 +9,16 @@ import { getIntegrationCredentialRepository } from '@/modules/integrations/infra
 import { PersonalProfileForm } from '@/modules/identity/ui/PersonalProfileForm'
 import { toClinicSettingsDto } from '@/modules/settings/application/toSettingsDto'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
+import {
+  createAvailabilityExceptionFromPanel,
+  removeAvailabilityExceptionFromPanel,
+} from '@/modules/scheduling/actions/availabilityPanel.actions'
+import type { AvailabilityException } from '@/modules/scheduling/domain/AvailabilityException'
+import { isAvailabilityExceptionError } from '@/modules/scheduling/domain/AvailabilityExceptionRepository'
+import { getAvailabilityExceptionSource } from '@/modules/scheduling/infrastructure/availability-repository'
+import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
+import { availabilityMessages } from '@/modules/scheduling/schemas/availabilityException.schema'
+import { AvailabilityExceptionsPanel } from '@/modules/scheduling/ui/AvailabilityExceptionsPanel'
 import { ConfiguracoesScreen } from '@/modules/settings/ui/ConfiguracoesScreen'
 
 export const metadata: Metadata = {
@@ -63,8 +73,67 @@ export default async function ConfiguracoesPage() {
         })
       : null
 
+  /*
+   * Bloqueios de agenda — leitura para todos, escrita para `appointment.write`.
+   *
+   * Ver quando a clínica estará fechada não expõe dado de ninguém: é a mesma
+   * natureza do horário de funcionamento acima. Criar e remover, sim, mudam a
+   * agenda de todo mundo.
+   */
+  const availabilitySource = await getAvailabilityExceptionSource()
+  const canManageAvailability = can(role, 'appointment.write')
+
+  let exceptions: AvailabilityException[] = []
+  let availabilityError: string | null = null
+
+  try {
+    exceptions = await availabilitySource.repository.listUpcoming(
+      availabilitySource.clinicId,
+      new Date(),
+    )
+  } catch (cause) {
+    if (!isAvailabilityExceptionError(cause)) throw cause
+    availabilityError =
+      cause.reason === 'forbidden'
+        ? availabilityMessages.forbidden
+        : availabilityMessages.unavailable
+  }
+
+  /*
+   * A lista de profissionais vem do repositório da agenda, que já a expõe para
+   * o formulário de agendamento — nenhuma consulta nova para o mesmo dado.
+   */
+  const appointmentSource = await getAppointmentRepository(new Date())
+  const professionals = availabilitySource.isLive
+    ? await appointmentSource.repository
+        .listProfessionals(appointmentSource.clinicId)
+        .catch(() => [])
+    : []
+
   return (
     <ConfiguracoesScreen
+      availabilitySlot={
+        <AvailabilityExceptionsPanel
+          exceptions={exceptions.map((exception) => ({
+            id: exception.id,
+            professionalId: exception.professionalId,
+            professionalName: exception.professionalName,
+            kind: exception.kind,
+            startsAt: exception.startsAt.toISOString(),
+            endsAt: exception.endsAt.toISOString(),
+            reason: exception.reason,
+          }))}
+          professionals={professionals.map((professional) => ({
+            id: professional.id,
+            name: professional.name,
+          }))}
+          onCreate={createAvailabilityExceptionFromPanel}
+          onRemove={removeAvailabilityExceptionFromPanel}
+          canManage={canManageAvailability}
+          isLive={availabilitySource.isLive}
+          loadError={availabilityError}
+        />
+      }
       settings={toClinicSettingsDto(settings)}
       canManage={can(role, 'clinic.settings')}
       profileSlot={

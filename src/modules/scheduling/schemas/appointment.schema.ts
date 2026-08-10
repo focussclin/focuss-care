@@ -75,6 +75,9 @@ export const scheduleMessages = {
    * tela mostraria uma recusa educada para algo que é permitido.
    */
   outsideBusinessHours: 'Deseja agendar mesmo assim?',
+  /** Recurso de ultimo caso: `describeBlock` quase sempre tem o que dizer. */
+  blockedWindow:
+    'Este horario esta bloqueado na agenda. Remova o bloqueio para marcar assim mesmo.',
   forbidden: 'Você não tem permissão para alterar a agenda.',
   notFound: 'Este atendimento não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',

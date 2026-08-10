@@ -32,6 +32,14 @@ export interface ScheduleFailureMessages {
    * 08:00 às 12:00") e a segunda é fixa. Só a fixa mora em `scheduleMessages`.
    */
   outsideBusinessHours: string
+  /**
+   * Recurso de ultimo caso do bloqueio explicito.
+   *
+   * Quase sempre o adapter manda `userDetail` montado por `describeBlock`, que
+   * diz de quem e o bloqueio e por que. Este texto so aparece se o detalhe
+   * faltar.
+   */
+  blockedWindow: string
   forbidden: string
   notFound: string
   unavailable: string
@@ -70,6 +78,20 @@ export function toScheduleFailure<F extends string>(
             .filter(Boolean)
             .join(' '),
         )
+      /*
+       * 'conflict', e NAO 'needs-confirmation'.
+       *
+       * Aqui a diferenca com o caso acima e o ponto: fora do expediente e
+       * inferencia sobre o horario padrao, e cabe confirmar. Bloqueio e alguem
+       * que digitou "25/12, clinica fechada". Oferecer confirmacao
+       * transformaria a decisao num aviso, e o bloqueio existe exatamente para
+       * nao depender de alguem lembrar.
+       *
+       * `userDetail` vem de `describeBlock`, montado a partir da propria linha
+       * — nunca e mensagem do Postgres.
+       */
+      case 'blocked-window':
+        return err<F>('conflict', cause.userDetail ?? messages.blockedWindow)
       case 'not-found':
         return err<F>('not-found', messages.notFound)
       case 'forbidden':

@@ -384,6 +384,13 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/relatorios',
         '/pacientes/:seg',
         '/pacientes/:seg/historico',
+        /*
+         * `/configuracoes` entra por causa das EXCECOES de disponibilidade:
+         * bloqueio e horario extra sao geridos la, ao lado do horario de
+         * funcionamento que eles excetuam. Criar ou remover um muda a lista
+         * daquela tela e a agenda ao mesmo tempo.
+         */
+        '/configuracoes',
       ],
       settings: ['/', '/configuracoes', '/agenda'],
       /*

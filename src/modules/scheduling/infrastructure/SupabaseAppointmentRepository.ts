@@ -8,6 +8,10 @@ import {
   parseStoredBusinessHours,
 } from '@/lib/clinic/business-hours'
 import type { Database } from '@/lib/supabase/database.types'
+
+import type { AvailabilityException } from '../domain/AvailabilityException'
+import { describeBlock, findBlocking, findCovering } from '../domain/AvailabilityException'
+import { SupabaseAvailabilityExceptionRepository } from './SupabaseAvailabilityExceptionRepository'
 import type {
   Appointment,
   AppointmentStatus,
@@ -304,8 +308,9 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       data.endsAt,
     )
 
-    await this.assertWithinBusinessHours(
+    await this.assertWindowIsOpen(
       clinicId,
+      data.professionalId,
       data.startsAt,
       data.endsAt,
       options,
@@ -407,7 +412,13 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       appointmentId,
     )
 
-    await this.assertWithinBusinessHours(clinicId, startsAt, endsAt, options)
+    await this.assertWindowIsOpen(
+      clinicId,
+      target.professional_id,
+      startsAt,
+      endsAt,
+      options,
+    )
 
     const { data: row, error } = await this.client
       .from('appointments')
@@ -559,13 +570,47 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
    * Falha de leitura da configuração **libera**: preferência indisponível não
    * pode virar clínica que não consegue agendar.
    */
-  private async assertWithinBusinessHours(
+  private async assertWindowIsOpen(
     clinicId: string,
+    professionalId: string | null,
     startsAt: Date,
     endsAt: Date,
     options: ScheduleWriteOptions,
   ): Promise<void> {
+    /*
+     * Bloqueio explícito é recusa DEFINITIVA, e a diferença importa.
+     *
+     * Fora do expediente é inferência: a clínica declarou um horário padrão, e
+     * encaixe fora dele acontece. Um bloqueio é o contrário — alguém digitou
+     * "25/12, clínica fechada" ou "férias da Dra. Ana". Deixar confirmar por
+     * cima transformaria a decisão num aviso, e o bloqueio existe justamente
+     * para não depender de alguém lembrar.
+     *
+     * Por isso ele é checado ANTES de `allowOutsideBusinessHours`: a confirmação
+     * de encaixe não alcança bloqueio.
+     */
+    const exceptions = await this.loadExceptions(clinicId, startsAt)
+
+    const blocking = findBlocking(exceptions, { startsAt, endsAt }, professionalId)
+    if (blocking) {
+      throw new AppointmentRepositoryError(
+        'blocked-window',
+        `janela bloqueada (${blocking.id})`,
+        undefined,
+        describeBlock(blocking),
+      )
+    }
+
     if (options.allowOutsideBusinessHours) return
+
+    /*
+     * Disponibilidade extra dispensa o expediente — é para isso que serve.
+     *
+     * Um mutirão de sábado só é útil se marcar no sábado não pedir confirmação
+     * de "fora do horário" a cada paciente. A cobertura precisa ser TOTAL:
+     * extra das 19h às 21h não autoriza atendimento que termina 22h.
+     */
+    if (findCovering(exceptions, { startsAt, endsAt }, professionalId)) return
 
     const { data, error } = await this.client
       .from('clinic_settings')
@@ -591,6 +636,24 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       `fora do expediente (${verdict.reason})`,
       undefined,
       describeOutsideHours(verdict),
+    )
+  }
+
+  /**
+   * Exceções vigentes a partir do início pedido.
+   *
+   * Falha de leitura **não libera**, ao contrário do horário de funcionamento.
+   * Lá, indisponibilidade da configuração não pode virar clínica que não
+   * consegue agendar; aqui, engolir o erro marcaria em cima de um bloqueio que
+   * existe — e ninguém descobriria antes de o paciente chegar na porta fechada.
+   */
+  private async loadExceptions(
+    clinicId: string,
+    from: Date,
+  ): Promise<AvailabilityException[]> {
+    return new SupabaseAvailabilityExceptionRepository(this.client).listUpcoming(
+      clinicId,
+      from,
     )
   }
 

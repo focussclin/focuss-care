@@ -27,6 +27,15 @@ export interface ConfiguracoesScreenProps {
    * 4). É o mesmo desenho do seletor de clínicas na casca da aplicação.
    */
   profileSlot?: ReactNode
+  /**
+   * Bloqueios e horarios extras da agenda, montados pela ROTA.
+   *
+   * Chega como slot pelo mesmo motivo do perfil: a excecao e do modulo
+   * `scheduling` e o horario de funcionamento e do `settings` — um modulo nao
+   * alcanca o interior do outro (regra 4). Fica logo abaixo do expediente
+   * porque e a excecao a ele.
+   */
+  availabilitySlot?: ReactNode
   isLive?: boolean
   integrationCredentials: IntegrationCredentialsPanelProps['overview']
 }
@@ -53,6 +62,7 @@ export function ConfiguracoesScreen({
   settings,
   canManage,
   profileSlot,
+  availabilitySlot,
   isLive = false,
   integrationCredentials,
 }: ConfiguracoesScreenProps) {
@@ -89,6 +99,8 @@ export function ConfiguracoesScreen({
         pode editar. Quem não administra a clínica encontra o que veio fazer sem
         passar por três cartões somente-leitura.
       */}
+      {availabilitySlot}
+
       {profileSlot}
 
       <ClinicIdentityForm

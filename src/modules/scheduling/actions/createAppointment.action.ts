@@ -114,6 +114,7 @@ const runCreateAppointment = createAction<
         conflict: scheduleMessages.conflict,
         roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
+    blockedWindow: scheduleMessages.blockedWindow,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,

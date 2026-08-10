@@ -45,6 +45,17 @@ export type AppointmentWriteFailure =
    * 'needs-confirmation' e a operação segue se quem agenda confirmar.
    */
   | 'outside-business-hours'
+  /**
+   * O horário cai dentro de um bloqueio explícito de `availability_exceptions`.
+   *
+   * **É recusa definitiva**, e a diferença com `outside-business-hours` é o
+   * ponto: aquele é inferência sobre o horário padrão declarado; este é alguém
+   * que digitou "25/12, clínica fechada" ou "férias da Dra. Ana". Deixar
+   * confirmar por cima transformaria a decisão num aviso — e o bloqueio existe
+   * exatamente para não depender de alguém lembrar. Para marcar assim mesmo,
+   * remova o bloqueio.
+   */
+  | 'blocked-window'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
   | 'not-found'
   /** A policy de RLS recusou. Sessão sem direito sobre esta clínica. */

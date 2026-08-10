@@ -95,6 +95,7 @@ const runCancelAppointment = createAction<
         // porque o tradutor é um só para as três actions.
         roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
+    blockedWindow: scheduleMessages.blockedWindow,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,
