@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { forbidden, notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { z } from 'zod'
 
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { saveFormResponseFromScreen } from '@/modules/forms/actions/formResponseScreen.actions'
 import { toFormDto } from '@/modules/forms/application/toFormDto'
 import { getFormRepository } from '@/modules/forms/infrastructure/repository'
@@ -24,7 +26,13 @@ export default async function FormResponsePage({
   const { formId } = await params
   if (!z.uuid().safeParse(formId).success) notFound()
 
-  const formSource = await getFormRepository()
+  const [formSource, role] = await Promise.all([
+    getFormRepository(),
+    getActiveClinicRole(),
+  ])
+
+  if (formSource.isLive && !can(role, 'patient.write')) forbidden()
+
   const form = await formSource.repository.findById(formSource.clinicId, formId)
   if (!form || form.status !== 'published') notFound()
 
