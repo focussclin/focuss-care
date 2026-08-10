@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createInventoryItemSchema, recordInventoryMovementSchema } from './inventory.schema'
+import { createInventoryItemSchema, recordInventoryMovementSchema, setInventoryQuantitySchema } from './inventory.schema'
 
 describe('inventory.schema', () => {
   it('normaliza SKU e permite estoque mínimo zero', () => {
@@ -28,5 +28,55 @@ describe('inventory.schema', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+})
+
+/**
+ * A contagem aceita zero; a movimentação não.
+ *
+ * Não é inconsistência: movimentar nada não é movimentar, mas contar uma
+ * prateleira vazia é o resultado mais comum de um item que acabou. Recusar o
+ * zero obrigaria a pessoa a registrar uma saída com a diferença calculada de
+ * cabeça — exatamente o cálculo que a função do banco existe para fazer sozinha,
+ * e sob lock.
+ */
+describe('setInventoryQuantitySchema', () => {
+  const base = { itemId: '9019956f-bdd8-4d61-868d-09b02332dad0', countedQuantity: 4, reason: '' }
+
+  it('aceita zero', () => {
+    const parsed = setInventoryQuantitySchema.parse({ ...base, countedQuantity: 0 })
+
+    expect(parsed.countedQuantity).toBe(0)
+  })
+
+  it('recusa contagem negativa', () => {
+    expect(setInventoryQuantitySchema.safeParse({ ...base, countedQuantity: -1 }).success).toBe(false)
+  })
+
+  it('recusa contagem fracionada', () => {
+    // Meia luva não existe; o banco guarda `integer`.
+    expect(setInventoryQuantitySchema.safeParse({ ...base, countedQuantity: 2.5 }).success).toBe(false)
+  })
+
+  it('motivo vazio vira null, e não string vazia', () => {
+    // `nullif(trim(p_reason), '')` no banco faria o mesmo; mandar '' seria
+    // depender de a função limpar o que a aplicação sujou.
+    expect(setInventoryQuantitySchema.parse(base).reason).toBeNull()
+  })
+
+  it('não aceita quantidade nem tipo de movimento — a direção é do banco', () => {
+    /*
+     * Se a tela pudesse mandar 'in'/'out' junto, ela estaria decidindo o sinal
+     * do ajuste a partir de um saldo que leu antes — a corrida que
+     * `set_inventory_quantity` evita.
+     */
+    const parsed = setInventoryQuantitySchema.parse({ ...base, movementType: 'in', quantity: 99 })
+
+    expect(parsed).not.toHaveProperty('movementType')
+    expect(parsed).not.toHaveProperty('quantity')
+  })
+
+  it('exige o item por uuid', () => {
+    expect(setInventoryQuantitySchema.safeParse({ ...base, itemId: 'nao-uuid' }).success).toBe(false)
   })
 })

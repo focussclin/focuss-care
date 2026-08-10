@@ -1,4 +1,6 @@
 import type {
+  InventoryCountFormValues,
+  InventoryCountOutcome,
   InventoryItemDto,
   InventoryItemFormValues,
   InventoryMovementDto,
@@ -14,6 +16,7 @@ export interface InventoryScreenProps {
   ) => Promise<string | null>
   onToggleItem: (itemId: string, isActive: boolean) => Promise<string | null>
   onRecordMovement: (values: InventoryMovementFormValues) => Promise<string | null>
+  onCountItem: (values: InventoryCountFormValues) => Promise<InventoryCountOutcome>
   isLive: boolean
   schemaPending?: boolean
 }

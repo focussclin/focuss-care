@@ -5,10 +5,12 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Box,
+  ClipboardCheck,
   Edit3,
   Info,
   PackageOpen,
   Plus,
+  Scale,
   Search,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -24,12 +26,13 @@ import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { TextareaField } from '@/components/ui/textarea-field'
 import { TextField } from '@/components/ui/text-field'
 
-import type { InventoryMovementType } from '../domain/Inventory'
+import type { InventoryMovementType, StockLevel } from '../domain/Inventory'
+import { needsRestock, stockLevelOf } from '../domain/Inventory'
 import type { InventoryItemDto } from '../schemas/inventory.schema'
 import { inventoryMessages } from '../schemas/inventory.schema'
 import type { InventoryScreenProps } from './InventoryScreen.props'
 
-type ItemFilter = 'active' | 'all' | 'inactive'
+type ItemFilter = 'active' | 'all' | 'inactive' | 'restock'
 
 const emptyItem = {
   name: '',
@@ -47,25 +50,42 @@ const emptyMovement = {
   reason: '',
 }
 
+const emptyCount = {
+  itemId: '',
+  countedQuantity: '',
+  reason: '',
+}
+
+const stockBadge: Record<StockLevel, { label: string; tone: StatusTone }> = {
+  inactive: { label: 'Inativo', tone: 'neutral' },
+  'out-of-stock': { label: 'Sem saldo', tone: 'negative' },
+  'below-minimum': { label: 'Abaixo do mínimo', tone: 'negative' },
+  healthy: { label: 'Saldo saudável', tone: 'positive' },
+}
+
 export function InventoryScreen({
   items,
   movements,
   onSubmitItem,
   onToggleItem,
   onRecordMovement,
+  onCountItem,
   isLive,
   schemaPending = false,
 }: InventoryScreenProps) {
   const router = useRouter()
   const [itemModalOpen, setItemModalOpen] = useState(false)
   const [movementModalOpen, setMovementModalOpen] = useState(false)
+  const [countingItem, setCountingItem] = useState<InventoryItemDto | null>(null)
   const [editing, setEditing] = useState<InventoryItemDto | null>(null)
   const [confirming, setConfirming] = useState<InventoryItemDto | null>(null)
   const [itemForm, setItemForm] = useState(emptyItem)
   const [movementForm, setMovementForm] = useState(emptyMovement)
+  const [countForm, setCountForm] = useState(emptyCount)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<ItemFilter>('active')
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState(false)
 
@@ -75,6 +95,7 @@ export function InventoryScreen({
     return items.filter((item) => {
       if (filter === 'active' && !item.isActive) return false
       if (filter === 'inactive' && item.isActive) return false
+      if (filter === 'restock' && !needsRestock(item)) return false
       if (!query) return true
       return [item.name, item.sku ?? ''].some((value) =>
         value.toLocaleLowerCase('pt-BR').includes(query),
@@ -82,9 +103,8 @@ export function InventoryScreen({
     })
   }, [filter, items, search])
 
-  const lowStockCount = items.filter(
-    (item) => item.isActive && item.currentQuantity <= item.minimumQuantity,
-  ).length
+  const modalOpen = itemModalOpen || movementModalOpen || Boolean(countingItem) || Boolean(confirming)
+  const restockCount = items.filter(needsRestock).length
   const totalUnits = items.reduce((sum, item) => sum + item.currentQuantity, 0)
 
   function openCreate() {
@@ -113,14 +133,30 @@ export function InventoryScreen({
     setMovementModalOpen(true)
   }
 
+  function openCount(item: InventoryItemDto) {
+    /*
+     * O campo nasce VAZIO, e não com o saldo atual.
+     *
+     * Preencher com o saldo transforma "Salvar" em um confirma-o-que-já-está —
+     * a pessoa contaria a prateleira e, na dúvida, aceitaria o número sugerido.
+     * A contagem só vale se vier da prateleira.
+     */
+    setCountForm({ ...emptyCount, itemId: item.id })
+    setError(null)
+    setNotice(null)
+    setCountingItem(item)
+  }
+
   function closeModals(force = false) {
     if (saving && !force) return
     setItemModalOpen(false)
     setMovementModalOpen(false)
+    setCountingItem(null)
     setEditing(null)
     setConfirming(null)
     setItemForm(emptyItem)
     setMovementForm(emptyMovement)
+    setCountForm(emptyCount)
     setError(null)
   }
 
@@ -183,6 +219,38 @@ export function InventoryScreen({
     }
   }
 
+  async function submitCount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setNotice(null)
+    const countedQuantity = Number(countForm.countedQuantity)
+    if (countForm.countedQuantity.trim() === '' || !Number.isInteger(countedQuantity) || countedQuantity < 0) {
+      setError(inventoryMessages.countedInvalid)
+      return
+    }
+    setSaving(true)
+    try {
+      const outcome = await onCountItem({
+        itemId: countForm.itemId,
+        countedQuantity,
+        reason: countForm.reason,
+      })
+      if (outcome.status === 'error') {
+        setError(outcome.message)
+        return
+      }
+      // Conferência que bateu é sucesso, e vai para o `role="status"` — nunca
+      // para o bloco de erro.
+      if (outcome.status === 'unchanged') setNotice(inventoryMessages.countMatchesBalance)
+      closeModals(true)
+      router.refresh()
+    } catch {
+      setError(inventoryMessages.unavailable)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function confirmToggle() {
     if (!confirming || toggling) return
     setToggling(true)
@@ -229,16 +297,27 @@ export function InventoryScreen({
         </p>
       </div>
 
-      {error ? (
-        <div role="alert" className="rounded-card border border-status-negative/25 bg-status-negative-surface px-4 py-3 text-aux text-status-negative">
-          {error}
+      {/*
+        O erro só fica na página quando NENHUM modal está aberto.
+
+        O Radix marca o resto do documento com `aria-hidden` enquanto o diálogo
+        vive, e o overlay ainda cobre tudo com desfoque. Como as gravações que
+        falham mantêm o modal aberto de propósito — para a pessoa corrigir sem
+        redigitar —, a mensagem ficava atrás do overlay e fora da árvore de
+        acessibilidade: o botão "Salvar" parecia não fazer nada.
+      */}
+      {modalOpen ? null : <ErrorNote message={error} />}
+
+      {notice ? (
+        <div role="status" className="rounded-card border border-status-positive/25 bg-status-positive-surface px-4 py-3 text-aux text-status-positive">
+          {notice}
         </div>
       ) : null}
 
       <div className="grid grid-cols-2 gap-4 nav:grid-cols-4">
         <Kpi label="Itens ativos" value={String(items.filter((item) => item.isActive).length)} />
         <Kpi label="Unidades em saldo" value={String(totalUnits)} />
-        <Kpi label="Abaixo do mínimo" value={String(lowStockCount)} tone={lowStockCount > 0 ? 'danger' : undefined} />
+        <Kpi label="Precisam de reposição" value={String(restockCount)} tone={restockCount > 0 ? 'danger' : undefined} />
         <Kpi label="Movimentações recentes" value={String(movements.length)} />
       </div>
 
@@ -262,6 +341,7 @@ export function InventoryScreen({
                 hideLabel
                 options={[
                   { value: 'active', label: 'Ativos' },
+                  { value: 'restock', label: 'Repor' },
                   { value: 'all', label: 'Todos' },
                   { value: 'inactive', label: 'Inativos' },
                 ]}
@@ -277,8 +357,8 @@ export function InventoryScreen({
         {visibleItems.length === 0 ? (
           <EmptyState
             icon={PackageOpen}
-            title={items.length === 0 ? 'Nenhum item cadastrado' : 'Nenhum item encontrado'}
-            description={items.length === 0 ? 'Cadastre o primeiro insumo para acompanhar o saldo.' : 'Ajuste a busca ou o filtro para encontrar outro item.'}
+            title={items.length === 0 ? 'Nenhum item cadastrado' : filter === 'restock' && !search.trim() ? 'Nada para repor' : 'Nenhum item encontrado'}
+            description={items.length === 0 ? 'Cadastre o primeiro insumo para acompanhar o saldo.' : filter === 'restock' && !search.trim() ? 'Todos os itens ativos estão acima do estoque mínimo.' : 'Ajuste a busca ou o filtro para encontrar outro item.'}
             action={items.length === 0 ? <Button onClick={openCreate} disabled={!canMutate}><Plus aria-hidden className="size-4" />Novo item</Button> : undefined}
           />
         ) : (
@@ -290,6 +370,7 @@ export function InventoryScreen({
                 canMutate={canMutate}
                 onEdit={() => openEdit(item)}
                 onMovement={() => openMovement(item)}
+                onCount={() => openCount(item)}
                 onToggle={() => setConfirming(item)}
               />
             ))}
@@ -306,14 +387,18 @@ export function InventoryScreen({
             {movements.slice(0, 10).map((movement) => {
               const item = itemById.get(movement.itemId)
               const inbound = movement.movementType === 'in'
+              // `countedQuantity` só vem preenchido do ajuste por contagem. É o
+              // que separa "saíram 3 no atendimento" de "contei e faltavam 3".
+              const counted = movement.countedQuantity
+              const kind = counted !== null ? (inbound ? 'Ajuste · sobra' : 'Ajuste · falta') : inbound ? 'Entrada' : 'Saída'
               return (
                 <div key={movement.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
                   <span className={inbound ? 'flex size-9 items-center justify-center rounded-full bg-status-positive-surface text-status-positive' : 'flex size-9 items-center justify-center rounded-full bg-status-pending-surface text-status-pending'}>
-                    {inbound ? <ArrowDownToLine aria-hidden className="size-4" /> : <ArrowUpFromLine aria-hidden className="size-4" />}
+                    {counted !== null ? <ClipboardCheck aria-hidden className="size-4" /> : inbound ? <ArrowDownToLine aria-hidden className="size-4" /> : <ArrowUpFromLine aria-hidden className="size-4" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-aux font-semibold text-foreground">{item?.name ?? 'Item removido'}</p>
-                    <p className="text-label text-muted">{inbound ? 'Entrada' : 'Saída'} · {movement.reason || 'Sem motivo'} · {formatDate(movement.createdAt)}</p>
+                    <p className="text-label text-muted">{kind} · {counted !== null ? `saldo apurado ${counted}` : movement.reason || 'Sem motivo'} · {formatDate(movement.createdAt)}</p>
                   </div>
                   <span className={inbound ? 'text-control font-semibold text-status-positive' : 'text-control font-semibold text-status-pending'}>{inbound ? '+' : '-'}{movement.quantity}</span>
                 </div>
@@ -325,6 +410,7 @@ export function InventoryScreen({
 
       <Modal open={itemModalOpen} onOpenChange={(open) => (open ? setItemModalOpen(true) : closeModals())} title={editing ? 'Editar item' : 'Novo item'} description="Cadastre o insumo e o alerta de estoque mínimo." footer={<><Button variant="secondary" onClick={() => closeModals()} disabled={saving}>Cancelar</Button><Button type="submit" form="inventory-item-form" isLoading={saving}>Salvar item</Button></>}>
         <form id="inventory-item-form" className="flex flex-col gap-4" onSubmit={submitItem}>
+          <ErrorNote message={error} />
           <TextField label="Nome do item" value={itemForm.name} onChange={(event) => setItemForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ex.: Luvas descartáveis" required />
           <div className="grid gap-4 sm:grid-cols-3">
             <TextField label="SKU (opcional)" value={itemForm.sku} onChange={(event) => setItemForm((current) => ({ ...current, sku: event.target.value }))} placeholder="Ex.: LUV-001" />
@@ -337,6 +423,7 @@ export function InventoryScreen({
 
       <Modal open={movementModalOpen} onOpenChange={(open) => (open ? setMovementModalOpen(true) : closeModals())} title="Registrar movimentação" description="O saldo será atualizado atomicamente pelo banco." footer={<><Button variant="secondary" onClick={() => closeModals()} disabled={saving}>Cancelar</Button><Button type="submit" form="inventory-movement-form" isLoading={saving}>Registrar</Button></>}>
         <form id="inventory-movement-form" className="flex flex-col gap-4" onSubmit={submitMovement}>
+          <ErrorNote message={error} />
           <SelectField label="Item" options={items.filter((item) => item.isActive).map((item) => ({ value: item.id, label: `${item.name} · ${item.currentQuantity} ${item.unit}` }))} value={movementForm.itemId} onChange={(event) => setMovementForm((current) => ({ ...current, itemId: event.target.value }))} />
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField label="Tipo" options={[{ value: 'in', label: 'Entrada' }, { value: 'out', label: 'Saída' }]} value={movementForm.movementType} onChange={(event) => setMovementForm((current) => ({ ...current, movementType: event.target.value as InventoryMovementType }))} />
@@ -347,17 +434,48 @@ export function InventoryScreen({
         </form>
       </Modal>
 
+      <Modal
+        open={Boolean(countingItem)}
+        onOpenChange={(open) => (open ? undefined : closeModals())}
+        title="Ajustar por contagem"
+        description="Informe o saldo apurado na prateleira. A diferença é calculada e gravada pelo banco, na mesma operação."
+        footer={<><Button variant="secondary" onClick={() => closeModals()} disabled={saving}>Cancelar</Button><Button type="submit" form="inventory-count-form" isLoading={saving}>Salvar contagem</Button></>}
+      >
+        <form id="inventory-count-form" className="flex flex-col gap-4" onSubmit={submitCount} noValidate>
+          <ErrorNote message={error} />
+          <p className="text-aux text-muted">
+            {countingItem?.name} · saldo registrado {countingItem?.currentQuantity} {countingItem?.unit}
+          </p>
+          <TextField
+            label="Saldo contado"
+            type="number"
+            min={0}
+            value={countForm.countedQuantity}
+            onChange={(event) => setCountForm((current) => ({ ...current, countedQuantity: event.target.value }))}
+            hint="Zero é uma contagem válida — é a prateleira vazia."
+            required
+          />
+          <TextareaField
+            label="Motivo"
+            value={countForm.reason}
+            onChange={(event) => setCountForm((current) => ({ ...current, reason: event.target.value }))}
+            placeholder="Contagem mensal, vencimento, quebra ou perda."
+          />
+        </form>
+      </Modal>
+
       <Modal open={Boolean(confirming)} onOpenChange={(open) => (!open ? setConfirming(null) : undefined)} title={confirming?.isActive ? 'Desativar item?' : 'Reativar item?'} description={confirming?.isActive ? 'Itens desativados saem da operação, mas o histórico é preservado.' : 'O item voltará a aparecer para novas movimentações.'} footer={<><Button variant="secondary" onClick={() => setConfirming(null)} disabled={toggling}>Cancelar</Button><Button onClick={() => void confirmToggle()} isLoading={toggling}>{confirming?.isActive ? 'Desativar item' : 'Reativar item'}</Button></>}>
-        <p className="text-aux text-muted">{confirming?.name}</p>
+        <ErrorNote message={error} />
+        <p className="mt-3 text-aux text-muted">{confirming?.name}</p>
       </Modal>
     </div>
   )
 }
 
-function InventoryItemCard({ item, canMutate, onEdit, onMovement, onToggle }: { item: InventoryItemDto; canMutate: boolean; onEdit: () => void; onMovement: () => void; onToggle: () => void }) {
-  const low = item.isActive && item.currentQuantity <= item.minimumQuantity
-  const tone: StatusTone = !item.isActive ? 'neutral' : low ? 'negative' : 'positive'
-  const label = !item.isActive ? 'Inativo' : low ? 'Abaixo do mínimo' : 'Saldo saudável'
+function InventoryItemCard({ item, canMutate, onEdit, onMovement, onCount, onToggle }: { item: InventoryItemDto; canMutate: boolean; onEdit: () => void; onMovement: () => void; onCount: () => void; onToggle: () => void }) {
+  // Selo e KPI leem a MESMA função do domínio. Eram duas cópias da regra, e
+  // nada impedia que discordassem sobre o mesmo item.
+  const { label, tone } = stockBadge[stockLevelOf(item)]
   return (
     <div className="flex min-h-[218px] flex-col rounded-card border border-border-card bg-surface p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
@@ -369,9 +487,20 @@ function InventoryItemCard({ item, canMutate, onEdit, onMovement, onToggle }: { 
       <p className="mt-3 text-display-sm font-semibold tracking-[-0.02em] text-foreground">{item.currentQuantity} <span className="text-aux font-medium text-muted">{item.unit}</span></p>
       <div className="mt-auto flex flex-wrap gap-2 pt-4">
         <Button variant="secondary" onClick={onMovement} disabled={!canMutate || !item.isActive}><ArrowDownToLine aria-hidden className="size-4" />Movimentar</Button>
+        <Button variant="ghost" onClick={onCount} disabled={!canMutate || !item.isActive}><Scale aria-hidden className="size-4" />Contar</Button>
         <Button variant="ghost" onClick={onEdit} disabled={!canMutate}><Edit3 aria-hidden className="size-4" />Editar</Button>
         <Button variant="ghost" onClick={onToggle} disabled={!canMutate}><ArchiveRestore aria-hidden className="size-4" />{item.isActive ? 'Desativar' : 'Reativar'}</Button>
       </div>
+    </div>
+  )
+}
+
+/** Só um `role="alert"` existe por vez: ou na página, ou dentro do modal aberto. */
+function ErrorNote({ message }: { message: string | null }) {
+  if (!message) return null
+  return (
+    <div role="alert" className="rounded-card border border-status-negative/25 bg-status-negative-surface px-4 py-3 text-aux text-status-negative">
+      {message}
     </div>
   )
 }

@@ -1555,6 +1555,78 @@ de volta, o verbo correto por origem, e a ausência de avanço manual em
 
 ---
 
+## 8.19 Feature — Estoque (10/08/2026)
+
+Cadastro de itens, saldo, entradas/saídas atômicas e a integração com compras já
+existiam e estão íntegros — `receive_purchase_order_item` grava o movimento além
+de somar o saldo, então o extrato não fica devendo nada ao recebimento. A
+auditoria contra `20260809_inventory.sql` achou **três coisas**: uma
+funcionalidade ausente, um alerta que mentia e uma mensagem de erro invisível.
+
+### 1. O ajuste por contagem não existia
+
+A tela oferecia entrada e saída; "ajuste" aparecia só como sugestão de texto no
+campo de motivo. Quem contasse a prateleira e achasse divergência tinha de
+calcular a diferença de cabeça e registrá-la como saída manual.
+
+Fazer essa conta na aplicação seria pior do que não ter o recurso: exigiria ler
+o saldo antes de subtrair, e duas contagens simultâneas partiriam do mesmo
+número velho — a última sobrescreveria a primeira e o consumo do intervalo
+sumiria. É o fluxo "ler → calcular → gravar" que o cabeçalho da própria
+migration proíbe.
+
+`set_inventory_quantity` recebe o **saldo contado** e calcula a diferença
+depois do `for update`. A action nem aceita `movementType`/`quantity`: a direção
+do ajuste é decisão do banco. Contagem igual ao saldo devolve `null` — sucesso
+sem movimento, mostrado em `role="status"`, porque conferir um item que está
+certo não é erro.
+
+A coluna `counted_quantity` guarda o que foi contado. O ajuste continua sendo
+`in`/`out` (a direção do saldo não pode depender de um terceiro tipo), mas sem a
+coluna "saíram 3 no atendimento" e "contei e faltavam 3" viram duas linhas
+idênticas — e só a segunda responde quanto a clínica perde por quebra.
+
+### 2. Todo item recém-cadastrado nascia em vermelho
+
+O alerta de estoque mínimo era `currentQuantity <= minimumQuantity`, escrito
+duas vezes: uma no KPI, outra no selo do cartão. Como `minimum_quantity` nasce
+`0` no banco, um item novo sem nenhuma entrada dava `0 <= 0` e aparecia como
+**"Abaixo do mínimo"** — acusando violação de um mínimo que ninguém configurou.
+Um painel que sempre acusa vermelho é um painel que ninguém olha.
+
+`stockLevelOf` ficou no domínio, e KPI e selo leem a mesma função. Item sem
+saldo continua pedindo atenção, mas por **"Sem saldo"**, que é verdade. O KPI
+virou "Precisam de reposição" e ganhou um filtro "Repor" — o número existia
+desde sempre sem nenhuma forma de listar quais itens eram.
+
+### 3. Falha de gravação ficava atrás do overlay
+
+O bloco de erro vivia no nível da página. Como o Radix marca o resto do
+documento com `aria-hidden` enquanto o diálogo está aberto — e as gravações que
+falham mantêm o modal aberto de propósito, para a pessoa corrigir sem redigitar
+—, a mensagem ficava fora da árvore de acessibilidade e atrás do desfoque.
+Clicar "Salvar" e falhar parecia não fazer nada. Vale para item, movimentação,
+contagem e desativação.
+
+Agora existe **um** `role="alert"` por vez: na página quando nenhum modal está
+aberto, dentro do modal quando há um.
+
+### Também corrigido
+
+`42883`/`PGRST202` (função ausente) não eram traduzidos para `schema-not-ready`
+— só os códigos de tabela ausente eram. Aplicar a migration pela metade fazia a
+tela mandar "tente novamente" para sempre, numa função que nunca vai existir sem
+a migration.
+
+### O que continua bloqueado
+
+`20260809_inventory.sql` **não foi aplicada** — nada rodou em banco remoto.
+Enquanto isso, `/estoque` mantém `schemaPending` honesto e toda gravação fica
+desabilitada. O desbloqueio está em `docs/supabase-migrations-runbook.md` §3.62,
+incluindo o `alter table` para quem já aplicou uma versão anterior do arquivo.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

@@ -6,6 +6,7 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import {
   recordInventoryMovementFromScreen,
+  setInventoryQuantityFromScreen,
   submitInventoryItemFromScreen,
   toggleInventoryItemFromScreen,
 } from '@/modules/inventory/actions/inventoryScreen.actions'
@@ -52,6 +53,7 @@ export default async function InventoryPage() {
       onSubmitItem={submitInventoryItemFromScreen}
       onToggleItem={toggleInventoryItemFromScreen}
       onRecordMovement={recordInventoryMovementFromScreen}
+      onCountItem={setInventoryQuantityFromScreen}
       isLive={source.isLive}
       schemaPending={schemaPending}
     />

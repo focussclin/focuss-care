@@ -26,4 +26,8 @@ export class MockInventoryRepository implements InventoryRepository {
   async recordMovement(): Promise<InventoryMovement> {
     throw new Error('demo repository is read-only')
   }
+
+  async setQuantity(): Promise<InventoryMovement | null> {
+    throw new Error('demo repository is read-only')
+  }
 }

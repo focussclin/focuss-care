@@ -63,6 +63,7 @@ function movementRow(overrides: Record<string, unknown> = {}) {
     movement_type: 'out',
     quantity: 2,
     unit_cost_cents: 1590,
+    counted_quantity: null,
     reason: 'Uso no atendimento',
     created_by: USER,
     created_at: '2026-08-09T11:00:00.000Z',
@@ -237,6 +238,9 @@ describe('listRecentMovements', () => {
         movementType: 'out',
         quantity: 2,
         unitCostCents: 1590,
+        // Nulo aqui é o que diz que a saída veio da operação, e não de uma
+        // contagem de inventário.
+        countedQuantity: null,
         reason: 'Uso no atendimento',
         createdAt: new Date('2026-08-09T11:00:00.000Z'),
       },
@@ -532,6 +536,74 @@ describe('recordMovement', () => {
   })
 })
 
+/**
+ * Ajuste por contagem.
+ *
+ * O que a aplicação manda é o SALDO CONTADO. A diferença é calculada em
+ * `set_inventory_quantity`, depois do `for update` — se fosse calculada aqui,
+ * seria preciso ler o saldo antes, e duas contagens simultâneas partiriam do
+ * mesmo número velho.
+ */
+describe('setQuantity', () => {
+  it('manda o valor contado, sem calcular diferença nem ler o saldo antes', async () => {
+    const { fake, subject } = repository({ rpcRow: movementRow({ counted_quantity: 30 }) })
+
+    await subject.setQuantity(CLINIC, {
+      itemId: ITEM,
+      countedQuantity: 30,
+      reason: 'Contagem mensal',
+    })
+
+    const chamadas = fake.calls
+    expect(chamadas).toHaveLength(1)
+    expect(chamadas[0].table).toBe('rpc:set_inventory_quantity')
+    expect(chamadas[0].args[0]).toEqual({
+      p_clinic_id: CLINIC,
+      p_item_id: ITEM,
+      p_counted_quantity: 30,
+      p_reason: 'Contagem mensal',
+    })
+  })
+
+  it('nunca manda a clínica que veio por parâmetro de outro tenant', async () => {
+    const { fake, subject } = repository({ rpcRow: movementRow() })
+
+    await subject.setQuantity(OTHER_CLINIC, { itemId: ITEM, countedQuantity: 1, reason: null })
+
+    expect(fake.calls[0].args[0]).toMatchObject({ p_clinic_id: OTHER_CLINIC })
+  })
+
+  it('devolve o saldo apurado junto do movimento', async () => {
+    const { subject } = repository({ rpcRow: movementRow({ movement_type: 'in', quantity: 18, counted_quantity: 30 }) })
+
+    const movement = await subject.setQuantity(CLINIC, { itemId: ITEM, countedQuantity: 30, reason: null })
+
+    expect(movement).toMatchObject({ movementType: 'in', quantity: 18, countedQuantity: 30 })
+  })
+
+  it('retorno nulo é contagem que confere — NÃO é item ausente', async () => {
+    /*
+     * A diferença com `recordMovement`, que trata nulo como `not-found`. Aqui a
+     * função devolve nulo de propósito quando a contagem bate com o saldo, e
+     * traduzir isso para erro faria a tela acusar falha numa conferência que
+     * deu certo.
+     */
+    const { subject } = repository({ rpcRow: null })
+
+    await expect(
+      subject.setQuantity(CLINIC, { itemId: ITEM, countedQuantity: 12, reason: null }),
+    ).resolves.toBeNull()
+  })
+
+  it('recusa do banco continua virando o motivo certo', async () => {
+    const { subject } = repository({ error: { code: 'P0002' } })
+
+    await expect(
+      subject.setQuantity(CLINIC, { itemId: ITEM, countedQuantity: 3, reason: null }),
+    ).rejects.toMatchObject({ reason: 'not-found' })
+  })
+})
+
 describe('tradução das recusas do banco', () => {
   async function reasonOf(error: {
     code?: string | null
@@ -594,6 +666,16 @@ describe('tradução das recusas do banco', () => {
         reason: null,
       }),
     ).rejects.toMatchObject({ reason: 'insufficient-stock' })
+  })
+
+  it('função ausente é migration pendente, e não falha inesperada', async () => {
+    /*
+     * Só `42883` e `PGRST202` denunciam a RPC que não existe. Sem eles a tela
+     * mandaria "tente novamente" para sempre, em vez de dizer que falta rodar a
+     * migration — e "tente novamente" numa função ausente nunca vai dar certo.
+     */
+    expect(await reasonOf({ code: '42883' })).toBe('schema-not-ready')
+    expect(await reasonOf({ code: 'PGRST202' })).toBe('schema-not-ready')
   })
 
   it('o código do Postgres fica no erro, para o log — não para a tela', async () => {

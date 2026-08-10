@@ -1,4 +1,5 @@
 import type {
+  InventoryCountData,
   InventoryItem,
   InventoryItemUpdateData,
   InventoryMovement,
@@ -40,4 +41,19 @@ export interface InventoryRepository {
     clinicId: string,
     data: NewInventoryMovementData,
   ): Promise<InventoryMovement>
+  /**
+   * Ajusta o saldo para o valor **contado**, e devolve o movimento gerado.
+   *
+   * A diferença é calculada no banco, sob o mesmo lock que grava — nunca aqui.
+   * Fazer `contado - saldo` na aplicação exigiria ler o saldo antes, e duas
+   * contagens simultâneas partiriam do mesmo número velho: a última gravaria
+   * por cima da primeira e o consumo do intervalo sumiria.
+   *
+   * Devolve `null` quando a contagem confere com o saldo. É o resultado normal
+   * de conferir um item que está certo, não um erro.
+   */
+  setQuantity(
+    clinicId: string,
+    data: InventoryCountData,
+  ): Promise<InventoryMovement | null>
 }

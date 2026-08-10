@@ -1608,6 +1608,17 @@ create table if not exists public.inventory_movements (
   movement_type text not null check (movement_type in ('in', 'out')),
   quantity integer not null check (quantity > 0),
   unit_cost_cents integer check (unit_cost_cents is null or unit_cost_cents >= 0),
+  -- Preenchido SO pela contagem de inventario (`set_inventory_quantity`), com o
+  -- que foi contado na prateleira.
+  --
+  -- O ajuste continua sendo uma entrada ou uma saida — a direcao do saldo nao
+  -- pode depender de um terceiro `movement_type`, senao a soma do extrato
+  -- precisaria de um `case` a mais em todo lugar que le. O que muda e a CAUSA:
+  -- sem esta coluna, "saida de 3, motivo: contagem" e "saida de 3, motivo:
+  -- consumo" ficam indistinguiveis a nao ser por texto livre, e a clinica nunca
+  -- consegue responder quanto perdeu por quebra/vencimento.
+  counted_quantity integer
+    check (counted_quantity is null or counted_quantity >= 0),
   reason text,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
@@ -1765,6 +1776,90 @@ $$;
 
 revoke all on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) from public;
 grant execute on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Ajuste por contagem de inventario
+-- ---------------------------------------------------------------------------
+--
+-- Recebe o que foi CONTADO na prateleira, nao a diferenca. A subtracao acontece
+-- aqui dentro, depois do `for update`.
+--
+-- Essa distincao e a razao de a funcao existir. Calcular `contado - saldo` na
+-- aplicacao obriga a ler o saldo antes, e entre a leitura e a gravacao qualquer
+-- saida registrada por outra pessoa se perde: as duas contagens partem do mesmo
+-- saldo velho e a ultima sobrescreve a primeira. E exatamente o fluxo "ler ->
+-- calcular -> gravar" que o cabecalho deste arquivo diz que nao pode existir.
+--
+-- Contagem igual ao saldo devolve NULL. Nao e erro — e o resultado normal de
+-- conferir um item que esta certo, e gravar um movimento de zero unidades
+-- (proibido por `quantity > 0`) so sujaria o extrato.
+create or replace function public.set_inventory_quantity(
+  p_clinic_id uuid,
+  p_item_id uuid,
+  p_counted_quantity integer,
+  p_reason text
+)
+returns public.inventory_movements
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_item public.inventory_items;
+  v_delta integer;
+  v_movement public.inventory_movements;
+begin
+  if p_clinic_id is distinct from public.current_clinic_id() then
+    raise exception 'CLINIC_SCOPE' using errcode = '42501';
+  end if;
+
+  if p_counted_quantity is null or p_counted_quantity < 0 then
+    raise exception 'INVALID_MOVEMENT' using errcode = '22023';
+  end if;
+
+  select * into v_item
+    from public.inventory_items
+   where id = p_item_id
+     and clinic_id = p_clinic_id
+     and is_active = true
+   for update;
+
+  if not found then
+    raise exception 'ITEM_NOT_FOUND' using errcode = 'P0002';
+  end if;
+
+  v_delta := p_counted_quantity - v_item.current_quantity;
+
+  if v_delta = 0 then
+    return null;
+  end if;
+
+  update public.inventory_items
+     set current_quantity = p_counted_quantity,
+         updated_at = now()
+   where id = p_item_id
+     and clinic_id = p_clinic_id;
+
+  insert into public.inventory_movements (
+    clinic_id, item_id, movement_type, quantity, unit_cost_cents,
+    counted_quantity, reason, created_by
+  ) values (
+    p_clinic_id,
+    p_item_id,
+    case when v_delta > 0 then 'in' else 'out' end,
+    abs(v_delta),
+    null,
+    p_counted_quantity,
+    nullif(trim(p_reason), ''),
+    auth.uid()
+  ) returning * into v_movement;
+
+  return v_movement;
+end;
+$$;
+
+revoke all on function public.set_inventory_quantity(uuid, uuid, integer, text) from public;
+grant execute on function public.set_inventory_quantity(uuid, uuid, integer, text) to authenticated;
 
 commit;
 

@@ -227,6 +227,68 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.62 Estoque: a contagem manda o saldo apurado, não a diferença
+
+> Acrescentado em **10/08/2026**. `20260809_inventory.sql` continua **não
+> aplicada** — nada foi executado em banco remoto. Quem já aplicou uma versão
+> anterior deste arquivo precisa de duas coisas antes do `create or replace`:
+>
+> ```sql
+> alter table public.inventory_movements
+>   add column if not exists counted_quantity integer
+>   check (counted_quantity is null or counted_quantity >= 0);
+> ```
+>
+> A função `set_inventory_quantity` é nova; não há assinatura antiga a derrubar.
+
+`20260809_inventory.sql` ganhou o ajuste de estoque por contagem de inventário,
+que faltava — a tela oferecia entrada e saída, e "ajuste" existia só como
+sugestão no campo de motivo.
+
+**O que a aplicação manda é o saldo CONTADO na prateleira.** A subtração
+acontece dentro de `set_inventory_quantity`, depois do `for update`:
+
+```sql
+v_delta := p_counted_quantity - v_item.current_quantity;
+```
+
+Calcular a diferença na aplicação exigiria ler o saldo antes, e entre a leitura
+e a gravação qualquer saída registrada por outra pessoa se perderia — as duas
+contagens partiriam do mesmo saldo velho e a última sobrescreveria a primeira.
+É o fluxo "ler → calcular → gravar" que o cabeçalho do próprio arquivo diz que
+não pode existir. Por isso o schema da action (`setInventoryQuantitySchema`)
+**não aceita** `movementType` nem `quantity`: a direção do ajuste é uma decisão
+do banco, não da tela.
+
+### Contagem igual ao saldo devolve `null`
+
+Não é erro — é o resultado normal de conferir um item que está certo. Gravar um
+movimento de zero unidades é proibido por `quantity > 0`, e traduzir o `null`
+para "item indisponível" faria a tela acusar falha em cima de uma conferência
+que deu certo. A action devolve sucesso com `data: null`, e a tela mostra em
+`role="status"`, nunca em `role="alert"`.
+
+### `counted_quantity` existe para separar perda de consumo
+
+O ajuste continua sendo `in` ou `out` — a direção do saldo não pode depender de
+um terceiro `movement_type`, senão toda soma do extrato precisaria de um `case`
+a mais. O que a coluna guarda é a **causa**: sem ela, "saíram 3 no atendimento"
+e "contei e faltavam 3" são duas linhas idênticas, e a clínica nunca responde
+quanto perde por quebra ou vencimento.
+
+`src/modules/inventory/domain/Inventory.test.ts` lê este `.sql` e verifica a
+ordem `for update` → `v_delta :=`, o `case when v_delta > 0`, o `return null` e
+o `set current_quantity = p_counted_quantity` (o que torna a contagem
+idempotente). **Ao editar a função, rode esse teste.**
+
+### O padrão da migration segue igual
+
+`set_inventory_quantity` é `security invoker`, valida
+`p_clinic_id is distinct from public.current_clinic_id()` (`42501`), resolve o
+autor por `auth.uid()` e tem `revoke all ... from public` seguido de
+`grant execute ... to authenticated` — mesma forma de `record_inventory_movement`
+descrita em §3.6.
+
 ## 3.61 Compras: a máquina de estados vive em dois lugares, de propósito
 
 > Revisado em **10/08/2026**. `20260809_purchases.sql` continua **não

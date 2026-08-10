@@ -24,6 +24,7 @@ export function toInventoryMovementDto(
     movementType: movement.movementType,
     quantity: movement.quantity,
     unitCostCents: movement.unitCostCents,
+    countedQuantity: movement.countedQuantity,
     reason: movement.reason,
     createdAt: movement.createdAt.toISOString(),
   }

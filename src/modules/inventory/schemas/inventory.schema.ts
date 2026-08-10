@@ -14,6 +14,8 @@ export const inventoryMessages = {
   unitTooLong: 'Use no máximo 30 caracteres na unidade.',
   minimumInvalid: 'O estoque mínimo deve ser um inteiro entre 0 e 1.000.000.',
   quantityInvalid: 'A quantidade deve ser um inteiro maior que zero.',
+  countedInvalid: 'A contagem deve ser um inteiro entre 0 e 1.000.000.',
+  countMatchesBalance: 'A contagem confere com o saldo. Nenhum ajuste foi registrado.',
   costInvalid: 'O custo deve ser um valor inteiro em centavos maior ou igual a zero.',
   reasonTooLong: 'Use no máximo 240 caracteres no motivo.',
   notesTooLong: 'Use no máximo 500 caracteres nas observações.',
@@ -66,6 +68,26 @@ export const recordInventoryMovementSchema = z.object({
 })
 export type RecordInventoryMovementInput = z.infer<typeof recordInventoryMovementSchema>
 
+/**
+ * A contagem aceita **zero** — e é por isso que tem schema próprio.
+ *
+ * `recordInventoryMovementSchema` exige `quantity >= 1`, o que está certo para
+ * entrada e saída: movimentar nada não é movimentar. Mas contar uma prateleira
+ * vazia é o resultado mais comum de um item que acabou, e recusá-lo obrigaria a
+ * pessoa a registrar uma saída "na mão" com a diferença calculada de cabeça —
+ * exatamente o cálculo que a função do banco existe para fazer sozinha.
+ */
+export const setInventoryQuantitySchema = z.object({
+  itemId: z.uuid(inventoryMessages.notFound),
+  countedQuantity: z
+    .number()
+    .int(inventoryMessages.countedInvalid)
+    .min(0, inventoryMessages.countedInvalid)
+    .max(1_000_000, inventoryMessages.countedInvalid),
+  reason: optionalText(240, inventoryMessages.reasonTooLong),
+})
+export type SetInventoryQuantityInput = z.infer<typeof setInventoryQuantitySchema>
+
 export interface InventoryItemDto {
   id: string
   name: string
@@ -84,6 +106,7 @@ export interface InventoryMovementDto {
   movementType: InventoryMovementType
   quantity: number
   unitCostCents: number | null
+  countedQuantity: number | null
   reason: string | null
   createdAt: string
 }
@@ -103,3 +126,22 @@ export interface InventoryMovementFormValues {
   unitCostCents: number | null
   reason: string
 }
+
+export interface InventoryCountFormValues {
+  itemId: string
+  countedQuantity: number
+  reason: string
+}
+
+/**
+ * A contagem tem três desfechos, não dois.
+ *
+ * As outras telas devolvem `string | null` — mensagem de erro ou sucesso. Aqui
+ * isso não serve: "a contagem confere com o saldo" é sucesso, e devolvê-la como
+ * string pintaria de vermelho, no bloco `role="alert"`, uma conferência que deu
+ * certo.
+ */
+export type InventoryCountOutcome =
+  | { status: 'adjusted' }
+  | { status: 'unchanged' }
+  | { status: 'error'; message: string }

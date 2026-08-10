@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 
 import type {
+  InventoryCountData,
   InventoryItem,
   InventoryItemUpdateData,
   InventoryMovement,
@@ -44,6 +45,7 @@ const MOVEMENT_SELECT = `
   movement_type,
   quantity,
   unit_cost_cents,
+  counted_quantity,
   reason,
   created_by,
   created_at
@@ -73,6 +75,7 @@ function toMovement(row: InventoryMovementRow): InventoryMovement {
     movementType: row.movement_type,
     quantity: row.quantity,
     unitCostCents: row.unit_cost_cents,
+    countedQuantity: row.counted_quantity,
     reason: row.reason,
     createdAt: new Date(row.created_at),
   }
@@ -186,6 +189,27 @@ export class SupabaseInventoryRepository implements InventoryRepository {
     if (!row) throw notFound()
     return toMovement(row as unknown as InventoryMovementRow)
   }
+
+  async setQuantity(
+    clinicId: string,
+    data: InventoryCountData,
+  ): Promise<InventoryMovement | null> {
+    const { data: row, error } = await this.client.rpc('set_inventory_quantity', {
+      p_clinic_id: clinicId,
+      p_item_id: data.itemId,
+      p_counted_quantity: data.countedQuantity,
+      p_reason: data.reason,
+    })
+
+    if (error) throw toInventoryError(error)
+    /*
+     * Linha ausente aqui NÃO é item ausente — ao contrário de `recordMovement`.
+     * A função devolve `null` de propósito quando a contagem bate com o saldo,
+     * e traduzir isso para "item indisponível" faria a tela acusar um erro em
+     * cima de uma conferência que deu certo.
+     */
+    return row ? toMovement(row as unknown as InventoryMovementRow) : null
+  }
 }
 
 function notFound(): InventoryRepositoryError {
@@ -198,6 +222,16 @@ function toInventoryError(error: InventoryQueryError): InventoryRepositoryError 
 
   if (code === '42P01' || code === 'PGRST205') {
     return new InventoryRepositoryError('schema-not-ready', 'inventory ausente', code)
+  }
+  /*
+   * Função ausente é a MESMA situação de tabela ausente, e só estes dois códigos
+   * a denunciam. Sem eles, aplicar a migration pela metade — ou aplicá-la antes
+   * de `set_inventory_quantity` existir — cairia no `unexpected` do final, e a
+   * tela mandaria "tente novamente" para sempre em vez de dizer que falta rodar
+   * a migration.
+   */
+  if (code === '42883' || code === 'PGRST202') {
+    return new InventoryRepositoryError('schema-not-ready', 'função de estoque ausente', code)
   }
   if (code === '42501' || message.includes('clinic_scope')) {
     return new InventoryRepositoryError('forbidden', 'recusado pela policy', code)

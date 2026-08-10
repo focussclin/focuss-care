@@ -27,6 +27,7 @@ export interface InventoryMovementRow {
   movement_type: InventoryMovementType
   quantity: number
   unit_cost_cents: number | null
+  counted_quantity: number | null
   reason: string | null
   created_by: string | null
   created_at: string
@@ -91,12 +92,23 @@ export interface InventoryRpcArgs {
   p_reason: string | null
 }
 
+export interface InventoryCountRpcArgs {
+  p_clinic_id: string
+  p_item_id: string
+  p_counted_quantity: number
+  p_reason: string | null
+}
+
 export interface InventoryClient {
   from(relation: 'inventory_items'): InventoryItemQueryBuilder
   from(relation: 'inventory_movements'): InventoryMovementQueryBuilder
   rpc(
     fn: 'record_inventory_movement',
     args: InventoryRpcArgs,
+  ): PromiseLike<InventoryQueryResponse<InventoryMovementRow | null>>
+  rpc(
+    fn: 'set_inventory_quantity',
+    args: InventoryCountRpcArgs,
   ): PromiseLike<InventoryQueryResponse<InventoryMovementRow | null>>
 }
 
