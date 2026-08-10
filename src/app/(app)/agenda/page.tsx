@@ -6,6 +6,11 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { addDays, startOfDay, startOfWeek } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
+import {
+  resolveRoomContext,
+  type RoomLoad,
+} from '@/modules/rooms/application/roomContext'
+import { getRoomRepository } from '@/modules/rooms/infrastructure/repository'
 import { PICKER_RESULT_LIMIT } from '@/modules/patients/schemas/patientPicker.schema'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
@@ -37,12 +42,13 @@ export default async function AgendaPage({
   const rangeStart = addDays(startOfWeek(today), -7 * WEEKS_BEFORE)
   const rangeEnd = addDays(startOfWeek(today), 7 * WEEKS_AFTER)
 
-  const [appointmentSource, patientSource, settingsSource, role] =
+  const [appointmentSource, patientSource, settingsSource, role, roomSource] =
     await Promise.all([
       getAppointmentRepository(today),
       getPatientRepository(today),
       getClinicSettingsRepository(),
       getActiveClinicRole(),
+      getRoomRepository(),
     ])
 
   /*
@@ -88,11 +94,43 @@ export default async function AgendaPage({
     return 30
   })
 
+  /*
+   * A rota faz o I/O; `resolveRoomContext` faz o julgamento.
+   *
+   * O corte existe para que a decisão tenha teste: qual falha é absorvida, qual
+   * sobe, e o que separa "não há sala ativa" de "a tabela não existe". Estava
+   * tudo inline aqui, e um erro nessa distinção não quebrava nada visivelmente
+   * — só apagava o nome da sala dos atendimentos históricos.
+   *
+   * Ver `rooms/application/roomContext.ts`.
+   */
+  let roomLoad: RoomLoad
+
+  try {
+    roomLoad = {
+      status: 'loaded',
+      rooms: await roomSource.repository.list(roomSource.clinicId),
+    }
+  } catch (cause) {
+    roomLoad = { status: 'failed', cause }
+  }
+
+  const { rooms, schemaReady: roomSchemaReady } = resolveRoomContext(roomLoad)
+
+  /*
+   * `withRoom` pergunta se a COLUNA existe.
+   *
+   * Enquanto a migration não for aplicada, `appointments.room_id` não existe —
+   * e pedir coluna inexistente faz o PostgREST recusar a consulta inteira,
+   * derrubando a agenda de todo mundo. Aplicada, a coluna existe
+   * independentemente de haver sala ativa hoje.
+   */
   const [appointments, professionals, patientPage] = await Promise.all([
     appointmentSource.repository.listByRange(
       appointmentSource.clinicId,
       rangeStart,
       rangeEnd,
+      { withRoom: roomSchemaReady },
     ),
     appointmentSource.repository.listProfessionals(appointmentSource.clinicId),
     /*
@@ -136,6 +174,9 @@ export default async function AgendaPage({
       initialAppointments={appointments}
       patients={patientPage.items}
       professionals={professionals}
+      // Só id e nome: a agenda não precisa do resto, e a regra 4 não deixa ela
+      // conhecer `RoomDto`. A tradução acontece aqui, na rota.
+      rooms={rooms.map((room) => ({ id: room.id, name: room.name }))}
       openNewOnMount={novo === '1'}
       defaultDurationMinutes={defaultDurationMinutes}
       isLive={appointmentSource.isLive}

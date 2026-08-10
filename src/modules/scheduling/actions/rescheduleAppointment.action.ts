@@ -99,6 +99,13 @@ const runRescheduleAppointment = createAction<
     } catch (cause) {
       return toScheduleFailure('appointment.reschedule', cause, {
         conflict: scheduleMessages.conflict,
+        /*
+         * Remarcar PODE cair aqui, e é o caso menos óbvio dos três: o
+         * atendimento mantém a sala e muda de horário, e o novo intervalo pode
+         * colidir com outra reserva daquela mesma sala. Quem decide é a
+         * constraint do banco, no `update`.
+         */
+        roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,

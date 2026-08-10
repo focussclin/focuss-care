@@ -101,6 +101,10 @@ export function ListView({
                       </span>
                       <span className="mt-0.5 block truncate text-label text-muted">
                         {appointment.type} · {appointment.professionalName}
+                        {/* Sem sala não mostra nada. Ver o comentário em DayView. */}
+                        {appointment.roomName ? (
+                          <> · {appointment.roomName}</>
+                        ) : null}
                       </span>
                     </span>
 

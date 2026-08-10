@@ -24,5 +24,8 @@ export function toAppointmentDto(appointment: Appointment): AppointmentDto {
     durationMinutes: appointment.durationMinutes,
     status: appointment.status,
     notes: appointment.notes,
+    // Ver o JSDoc do campo: a grade monta o cartão novo a partir deste DTO,
+    // sem recarregar. Sem isto, a sala recém-reservada não apareceria.
+    roomName: appointment.roomName,
   }
 }

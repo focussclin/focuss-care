@@ -22,6 +22,20 @@ export interface NewAppointmentData {
   status: 'scheduled' | 'confirmed'
   /** Observação interna, ou null. Não é dado clínico. */
   notes: string | null
+  /**
+   * Sala reservada, ou null.
+   *
+   * `null` é o padrão e continua sendo o caminho normal: a clínica que não
+   * controla sala marca como sempre. Quem escolhe uma passa a disputar o
+   * intervalo daquela sala com os outros atendimentos — e quem decide isso é a
+   * constraint `appointments_room_no_overlap`, no banco, e não uma consulta
+   * daqui.
+   *
+   * **Opcional na assinatura**, e não `string | null` obrigatório: ausência e
+   * `null` significam a mesma coisa aqui — sem sala —, e exigir a chave faria
+   * todo chamador antigo declarar um campo que ele não tem opinião sobre.
+   */
+  roomId?: string | null
 }
 
 /**
@@ -51,8 +65,24 @@ export interface AppointmentRepository {
     limit: number,
   ): Promise<Appointment[]>
 
-  /** Atendimentos de um intervalo [from, to). */
-  listByRange(clinicId: string, from: Date, to: Date): Promise<Appointment[]>
+  /**
+   * Atendimentos de um intervalo [from, to).
+   *
+   * `withRoom` pede a sala no mesmo `select`. **Temporário**: enquanto
+   * `20260809_rooms.sql` não for aplicada, `appointments.room_id` não existe, e
+   * pedir uma coluna inexistente faz o PostgREST recusar a consulta inteira —
+   * a agenda pararia de carregar por causa de um recurso que ninguém usa ainda.
+   *
+   * Quem chama já sabe a resposta: a rota carrega as salas antes e passa
+   * `withRoom` só quando há alguma. Aplicada a migration, o parâmetro perde a
+   * razão de existir.
+   */
+  listByRange(
+    clinicId: string,
+    from: Date,
+    to: Date,
+    options?: { withRoom?: boolean },
+  ): Promise<Appointment[]>
 
   /**
    * Atendimentos de UM profissional no intervalo [from, to).

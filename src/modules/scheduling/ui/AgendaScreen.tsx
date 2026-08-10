@@ -39,6 +39,7 @@ import {
   type AppointmentSubmitFailure,
   type AppointmentSubmitOptions,
   type PatientFieldRenderer,
+  type RoomOption,
 } from './NewAppointmentModal'
 import { WeekView } from './WeekView'
 
@@ -47,6 +48,15 @@ export interface AgendaScreenProps {
   initialAppointments: readonly Appointment[]
   patients: readonly Patient[]
   professionals: readonly Professional[]
+  /**
+   * Salas ATIVAS da clinica, montadas pela rota.
+   *
+   * Atravessa esta tela so para chegar ao modal — a agenda em si nao filtra por
+   * sala. Vazio esconde o campo: clinica sem salas, migration pendente e modo
+   * de demonstracao caem todos aqui, e nos tres o campo nao teria o que
+   * oferecer.
+   */
+  rooms?: readonly RoomOption[]
   /** Abre o modal de criacao ja na entrada (link "+ Novo atendimento" do dashboard). */
   openNewOnMount?: boolean
   /** Duracao padrao configurada em /configuracoes (C-01). */
@@ -80,6 +90,7 @@ export function AgendaScreen({
   initialAppointments,
   patients,
   professionals,
+  rooms,
   openNewOnMount = false,
   defaultDurationMinutes = 30,
   renderPatientField,
@@ -186,6 +197,15 @@ export function AgendaScreen({
       durationMinutes: dto.durationMinutes,
       status: dto.status as Appointment['status'],
       notes: dto.notes,
+      /*
+       * Fecha o round-trip da atualização otimista.
+       *
+       * O cartão do atendimento recém-criado é montado AQUI, a partir do que a
+       * action devolveu — sem recarregar a página. Sem esta linha, quem acabou
+       * de reservar uma sala veria o cartão sem ela e concluiria que a reserva
+       * não pegou; a sala só apareceria no próximo `router.refresh()`.
+       */
+      roomName: dto.roomName,
     }
   }
 
@@ -550,6 +570,7 @@ export function AgendaScreen({
           if (!open) setReschedulingId(null)
         }}
         professionals={professionals}
+        rooms={rooms}
         renderPatientField={renderPatientField}
         existingAppointments={appointments}
         defaultDate={toDateInputValue(referenceDate)}

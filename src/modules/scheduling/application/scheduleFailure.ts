@@ -23,6 +23,8 @@ import { isAppointmentRepositoryError } from '../domain/AppointmentRepositoryErr
  */
 export interface ScheduleFailureMessages {
   conflict: string
+  /** Sala ocupada — resolve-se trocando de sala, não de horário. */
+  roomConflict: string
   /**
    * Chamada à ação, acrescentada ao motivo que o adapter montou.
    *
@@ -50,6 +52,8 @@ export function toScheduleFailure<F extends string>(
     switch (cause.reason) {
       case 'conflict':
         return err<F>('conflict', messages.conflict)
+      case 'room-conflict':
+        return err<F>('conflict', messages.roomConflict)
       /*
        * 'needs-confirmation', e não 'conflict': a operação é possível, e quem
        * recebe este código precisa OFERECER a confirmação. Devolver 'conflict'

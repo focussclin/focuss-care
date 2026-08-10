@@ -22,6 +22,21 @@ export type AppointmentWriteFailure =
    */
   | 'conflict'
   /**
+   * A SALA já está ocupada nesse intervalo.
+   *
+   * Separado de `conflict` porque a ação que resolve é outra: conflito de
+   * profissional se resolve mudando o horário; conflito de sala se resolve
+   * mudando a **sala**, e o horário continua bom. Colapsar os dois faria a
+   * recepção remarcar a consulta inteira para um problema que um `select`
+   * resolve.
+   *
+   * Vem exclusivamente do banco (`appointments_room_no_overlap`, SQLSTATE
+   * `23P01`), e não de consulta prévia da aplicação — ao contrário de
+   * `conflict`. Enquanto `20260809_rooms.sql` não for aplicada, a constraint
+   * não existe e este ramo nunca ocorre.
+   */
+  | 'room-conflict'
+  /**
    * O horário está fora do expediente que a clínica declarou.
    *
    * **Não é recusa definitiva.** Encaixe fora do horário acontece em clínica

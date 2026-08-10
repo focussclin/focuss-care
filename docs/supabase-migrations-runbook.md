@@ -227,9 +227,55 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.56 A agenda já escreve `room_id` — e degrada sozinha sem a migration
+
+> Implementado em **10/08/2026**. `20260809_rooms.sql` continua **não
+> aplicada**, e nada abaixo depende de aplicá-la para a agenda funcionar.
+
+A fatia §3.55 foi feita. O que muda no comportamento, hoje, com a migration
+pendente: **nada**. E isso é o requisito, não o resultado morno.
+
+### Como o vínculo se apaga sozinho
+
+Três pontos decidem, e todos leem a mesma coisa — se a clínica tem sala:
+
+| Ponto | Sem salas | Com salas |
+|---|---|---|
+| `/agenda` (rota) | `rooms.list()` levanta `schema-not-ready` → lista vazia | lista as ativas |
+| `NewAppointmentModal` | campo de sala **não renderiza** | `<select>` com "Sem sala definida" primeiro |
+| `create` (adapter) | `room_id` **fora do payload** | `room_id` no insert |
+| `listByRange` | `select` sem `room_id` | `select` com `room_id, rooms ( name )` |
+
+O detalhe que carrega o resto: **`room_id` não entra no payload como `null`**.
+Um `null` seria equivalente para o Postgres e fatal aqui — citar coluna
+inexistente faz o PostgREST recusar o comando inteiro, e marcar consulta
+pararia de funcionar para toda clínica que não usa sala. Pelo mesmo motivo o
+`select` da agenda só pede a coluna quando ela existe.
+
+### O que a migration destrava
+
+Aplicá-la faz o campo aparecer para quem cadastrar salas, e liga a constraint
+`appointments_room_no_overlap`. A partir daí:
+
+- reservar a mesma sala em horários que se cruzam é recusado **pelo banco**;
+- o adapter traduz `23P01` para `room-conflict` lendo o **nome da constraint**
+  na mensagem, e a tela diz "escolha outra sala — o horário continua
+  disponível". Colapsar isso em `conflict` mandaria a recepção remarcar a
+  consulta inteira para um problema que um `select` resolve.
+
+### O que continua fora
+
+- **Trocar a sala de um atendimento já marcado.** Remarcar mantém a sala e muda
+  o horário — e pode falhar com `room-conflict`, que a action já traduz.
+- `/salas-e-recursos` segue `availability: 'setup'`. A tela depende da tabela
+  `rooms`, ao contrário da agenda, que depende apenas de `room_id` ser opcional.
+
 ## 3.55 `room_id` espera uma fatia — e o cadastro de salas não
 
 > Levantado em **10/08/2026**, contra `20260809_rooms.sql` (não aplicada).
+>
+> **RESOLVIDO no mesmo dia** — ver §3.56. Esta seção fica como o registro do
+> que estava faltando e por quê; os cinco itens abaixo foram entregues.
 
 O módulo `rooms` está fechado: CRUD com Zod, RBAC `clinic.settings`, tenant
 explícito em toda consulta, remoção lógica por `deleted_at`, e testes de

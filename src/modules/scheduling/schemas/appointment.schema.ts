@@ -31,6 +31,13 @@ export const newAppointmentSchema = z.object({
   durationMinutes: z.string(),
   status: z.enum(['scheduled', 'confirmed']),
   notes: z.string().optional(),
+  /**
+   * Sala do formulário. `''` é "sem sala", e é o padrão.
+   *
+   * O servidor revalida e normaliza — este schema serve à tela, e a tela pode
+   * mandar string vazia porque é o que um `<select>` manda.
+   */
+  roomId: z.string().optional(),
 })
 
 export type NewAppointmentInput = z.infer<typeof newAppointmentSchema>
@@ -50,6 +57,15 @@ export const scheduleMessages = {
   durationInvalid: 'A duração precisa estar entre 5 minutos e 8 horas.',
   tooFarInPast: 'Não é possível agendar tão longe no passado.',
   conflict: 'Este profissional já possui um atendimento nesse horário.',
+  /**
+   * Sala ocupada — e a frase diz o que fazer.
+   *
+   * Distinta de `conflict` de propósito: aquela manda mudar o horário, esta
+   * manda mudar a sala. O horário continua bom, e a recepção não precisa
+   * remarcar a consulta inteira.
+   */
+  roomConflict:
+    'Esta sala já está reservada nesse horário. Escolha outra sala — o horário continua disponível.',
   /**
    * Segunda metade da mensagem de horário fora do expediente (A-02).
    *
@@ -144,6 +160,25 @@ export const createAppointmentSchema = z
      * aparece na auditoria.
      */
     confirmOutsideBusinessHours: z.boolean().optional().default(false),
+    /**
+     * Sala reservada — OPCIONAL, e é isso que preserva o que já existe.
+     *
+     * Ausente e string vazia viram `null`. O `<select>` do formulário manda
+     * `''` quando "Sem sala definida" está escolhida, e um `''` chegando ao
+     * banco como `room_id` seria recusado por não ser UUID — sobre a escolha
+     * mais comum de todas.
+     *
+     * Toda clínica que não usa sala, e todo atendimento criado antes desta
+     * fatia, continua válido: `room_id` fica nulo e a constraint de
+     * sobreposição por sala (`where room_id is not null`) nem é avaliada.
+     *
+     * **Só na criação.** Remarcar mantém a sala e muda o horário; trocar de
+     * sala é edição do atendimento, e a agenda ainda não a oferece.
+     */
+    roomId: z
+      .union([z.literal(''), z.uuid(scheduleMessages.invalidFields)])
+      .nullish()
+      .transform((value) => (value ? value : null)),
   })
   .transform((value, ctx) => {
     const startsAt = parseLocalDateTime(value.date, value.time)
@@ -176,6 +211,8 @@ export const createAppointmentSchema = z
       status: value.status,
       notes: value.notes,
       confirmOutsideBusinessHours: value.confirmOutsideBusinessHours,
+      // Já normalizado acima: `''` e ausente chegam aqui como `null`.
+      roomId: value.roomId,
       startsAt,
       endsAt: new Date(startsAt.getTime() + value.durationMinutes * 60_000),
     }
@@ -261,4 +298,13 @@ export interface AppointmentDto {
   durationMinutes: number
   status: string
   notes?: string
+  /**
+   * Nome da sala, quando há uma.
+   *
+   * Precisa atravessar porque a agenda faz atualização OTIMISTA: o atendimento
+   * recém-criado entra na grade a partir deste DTO, sem recarregar. Sem o
+   * campo aqui, quem acabou de reservar a sala veria o cartão sem ela até
+   * atualizar a página — e concluiria que a reserva não pegou.
+   */
+  roomName?: string | null
 }

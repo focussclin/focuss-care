@@ -18,6 +18,14 @@ export interface SelectFieldProps
   hideLabel?: boolean
   /** Mensagem curta abaixo do campo, no mesmo padrao do TextField. */
   error?: string
+  /**
+   * Explicacao curta abaixo do campo. Cede lugar ao `error`, como no TextField.
+   *
+   * `TextField` e `TextareaField` ja tinham; este nao, e a ausencia forcava
+   * quem precisava explicar um `<select>` a pendurar um `<p>` solto ao lado —
+   * fora do `aria-describedby`, ou seja, invisivel para leitor de tela.
+   */
+  hint?: string
 }
 
 /**
@@ -28,12 +36,13 @@ export interface SelectFieldProps
  */
 export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
   function SelectField(
-    { label, options, hideLabel = false, error, className, ...selectProps },
+    { label, options, hideLabel = false, error, hint, className, ...selectProps },
     ref,
   ) {
     const generatedId = useId()
     const selectId = `select-${generatedId}`
     const errorId = `${selectId}-error`
+    const hintId = `${selectId}-hint`
     const hasError = Boolean(error)
 
     return (
@@ -54,7 +63,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
             ref={ref}
             id={selectId}
             aria-invalid={hasError || undefined}
-            aria-describedby={hasError ? errorId : undefined}
+            aria-describedby={hasError ? errorId : hint ? hintId : undefined}
             className={cn(
               // 44px: altura minima de controle definida em AGENDA_DESIGN.md
               'h-11 w-full appearance-none rounded-field border bg-surface',
@@ -88,6 +97,12 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
           >
             <AlertCircle aria-hidden className="size-3.5 shrink-0" />
             {error}
+          </p>
+        ) : hint ? (
+          // O erro VENCE a dica, como no TextField: dois textos abaixo do
+          // mesmo campo competem, e o que importa nesse momento é o erro.
+          <p id={hintId} className="text-label text-muted">
+            {hint}
           </p>
         ) : null}
       </div>

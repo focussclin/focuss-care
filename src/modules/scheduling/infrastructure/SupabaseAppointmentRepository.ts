@@ -50,8 +50,29 @@ type AppointmentJoinRow = {
   internal_notes: string | null
   patients: { full_name: string } | null
   professionals: { display_name: string } | null
+  /*
+   * Opcionais no TIPO, e não só no valor.
+   *
+   * Enquanto `20260809_rooms.sql` não for aplicada, `appointments.room_id` não
+   * existe e o PostgREST recusaria a consulta inteira se ela pedisse a coluna.
+   * Ver `SELECT_WITH_NAMES` logo abaixo: a agenda continua pedindo o select
+   * antigo até a migration existir, e estes dois campos chegam `undefined`.
+   */
+  room_id?: string | null
+  rooms?: { name: string } | null
 }
 
+/**
+ * Colunas da agenda — SEM sala.
+ *
+ * `room_id` fica de fora de propósito. A coluna só existe depois de
+ * `20260809_rooms.sql`, e pedir uma coluna inexistente faz o PostgREST recusar
+ * a consulta inteira com `42703` — ou seja, a agenda pararia de carregar para
+ * todo mundo por causa de um recurso que ninguém ainda usa.
+ *
+ * `SELECT_WITH_ROOM` existe logo abaixo e é usado quando a clínica tem salas
+ * cadastradas, o que só acontece com a migration aplicada. Ver `selectFor`.
+ */
 const SELECT_WITH_NAMES = `
   id,
   patient_id,
@@ -64,6 +85,40 @@ const SELECT_WITH_NAMES = `
   patients ( full_name ),
   professionals ( display_name )
 `
+
+/**
+ * O `Insert` gerado de `appointments`.
+ *
+ * Ele NÃO conhece `room_id`, porque é gerado do schema remoto e
+ * `20260809_rooms.sql` não foi aplicada — e o tipo gerado rejeita chave
+ * excedente. O `as` para este alias é o único ponto do módulo que afirma algo
+ * sobre a coluna nova, e sai junto com o `npm run db:types` que seguir a
+ * migration.
+ */
+type AppointmentInsert = Database['public']['Tables']['appointments']['Insert']
+
+/** O mesmo, mais a sala. Só é seguro depois da migration de salas. */
+const SELECT_WITH_ROOM = `${SELECT_WITH_NAMES},
+  room_id,
+  rooms ( name )
+`
+
+/**
+ * Qual `select` usar.
+ *
+ * A escolha é EXPLÍCITA — vem de quem chama, que já sabe se a clínica tem salas
+ * cadastradas — e não descoberta por tentativa e erro. A alternativa seria
+ * pedir a coluna, tomar `42703` e repetir sem ela: funcionaria, e custaria uma
+ * consulta a mais em toda abertura da agenda enquanto a migration estivesse
+ * pendente, que é justamente o estado de hoje.
+ *
+ * Quando `20260809_rooms.sql` for aplicada e as clínicas tiverem salas, este
+ * parâmetro deixa de ter razão de existir e o `select` com sala passa a ser o
+ * único. Ver `docs/supabase-migrations-runbook.md` §3.55.
+ */
+function selectFor(withRoom: boolean | undefined): string {
+  return withRoom ? SELECT_WITH_ROOM : SELECT_WITH_NAMES
+}
 
 function toAppointment(row: AppointmentJoinRow): Appointment {
   const startsAt = new Date(row.starts_at)
@@ -83,6 +138,10 @@ function toAppointment(row: AppointmentJoinRow): Appointment {
     ),
     status: row.status,
     notes: row.internal_notes ?? undefined,
+    // `?? null` e nao `?? undefined`: quando o select TROUXE a coluna e ela e
+    // nula, "esta consulta sem sala" e um fato — diferente de "nao perguntei".
+    roomId: row.room_id ?? null,
+    roomName: row.rooms?.name ?? null,
   }
 }
 
@@ -130,10 +189,11 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     clinicId: string,
     from: Date,
     to: Date,
+    options?: { withRoom?: boolean },
   ): Promise<Appointment[]> {
     const { data, error } = await this.client
       .from('appointments')
-      .select(SELECT_WITH_NAMES)
+      .select(selectFor(options?.withRoom))
       .eq('clinic_id', clinicId)
       .gte('starts_at', from.toISOString())
       .lt('starts_at', to.toISOString())
@@ -251,21 +311,41 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       options,
     )
 
+    /*
+     * `room_id` só entra no payload quando HÁ sala.
+     *
+     * Mandar `room_id: null` seria equivalente para o banco — e fatal aqui:
+     * enquanto `20260809_rooms.sql` não for aplicada a coluna não existe, e o
+     * PostgREST recusa o insert inteiro por citá-la. Toda marcação de consulta
+     * pararia por causa de um campo que ninguém preencheu.
+     *
+     * Com o spread condicional, a clínica sem salas escreve exatamente o mesmo
+     * payload de antes desta fatia.
+     *
+     * O `as` existe porque `database.types.ts` é GERADO do schema remoto, onde
+     * `room_id` ainda não existe — e o tipo gerado rejeita chave excedente. É o
+     * mesmo motivo dos shims `*Database.ts` dos outros módulos; aqui basta um
+     * ponto, porque é a única escrita que cita a coluna. Ele sai junto com o
+     * `npm run db:types` que seguir a migration.
+     */
+    const payload = {
+      clinic_id: clinicId,
+      patient_id: data.patientId,
+      professional_id: data.professionalId,
+      status: data.status,
+      starts_at: data.startsAt.toISOString(),
+      ends_at: data.endsAt.toISOString(),
+      reason: data.reason,
+      internal_notes: data.notes,
+      is_walk_in: false,
+      created_by: createdBy,
+      ...(data.roomId ? { room_id: data.roomId } : {}),
+    }
+
     const { data: row, error } = await this.client
       .from('appointments')
-      .insert({
-        clinic_id: clinicId,
-        patient_id: data.patientId,
-        professional_id: data.professionalId,
-        status: data.status,
-        starts_at: data.startsAt.toISOString(),
-        ends_at: data.endsAt.toISOString(),
-        reason: data.reason,
-        internal_notes: data.notes,
-        is_walk_in: false,
-        created_by: createdBy,
-      })
-      .select(SELECT_WITH_NAMES)
+      .insert(payload as AppointmentInsert)
+      .select(selectFor(Boolean(data.roomId)))
       .single()
 
     if (error) throw toWriteError(error)
@@ -589,11 +669,31 @@ function toWriteError(error: {
   const code = error.code ?? undefined
   const message = error.message ?? 'sem mensagem'
 
-  // 23P01 = exclusion_violation, 23505 = unique_violation. Desde A-02 a
-  // sobreposicao e detectada ANTES da escrita, por consulta; este caminho e a
-  // ultima linha, para a corrida entre duas escritas simultaneas. So dispara se
-  // a constraint de exclusao existir no banco — a migration esta proposta e nao
-  // aplicada (B1). Se nao existir, este ramo simplesmente nao ocorre.
+  /*
+   * `23P01` cobre DUAS constraints de exclusao, e elas pedem mensagens
+   * diferentes.
+   *
+   *  - `appointments_no_overlap` — o PROFISSIONAL ja tem atendimento no
+   *    intervalo. Desde A-02 isso e detectado ANTES da escrita, por consulta;
+   *    este ramo e a ultima linha, para a corrida entre duas escritas
+   *    simultaneas.
+   *  - `appointments_room_no_overlap` — a SALA esta ocupada. Aqui NAO ha
+   *    consulta previa: quem decide e o banco, no momento do insert.
+   *
+   * Distinguir importa porque a acao que resolve e outra. "Este profissional ja
+   * tem atendimento nesse horario" manda trocar de horario; a sala ocupada se
+   * resolve trocando de SALA, e o horario continua bom. Colapsar as duas faria
+   * a recepcao remarcar a consulta inteira para um problema que um `select`
+   * resolveria.
+   *
+   * O nome da constraint vem no `message` do Postgres. Se ele nao vier — driver
+   * diferente, versao futura —, cai no `conflict` generico, que e a resposta
+   * mais antiga e ainda correta.
+   */
+  if (code === '23P01' && /appointments_room_no_overlap/i.test(message)) {
+    return new AppointmentRepositoryError('room-conflict', message, code)
+  }
+
   if (code === '23P01' || code === '23505') {
     return new AppointmentRepositoryError('conflict', message, code)
   }

@@ -55,7 +55,7 @@ de estoque).
 |---|---|---|
 | `identity` | **COMPLETO** | Cadastro, login, **recuperação de senha por e-mail**, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação, perfil pessoal |
 | `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, contatos vinculados com CRUD, consentimento LGPD |
-| `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento |
+| `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento e **reserva opcional de sala** — o campo só aparece quando a clínica tem salas, e `room_id` fica fora do payload quando não há |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
@@ -1146,6 +1146,71 @@ ordem, grupo vazio, nada se perde, não muta a entrada), schema Zod (trim,
 limites de capacidade, enum, e **nenhum schema aceita `clinicId`**), repositório
 Supabase (tenant em toda consulta, `deleted_at` só em `archive`, remoção é
 update e nunca delete, e a classificação de erro na escrita) e tela.
+
+---
+
+## 8.13 Feature — a agenda reserva sala (10/08/2026)
+
+Fecha a pendência que a fatia anterior tinha documentado: `appointments.room_id`
+existia na migration e **nenhum código o escrevia**.
+
+### O requisito que decidiu o desenho
+
+`20260809_rooms.sql` continua **não aplicada**, e `/agenda` não é
+`availability: 'setup'` — ela funciona há meses e não pode parar. Então o
+vínculo tinha de ser invisível enquanto a coluna não existir.
+
+Três pontos leem a mesma condição — a clínica tem sala? — e se apagam juntos:
+
+| Ponto | Sem salas | Com salas |
+|---|---|---|
+| Rota | `rooms.list()` levanta `schema-not-ready` → lista vazia | as ativas |
+| Modal | campo **não renderiza** | `<select>` com "Sem sala definida" primeiro |
+| `create` | `room_id` **fora do payload** | `room_id` no insert |
+| `listByRange` | `select` sem a coluna | `select` com `room_id, rooms ( name )` |
+
+O detalhe que carrega o resto: **`room_id` não vai como `null`**. Seria
+equivalente para o Postgres e fatal aqui — citar coluna inexistente faz o
+PostgREST recusar o comando inteiro, e marcar consulta pararia para toda
+clínica que não usa sala. O mesmo vale para o `select` da agenda, que roda em
+toda abertura da tela.
+
+### `room-conflict` é razão própria, e não `conflict`
+
+Conflito de **profissional** é detectado por consulta na aplicação e se resolve
+mudando o horário. Conflito de **sala** é detectado pelo banco, na constraint
+`appointments_room_no_overlap`, e se resolve trocando de sala — o horário
+continua bom.
+
+O adapter separa os dois lendo o nome da constraint na mensagem do `23P01`.
+Colapsá-los mandaria a recepção remarcar a consulta inteira para um problema
+que um `select` resolve. Sem nome de constraint (driver diferente, versão
+futura), cai no conflito genérico, que é a resposta mais antiga e ainda correta.
+
+### Preservado
+
+Todo atendimento criado antes desta fatia continua válido: `room_id` nulo não é
+dado faltando, é a maioria. A constraint é `where room_id is not null`, então
+nem chega a ser avaliada para eles. `roomId` é opcional na porta, no schema e na
+entidade — ausência e `null` significam a mesma coisa.
+
+De quebra, `SelectField` ganhou `hint`, que `TextField` e `TextareaField` já
+tinham. A ausência forçava quem precisava explicar um `<select>` a pendurar um
+`<p>` solto — fora do `aria-describedby`, ou seja, invisível para leitor de
+tela.
+
+### Ainda fora
+
+Trocar a sala de um atendimento já marcado. Remarcar mantém a sala e altera o
+horário; a troca deliberada de recurso é uma ação posterior, com suas próprias
+regras de conflito e auditoria.
+
+### Testes desta fatia — 44 novos
+
+Schema (ausente, `''` e `null` viram null; UUID inválido recusado) e repositório
+(`room_id` fora do payload sem sala, `select` sem a coluna, mapeamento com e sem
+sala, e as três formas de `23P01`). O teste que protege o resto é
+"não cita room_id no insert quando não há sala".
 
 ---
 

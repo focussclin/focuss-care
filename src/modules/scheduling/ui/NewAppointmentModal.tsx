@@ -31,12 +31,34 @@ export type PatientFieldRenderer = (control: {
   error?: string
 }) => ReactNode
 
+/**
+ * Sala como a agenda precisa dela.
+ *
+ * Tipo próprio, e não `RoomDto`: a regra 4 proíbe um módulo de alcançar o
+ * interior de outro, e a agenda só precisa de id e nome. A rota — que não é
+ * módulo — faz a tradução.
+ */
+export interface RoomOption {
+  id: string
+  name: string
+}
+
 export interface NewAppointmentModalProps {
   /** Seletor de paciente, montado pela rota — ver o uso no corpo do modal. */
   renderPatientField: PatientFieldRenderer
   open: boolean
   onOpenChange: (open: boolean) => void
   professionals: readonly Professional[]
+  /**
+   * Salas ATIVAS da clínica. Vazio esconde o campo por completo.
+   *
+   * Vazio acontece em três situações, e todas devem esconder: a clínica não
+   * cadastrou sala nenhuma, `20260809_rooms.sql` não foi aplicada, ou o modo de
+   * demonstração. Um `<select>` com uma opção só — "Sem sala definida" — seria
+   * um campo que só sabe dizer "não", e ele apareceria em toda marcação de
+   * consulta de toda clínica que não usa salas.
+   */
+  rooms?: readonly RoomOption[]
   /** Base para detectar conflito de horario antes de salvar. */
   existingAppointments: readonly Appointment[]
   defaultDate: string
@@ -121,6 +143,7 @@ export function NewAppointmentModal({
   open,
   onOpenChange,
   professionals,
+  rooms = [],
   existingAppointments,
   defaultDate,
   defaultTime = '09:00',
@@ -370,6 +393,31 @@ export function NewAppointmentModal({
           ]}
           {...register('professionalId')}
         />
+
+        {/*
+          O campo de sala só existe quando há sala.
+
+          Vazio acontece em três situações — clínica sem salas cadastradas,
+          migration `20260809_rooms.sql` pendente, e modo de demonstração — e as
+          três devem esconder o campo. Um `<select>` cuja única opção é "Sem
+          sala definida" apareceria em toda marcação de toda clínica que não usa
+          salas, para nunca ser usado.
+
+          "Sem sala definida" primeiro e como padrão: o vínculo é opcional, e o
+          caminho que já existia continua sendo o de menos cliques.
+        */}
+        {rooms.length > 0 ? (
+          <SelectField
+            label="Sala ou recurso"
+            hint="Opcional. Reservar a sala impede que outro atendimento use o mesmo horário nela."
+            error={errors.roomId?.message}
+            options={[
+              { value: '', label: 'Sem sala definida' },
+              ...rooms.map((room) => ({ value: room.id, label: room.name })),
+            ]}
+            {...register('roomId')}
+          />
+        ) : null}
 
         <TextField
           label="Tipo de atendimento"

@@ -67,6 +67,21 @@ export interface Appointment {
   durationMinutes: number
   status: AppointmentStatus
   notes?: string
+  /**
+   * Sala reservada, quando há uma.
+   *
+   * **Opcional por construção, e isso é a feature.** Clínica que não controla
+   * sala continua marcando como sempre: `appointments.room_id` nasce nulo, e
+   * todo atendimento criado antes desta fatia permanece válido. A constraint de
+   * sobreposição por sala é `where room_id is not null`, então ela nem chega a
+   * ser avaliada para eles.
+   *
+   * Tornar obrigatório exigiria uma sala cadastrada para marcar qualquer
+   * consulta — e a migration de salas nem está aplicada.
+   */
+  roomId?: string | null
+  /** Nome da sala, do join. Ausente quando não há sala ou o join não veio. */
+  roomName?: string | null
 }
 
 export interface ActivityEntry {

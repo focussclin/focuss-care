@@ -84,6 +84,16 @@ export function DayView({
                             {appointment.type} · {appointment.professionalName}
                             {' · '}
                             {appointment.durationMinutes} min
+                            {/*
+                              Sem sala não mostra NADA — nem "sem sala".
+                              O vínculo é opcional e a maioria dos atendimentos
+                              não tem sala; um rótulo de ausência repetido em
+                              toda linha da agenda seria ruído sobre o caso
+                              normal.
+                            */}
+                            {appointment.roomName ? (
+                              <> · {appointment.roomName}</>
+                            ) : null}
                           </span>
                         </span>
 

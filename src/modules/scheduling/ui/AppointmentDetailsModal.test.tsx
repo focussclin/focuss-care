@@ -162,4 +162,27 @@ describe('AppointmentDetailsModal', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('mostra a sala quando o atendimento tem uma', () => {
+    /*
+     * Este é o lugar que sustenta a decisão da grade semanal: lá o bloco de 30
+     * minutos não tem altura para uma quarta linha, e a omissão só se justifica
+     * porque quem precisa da sala abre o atendimento. Se aqui não aparecesse, a
+     * informação não existiria em canto nenhum.
+     */
+    renderModal({
+      appointment: { ...appointment, roomName: 'Consultório 1' },
+    })
+
+    expect(screen.getByText('Sala')).toBeTruthy()
+    expect(screen.getByText('Consultório 1')).toBeTruthy()
+  })
+
+  it('sem sala não mostra a linha — nem escrita "sem sala"', () => {
+    // O vínculo é opcional, e a maioria dos atendimentos não tem sala. Um
+    // rótulo de ausência seria ruído sobre o caso normal.
+    renderModal()
+
+    expect(screen.queryByText('Sala')).toBeNull()
+  })
 })

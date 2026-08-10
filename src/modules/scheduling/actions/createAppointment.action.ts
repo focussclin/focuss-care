@@ -94,6 +94,12 @@ const runCreateAppointment = createAction<
           endsAt: input.endsAt,
           reason: input.reason,
           status: input.status,
+          /*
+           * Já normalizado pelo schema: `''` e ausente viraram `null`. O
+           * adapter só cita `room_id` no insert quando ele não é nulo, para não
+           * quebrar quem ainda não tem a coluna.
+           */
+          roomId: input.roomId,
           notes: input.notes,
         },
         context.userId,
@@ -106,6 +112,7 @@ const runCreateAppointment = createAction<
     } catch (cause) {
       return toScheduleFailure('appointment.create', cause, {
         conflict: scheduleMessages.conflict,
+        roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,

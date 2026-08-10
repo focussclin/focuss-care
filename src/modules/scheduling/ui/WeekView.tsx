@@ -157,8 +157,38 @@ export function WeekView({
                             {appointment.professionalName}
                           </span>
                         ) : null}
+
+                        {/*
+                          A sala entra como QUARTA linha, e por último.
+
+                          O bloco da semana já revela por altura: tipo acima de
+                          58px, profissional acima de 78px. A ordem é de
+                          importância — quem olha a grade semanal quer saber
+                          quem é o paciente e quem atende; a sala só interessa a
+                          quem vai andar até ela, e essa pessoa abre o
+                          atendimento.
+
+                          Sem sala não ocupa linha nenhuma: o vínculo é
+                          opcional e a maioria dos atendimentos não tem sala.
+                        */}
+                        {geometry.height > 98 && appointment.roomName ? (
+                          <span className="block truncate text-[11px] opacity-80">
+                            {appointment.roomName}
+                          </span>
+                        ) : null}
+
+                        {/*
+                          A descrição para leitor de tela NÃO é limitada por
+                          altura — ela não ocupa espaço. Quem navega assim
+                          recebe a sala mesmo no bloco de 30 minutos, onde a
+                          versão visível não caberia.
+                        */}
                         <span className="sr-only">
-                          {`${appointment.type} com ${appointment.professionalName}. Status: ${status.label}.`}
+                          {`${appointment.type} com ${appointment.professionalName}.`}
+                          {appointment.roomName
+                            ? ` Sala: ${appointment.roomName}.`
+                            : ''}
+                          {` Status: ${status.label}.`}
                         </span>
                       </button>
                     )

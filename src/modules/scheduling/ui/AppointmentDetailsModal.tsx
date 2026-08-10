@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarClock, Stethoscope, User } from 'lucide-react'
+import { CalendarClock, DoorOpen, Stethoscope, User } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -150,6 +150,23 @@ export function AppointmentDetailsModal({
             label="Duração"
             value={`${appointment.durationMinutes} minutos`}
           />
+
+          {/*
+            A sala aparece AQUI sempre que existir, sem restrição de espaço.
+
+            É o que sustenta a decisão da grade semanal: lá o bloco de 30
+            minutos não tem altura para uma quarta linha, e o comentário
+            justifica a omissão dizendo que quem precisa da sala abre o
+            atendimento. Se este lugar não a mostrasse, aquela justificativa
+            seria falsa e a informação não existiria em canto nenhum.
+          */}
+          {appointment.roomName ? (
+            <DetailRow
+              icon={<DoorOpen aria-hidden className="size-4 text-muted" />}
+              label="Sala"
+              value={appointment.roomName}
+            />
+          ) : null}
         </dl>
 
         {appointment.notes ? (
