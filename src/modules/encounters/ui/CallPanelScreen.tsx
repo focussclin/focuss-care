@@ -65,6 +65,13 @@ export function CallPanelScreen({
 
   return (
     <div className="flex min-h-[70vh] flex-col gap-6">
+      {/*
+        `h1` invisível — a única tela do produto sem `PageHeader`, e com razão:
+        o painel é para a TV da sala de espera, e um título ocupando o topo
+        rouba espaço do nome que precisa ser lido de longe.
+      */}
+      <h1 className="sr-only">Painel de chamada</h1>
+
       {!isLive ? (
         <p
           role="status"
