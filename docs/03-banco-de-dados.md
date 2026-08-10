@@ -183,7 +183,8 @@ select tablename, policyname, cmd, roles
  where schemaname = 'public'
    and tablename in ('conversations', 'messages', 'workflows', 'allergies',
                      'availability_exceptions', 'services', 'vitals',
-                     'message_templates', 'prescriptions', 'prescription_items')
+                     'message_templates', 'prescriptions', 'prescription_items',
+                     'price_lists', 'price_list_items')
  order by tablename, cmd;
 ```
 
@@ -194,6 +195,23 @@ status, responsável e leitura só passam a gravar depois que essa policy existi
 O mesmo vale para `workflows` em `/automacoes`, que precisa de `INSERT`,
 `UPDATE` e `DELETE` para o papel com `clinic.settings`. As duas telas tratam a
 ausência do mesmo jeito: `write-forbidden`, com o texto apontando a policy.
+
+### `price_list_items` guarda o repasse de DUAS formas
+
+`professional_share_percent` e `professional_share_cents` expressam a mesma
+coisa, e nada declara qual vence quando ambas estão preenchidas. A aplicação
+**não lê nem grava** as duas — o preço do item é gravado, o repasse fica onde
+está. Para responder:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.price_list_items'::regclass;
+```
+
+Sem `check` declarado, a resposta vem de `select professional_share_percent,
+professional_share_cents from public.price_list_items` combinado com o que a
+clínica pratica — ou de declarar a regra antes de gravar o primeiro repasse.
 
 ### `allergies.severity` é um número sem escala conhecida
 

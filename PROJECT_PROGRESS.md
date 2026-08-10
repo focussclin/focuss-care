@@ -68,7 +68,7 @@ de estoque).
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão real, cofre cifrado por clínica, construtor de automações e **biblioteca de modelos de mensagem** (CRUD real, aprovação lida do provedor). **Ainda não envia, não executa, não chama modelo nem sincroniza agenda** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
-| `catalog` | **COMPLETO** | Catálogo de serviços: nome, código interno e TUSS, categoria, duração e preço base, com exclusão lógica. **O preço é omitido no servidor** para quem não tem `invoice.read`. Tabelas por convênio (`price_lists`) seguem sem superfície |
+| `catalog` | **COMPLETO** | Catálogo de serviços (com preço omitido no servidor para quem não tem `invoice.read`) e **tabelas de preço** com vigência, tabela padrão única e preço por serviço. Repasse ao profissional segue fora: convenção ambígua no schema |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
@@ -2550,6 +2550,77 @@ dois rótulos faltando.
 esta fatia não a destrava. O que mudou é que o ciclo local da guia fechou, e o
 módulo deixou de ter zero cobertura de UI — 27 testes novos, 11 de domínio e 16
 de tela.
+
+---
+
+## 8.32 Feature — Tabelas de preço (10/08/2026)
+
+Varri as 56 tabelas do schema aplicado procurando as que ainda não têm
+superfície. Sobraram sete, e seis estão bloqueadas por coisa externa:
+`ai_messages` e `document_embeddings` (IA), `clinical_attachments` (bucket),
+`professional_payouts` e `professional_payout_items` (P-RPC). A sétima era
+`price_lists` — e a ambiguidade que eu havia registrado estava **só nos itens**.
+
+`price_lists` é inequívoca: `name`, `is_default`, `valid_from`, `valid_until`,
+`is_active`. Nada a adivinhar.
+
+### O que isso liga
+
+`services.default_price_cents` é o particular. Uma clínica que atende convênio
+cobra valores diferentes pelo mesmo procedimento, e `price_list_items.service_id`
+é exatamente esse vínculo — que fecha o catálogo construído em §8.26 com os
+convênios de §8.31. Sem tabela de preço, cada valor de convênio vive na cabeça
+de quem fatura.
+
+### O repasse ao profissional continua fora, e a tela diz por quê
+
+`price_list_items` tem `professional_share_percent` **e**
+`professional_share_cents`. As duas expressam a mesma coisa, nada declara qual
+vence quando ambas estão preenchidas, e não há linha gravada que revele a
+convenção. Escolher seria adivinhar um número que vira dinheiro no bolso de
+alguém — mesma classe de `allergies.severity` e `work_schedules.weekday`.
+
+As duas colunas ficam fora do `select` também, e não só das escritas: lê-las
+colocaria no DTO um valor cuja unidade ninguém confirmou, e número no DTO acaba
+na tela. A consulta que destrava está na mensagem exibida no painel.
+
+### Uma tabela padrão, e a ORDEM das duas escritas
+
+No máximo uma padrão por clínica: duas deixam quem fatura sem saber qual preço
+vale. Não há função no banco para as duas escritas juntas, e esta fatia não cria
+migration — então o repositório **limpa o padrão anterior antes** de promover.
+
+A ordem é a proteção: se a segunda escrita falhar, a clínica fica **sem** padrão
+— estado visível, que pede uma escolha. A ordem inversa deixaria duas padrão, e
+aí ninguém sabe qual vale. Há teste que verifica a sequência.
+
+Tabela nova nasce **sem** ser padrão, mesmo sendo a primeira: promover
+automaticamente faria a primeira criada virar a referência de preço da clínica
+sem ninguém decidir isso.
+
+### Serviço aparece uma vez por tabela
+
+Dois itens para o mesmo serviço na mesma tabela deixam quem fatura sem saber
+qual valor cobrar. O seletor só oferece serviços ainda não precificados, e o
+repositório atualiza o item existente em vez de criar um segundo. Entre tabelas
+diferentes é o contrário — é para isso que elas existem.
+
+Item removido é apagado de verdade: tabela de preço é configuração, e o que foi
+cobrado vive em `invoice_items` com o valor copiado no momento da cobrança.
+
+### Vigência é comparação de data
+
+Tabela fora da janela **continua na lista**, sinalizada — quem fatura um
+atendimento antigo precisa dela. E serviço apagado do catálogo não vira item
+órfão sem nome: o item continua existindo, e esconder o nome deixaria um preço
+que ninguém consegue interpretar.
+
+### Estado
+
+Painel em `/servicos`, abaixo do catálogo, como slot com leitura e falha
+próprias — se as tabelas não carregarem, o cadastro de serviço continua
+servindo. `catalog` segue **COMPLETO** para o que as tabelas suportam, agora com
+98 testes (44 novos: 12 de domínio, 16 de repositório, 16 de UI).
 
 ---
 

@@ -67,6 +67,7 @@ const emptyForm: FormState = {
  * pode apontar para ela.
  */
 export function CatalogScreen({
+  priceListsSlot,
   services,
   onSubmit,
   onSetActive,
@@ -242,7 +243,7 @@ export function CatalogScreen({
           title="Serviços"
           description={
             canSeePrice
-              ? 'Preço base do particular. Tabelas por convênio ainda não são geridas aqui.'
+              ? 'Preço base do particular. Valores por convênio ficam nas tabelas de preço, abaixo.'
               : 'Seu perfil não exibe valores — nome, código e duração seguem disponíveis.'
           }
           action={
@@ -386,11 +387,13 @@ export function CatalogScreen({
         )}
       </Card>
 
+      {priceListsSlot}
+
       <Modal
         open={modalOpen}
         onOpenChange={(open) => (open ? setModalOpen(true) : close())}
         title={editing ? 'Editar serviço' : 'Novo serviço'}
-        description="Nome e preço base. Tabelas por convênio ainda não são geridas aqui."
+        description="Nome e preço base do particular. Valores por convênio ficam nas tabelas de preço."
         footer={
           <>
             <Button variant="secondary" onClick={() => close()} disabled={saving}>
