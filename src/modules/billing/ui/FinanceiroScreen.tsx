@@ -14,6 +14,7 @@ import { useState, useTransition } from 'react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
@@ -97,7 +98,7 @@ export function FinanceiroScreen({
   const [, startTransition] = useTransition()
   const [creating, setCreating] = useState(false)
   const [paying, setPaying] = useState<InvoiceDto | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [canceling, setCanceling] = useState<InvoiceDto | null>(null)
 
   function refresh() {
     startTransition(() => router.refresh())
@@ -129,15 +130,15 @@ export function FinanceiroScreen({
         </p>
       )}
 
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-card border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
-        >
-          {error}
-        </p>
-      ) : null}
+      {/*
+        O aviso de erro no nível da TELA saiu junto com o cancelamento em um
+        clique — ele era o único escritor deste estado.
 
+        E era o lugar errado: a recusa aparecia no topo da página enquanto a
+        pessoa olhava a linha da cobrança, lá embaixo. Todas as outras ações
+        desta tela já devolvem a mensagem para o próprio modal, que é onde a
+        decisão foi tomada. O cancelamento agora faz o mesmo.
+      */}
       <p className="text-label text-muted">{periodLabel}</p>
 
       <section aria-label="Resumo financeiro">
@@ -240,15 +241,7 @@ export function FinanceiroScreen({
                       invoice.status !== 'canceled' ? (
                         <Button
                           variant="ghost"
-                          onClick={async () => {
-                            setError(null)
-                            const result = await cancelInvoiceAction({
-                              invoiceId: invoice.id,
-                              reason: '',
-                            })
-                            if (!result.ok) setError(result.error.message)
-                            else refresh()
-                          }}
+                          onClick={() => setCanceling(invoice)}
                         >
                           Cancelar
                         </Button>
@@ -335,6 +328,57 @@ export function FinanceiroScreen({
           return null
         }}
       />
+
+      {/*
+        Cancelar cobrança era um `onClick` solto: um clique, sem pergunta, e com
+        `reason: ''` fixo no corpo da chamada.
+
+        As duas coisas se explicam juntas. O `audit` de `cancelInvoice.action`
+        promete registrar por que a cobrança caiu, e `invoices.cancel_reason`
+        existe para isso — mas a tela nunca perguntava, então o motivo era
+        sempre nulo. Motivo opcional que ninguém pede é motivo que não existe, e
+        a auditoria financeira ficava com a data e o autor de um cancelamento
+        que ninguém consegue explicar seis meses depois.
+      */}
+      <ConfirmDialog
+        open={canceling !== null}
+        onOpenChange={(open) => {
+          if (!open) setCanceling(null)
+        }}
+        title="Cancelar cobrança"
+        description="A cobrança deixa de ser devida, e o registro permanece."
+        confirmLabel="Cancelar cobrança"
+        pendingLabel="Cancelando…"
+        cancelLabel="Manter cobrança"
+        reason={{
+          label: 'Motivo do cancelamento',
+          placeholder: 'Ex.: atendimento não realizado, cobrança duplicada',
+          required: true,
+          hint: 'Fica em `cancel_reason` e aparece na auditoria financeira.',
+          missingMessage: 'Escreva o motivo antes de cancelar a cobrança.',
+        }}
+        onConfirm={async (reason) => {
+          const result = await cancelInvoiceAction({
+            invoiceId: canceling!.id,
+            reason: reason ?? '',
+          })
+
+          if (!result.ok) return result.error.message
+
+          setCanceling(null)
+          refresh()
+          return null
+        }}
+      >
+        <p className="text-aux leading-6 text-foreground">
+          <strong className="font-semibold">
+            {canceling?.patientName ?? 'Cobrança'}
+          </strong>{' '}
+          — {canceling ? formatCents(canceling.totalCents) : ''}. A linha
+          continua no financeiro com a data do cancelamento e quem cancelou;
+          nada é apagado.
+        </p>
+      </ConfirmDialog>
     </div>
   )
 }

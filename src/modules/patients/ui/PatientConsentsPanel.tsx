@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { StatusBadge } from '@/components/ui/status-badge'
 
 import { grantPatientConsentAction } from '../actions/grantPatientConsent.action'
@@ -66,6 +67,7 @@ export function PatientConsentsPanel({
   const router = useRouter()
   const [pending, setPending] = useState<PatientConsentPurpose | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [revoking, setRevoking] = useState<PatientConsentRow | null>(null)
 
   const enabled = isLive && canManage
   const disabledReason = !isLive
@@ -74,10 +76,11 @@ export function PatientConsentsPanel({
       ? 'Seu papel não permite alterar consentimentos deste paciente.'
       : undefined
 
+  /** Devolve a mensagem de erro, ou `null` — o contrato do `ConfirmDialog`. */
   async function run(
     purpose: PatientConsentPurpose,
     intent: 'grant' | 'revoke',
-  ) {
+  ): Promise<string | null> {
     setFeedback(null)
     setPending(purpose)
 
@@ -91,7 +94,7 @@ export function PatientConsentsPanel({
 
       if (!result.ok) {
         setFeedback({ purpose, tone: 'error', message: result.error.message })
-        return
+        return result.error.message
       }
 
       setFeedback({
@@ -107,6 +110,7 @@ export function PatientConsentsPanel({
       // estado novo. Nao ha estado local a atualizar — e, nao havendo, nao ha como
       // a tela mostrar algo que o banco nao confirmou.
       router.refresh()
+      return null
     } catch {
       // A action rejeitou antes de devolver `Result` — rede caiu, deploy no meio.
       setFeedback({
@@ -114,6 +118,7 @@ export function PatientConsentsPanel({
         tone: 'error',
         message: patientConsentMessages.unavailable,
       })
+      return patientConsentMessages.unavailable
     } finally {
       setPending(null)
     }
@@ -238,7 +243,16 @@ export function PatientConsentsPanel({
                       isLoading={isPending}
                       title={disabledReason}
                       aria-label={`Revogar consentimento — ${row.label}`}
-                      onClick={() => run(row.purpose, 'revoke')}
+                      /*
+                       * Revogar é registro LEGAL, e era um clique.
+                       *
+                       * Registrar de novo não desfaz: a revogação fica na
+                       * trilha com data e autor, como tem que ficar. Por isso a
+                       * ação é irreversível no sentido que importa — o histórico
+                       * passa a dizer que esta pessoa retirou o consentimento
+                       * num dia em que talvez não tenha retirado.
+                       */
+                      onClick={() => setRevoking(row)}
                     >
                       {isPending ? 'Revogando...' : 'Revogar'}
                     </Button>
@@ -259,6 +273,39 @@ export function PatientConsentsPanel({
           })}
         </ul>
       </div>
+
+      <ConfirmDialog
+        open={revoking !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevoking(null)
+        }}
+        title="Revogar consentimento"
+        description="A clínica deixa de tratar os dados desta pessoa para esta finalidade."
+        confirmLabel="Revogar consentimento"
+        pendingLabel="Revogando…"
+        cancelLabel="Manter consentimento"
+        onConfirm={async () => {
+          if (!revoking) return null
+
+          const failure = await run(revoking.purpose, 'revoke')
+          if (failure) return failure
+
+          setRevoking(null)
+          return null
+        }}
+      >
+        <p className="text-aux leading-6 text-foreground">
+          Finalidade:{' '}
+          <strong className="font-semibold">{revoking?.label}</strong>.{' '}
+          {revoking?.description}
+        </p>
+
+        <p className="rounded-field border border-border-card bg-background px-3.5 py-2.5 text-label leading-5 text-muted">
+          A revogação fica registrada com data e autor, e o histórico anterior
+          não é apagado. Registrar de novo depois cria um consentimento novo —
+          não desfaz este.
+        </p>
+      </ConfirmDialog>
     </Card>
   )
 }

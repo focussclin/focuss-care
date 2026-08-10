@@ -58,6 +58,26 @@ export function AppShell({
   return (
     <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
       <div className="min-h-dvh bg-background">
+        {/*
+          Pular para o conteúdo — primeiro elemento focável da página.
+
+          A sidebar renderiza até 31 itens antes do `<main>`. Sem este link,
+          quem navega por teclado atravessa o menu inteiro A CADA TROCA DE
+          PÁGINA para chegar no que veio ver. Não é desconforto: numa recepção,
+          é a diferença entre atender e esperar.
+
+          `sr-only focus:not-sr-only` é o padrão: invisível até receber foco, e
+          aí aparece ancorado no topo. O `<main>` tem `tabIndex={-1}` porque
+          elemento não focável não recebe foco por âncora — o navegador rolaria
+          até ele e deixaria o foco para trás, no menu.
+        */}
+        <a
+          href="#conteudo"
+          className="sr-only rounded-field bg-surface px-4 py-3 text-aux font-semibold text-link shadow-raised focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:outline-none focus:shadow-focus"
+        >
+          Pular para o conteúdo
+        </a>
+
         <aside
           className={cn(
             'fixed inset-y-0 left-0 z-40 hidden border-r border-white/5 transition-[width] duration-200 md:block',
@@ -88,7 +108,11 @@ export function AppShell({
             onMenuClick={() => setDrawerOpen(true)}
             onOpenCommands={() => setCommandsOpen(true)}
           />
-          <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
+          <main
+            id="conteudo"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-[1680px] px-4 py-6 outline-none sm:px-6 md:py-8 lg:px-8 xl:px-10"
+          >
             {children}
           </main>
         </div>

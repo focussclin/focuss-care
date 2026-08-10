@@ -154,8 +154,16 @@ export function SidebarNav({
         >
           {navSections.map((section, index) => (
             <div key={section.key} className={cn(index > 0 && 'mt-6')}>
+              {/*
+                `white/58`, e nao `white/38`.
+
+                Sobre `bg-brand` (#0b315f) o 38% da 3,15:1 — reprova o AA
+                (4,5:1) em texto de 10px maiusculo, que ja e o pior caso de
+                legibilidade. Nao ha isencao aqui: sao cabecalhos de secao,
+                conteudo estrutural, e nao item desabilitado. 58% da 5,36:1.
+              */}
               {!collapsed ? (
-                <p className="mb-2 px-3 text-[10px] font-semibold tracking-[0.12em] text-white/38 uppercase">
+                <p className="mb-2 px-3 text-[10px] font-semibold tracking-[0.12em] text-white/58 uppercase">
                   {section.label}
                 </p>
               ) : null}

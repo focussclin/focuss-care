@@ -35,9 +35,20 @@
   /*
    * Atencao suave — DASHBOARD_DESIGN.md pede "cor de atencao suave" para o card
    * "Pacientes aguardando" sem fixar o valor. Ambar terroso derivado para
-   * harmonizar com a paleta. Pendente de confirmacao do Codex.
+   * harmonizar com a paleta.
+   *
+   * ESCURECIDO em 10/08/2026, de #a8761f para #8a6015. O valor anterior estava
+   * marcado "pendente de confirmacao" e reprovava o AA nas duas superficies em
+   * que ele e usado:
+   *
+   *   #a8761f sobre #f6eedd = 3,45:1   ·   sobre branco = 3,98:1
+   *   #8a6015 sobre #f6eedd = 4,83:1   ·   sobre branco = 5,58:1  (minimo 4,5)
+   *
+   * "Suave" continua valendo — o tom e o mesmo ambar terroso, so com
+   * luminancia suficiente para o texto ser lido por quem nao tem visao
+   * perfeita, que num painel de clinica e a maioria em algum momento do dia.
    */
-  --fc-attention-600: #a8761f;
+  --fc-attention-600: #8a6015;
   --fc-attention-100: #f6eedd;
 
   /* Status — AGENDA_DESIGN.md e PATIENTS_DESIGN.md usam a mesma escala */
