@@ -62,6 +62,15 @@ export interface Invoice {
   notes: string | null
   createdAt: Date
   items: readonly InvoiceItem[]
+  /**
+   * Os recebimentos individuais desta cobrança.
+   *
+   * `paidCents` continua sendo o total e a fonte do saldo — nada aqui
+   * recalcula dinheiro. Esta lista existe porque um RECIBO comprova UM
+   * recebimento, com valor, método e data próprios: o total sozinho não permite
+   * emitir comprovante nenhum.
+   */
+  payments: readonly Payment[]
 }
 
 export interface NewInvoiceData {

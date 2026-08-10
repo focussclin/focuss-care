@@ -41,6 +41,14 @@ export const billingMessages = {
    */
   issueUnavailable:
     'A emissão de documento fiscal numerado ainda não está disponível: depende de uma função do banco de dados cuja assinatura não pôde ser verificada. As cobranças abaixo são registro interno e continuam valendo para controle e recebimento.',
+  /**
+   * O mesmo bloqueio, dito dentro do recibo.
+   *
+   * O aviso da tela de trás não acompanha o comprovante impresso, e uma clínica
+   * que trate este papel como nota fiscal deixa de emitir a nota.
+   */
+  receiptNotFiscal:
+    'Este é um comprovante interno de recebimento e NÃO é documento fiscal. A emissão de nota fiscal numerada não está disponível nesta instalação.',
 } as const
 
 /** Formas de pagamento que a tela oferece, com o nome que a recepção usa. */
@@ -291,6 +299,29 @@ export interface InvoiceDto {
   dueDate: string | null
   createdAt: string
   items: readonly InvoiceItemDto[]
+  /** Os recebimentos individuais — cada um rende um recibo. */
+  payments: readonly InvoicePaymentDto[]
+}
+
+export interface InvoicePaymentDto {
+  id: string
+  amountCents: number
+  method: string
+  paidAt: string
+  notes: string | null
+}
+
+/**
+ * Como a clínica se identifica no recibo.
+ *
+ * **Sem `id`.** Nada no comprovante o usa, e o identificador interno do tenant
+ * não tem por que atravessar a fronteira só para ser impresso. A leitura é
+ * tenant-scoped na rota, por `getClinicSettingsRepository`.
+ */
+export interface ReceiptClinicDto {
+  tradeName: string
+  legalName: string | null
+  cnpj: string | null
 }
 
 export interface CashEntryDto {

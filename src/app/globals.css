@@ -58,3 +58,51 @@
     }
   }
 }
+
+/*
+ * Folha de impressao do RECIBO.
+ *
+ * O recibo vive num modal do Radix, que renderiza num portal e posiciona o
+ * dialogo com `position: fixed` + `transform` para centralizar. Sem estas
+ * regras, mandar imprimir sairia com o painel do financeiro inteiro atras do
+ * comprovante, e o comprovante cortado no meio da folha — que foi exatamente a
+ * razao de o botao nao existir antes.
+ *
+ * Duas coisas acontecem aqui, e as duas sao necessarias:
+ *
+ *  1. `visibility` esconde a pagina e devolve a visibilidade so a subarvore
+ *     marcada. E `visibility`, e nao `display: none`, porque esconder por
+ *     display quebraria o layout dos ancestrais do portal.
+ *  2. O dialogo deixa de flutuar: sem neutralizar `position` e `transform`, o
+ *     comprovante imprimiria na posicao em que estava centralizado na tela.
+ *
+ * Imprimir so acontece com o recibo aberto — o botao vive dentro dele —, entao
+ * mirar `[role='dialog']` alcanca o dialogo certo sem depender de `:has()`.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  [data-receipt-sheet],
+  [data-receipt-sheet] * {
+    visibility: visible;
+  }
+
+  [role='dialog'] {
+    position: static !important;
+    inset: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    /* Papel branco e tinta preta, seja qual for o tema da tela. */
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  [data-receipt-sheet] {
+    padding: 0 !important;
+  }
+}

@@ -13,6 +13,7 @@ import {
 import { getBillingRepository } from '@/modules/billing/infrastructure/repository'
 import { FinanceiroScreen } from '@/modules/billing/ui/FinanceiroScreen'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
+import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 import { PATIENT_PAGE_MAX_SIZE } from '@/modules/patients/schemas/patientQuery.schema'
 
 export const metadata: Metadata = {
@@ -63,8 +64,34 @@ export default async function FinanceiroPage() {
     }),
   ])
 
+  /*
+   * Identidade da clínica para o recibo — leitura tenant-scoped, aqui na rota.
+   *
+   * `getClinicSettingsRepository` resolve a clínica ativa pelo banco; o id
+   * nunca chega ao cliente, porque nada no comprovante o usa. Falha na leitura
+   * **não derruba o financeiro**: o recibo diz que não carregou os dados da
+   * clínica, e a tela continua servindo para cobrar e receber.
+   */
+  const receiptClinic = await (async () => {
+    try {
+      const settingsSource = await getClinicSettingsRepository()
+      const settings = await settingsSource.repository.load(settingsSource.clinicId)
+      return {
+        tradeName: settings.profile.tradeName,
+        legalName: settings.profile.legalName,
+        cnpj: settings.profile.cnpj,
+      }
+    } catch (cause) {
+      console.error('[financeiro] identidade da clínica indisponível', {
+        kind: cause instanceof Error ? cause.name : typeof cause,
+      })
+      return null
+    }
+  })()
+
   return (
     <FinanceiroScreen
+      receiptClinic={receiptClinic}
       summary={toFinanceSummaryDto(summary)}
       invoices={invoices.map(toInvoiceDto)}
       payables={payables.map(toPayableDto)}

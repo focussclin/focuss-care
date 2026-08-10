@@ -34,11 +34,14 @@ import {
   type CashSessionDto,
   type FinanceSummaryDto,
   type InvoiceDto,
+  type InvoicePaymentDto,
   type PayableDto,
+  type ReceiptClinicDto,
 } from '../schemas/billing.schema'
 import { CashSessionCard } from './CashSessionCard'
 import { NewInvoiceModal, type InvoicePatientOption } from './NewInvoiceModal'
 import { PaymentModal } from './PaymentModal'
+import { ReceiptModal } from './ReceiptModal'
 import { PayablesPanel } from './PayablesPanel'
 
 export interface FinanceiroScreenProps {
@@ -52,6 +55,13 @@ export interface FinanceiroScreenProps {
   canRegisterPayment: boolean
   canManageCash: boolean
   canManagePayables: boolean
+  /**
+   * Identidade da clínica para o recibo, lida tenant-scoped na ROTA.
+   *
+   * `null` quando a leitura falha — o recibo diz isso em vez de inventar nome.
+   * O `id` da clínica NÃO vem: nada no comprovante o usa.
+   */
+  receiptClinic: ReceiptClinicDto | null
   isLive?: boolean
 }
 
@@ -92,6 +102,7 @@ export function FinanceiroScreen({
   canRegisterPayment,
   canManageCash,
   canManagePayables,
+  receiptClinic,
   isLive = false,
 }: FinanceiroScreenProps) {
   const router = useRouter()
@@ -99,6 +110,10 @@ export function FinanceiroScreen({
   const [creating, setCreating] = useState(false)
   const [paying, setPaying] = useState<InvoiceDto | null>(null)
   const [canceling, setCanceling] = useState<InvoiceDto | null>(null)
+  const [receipt, setReceipt] = useState<{
+    invoice: InvoiceDto
+    payment: InvoicePaymentDto
+  } | null>(null)
 
   function refresh() {
     startTransition(() => router.refresh())
@@ -225,6 +240,25 @@ export function FinanceiroScreen({
                       <StatusBadge tone={meta.tone}>{meta.label}</StatusBadge>
                     ) : null}
 
+                    {/*
+                      Um recibo por PAGAMENTO, e não por fatura: o comprovante
+                      atesta um valor recebido, e uma fatura paga em duas vezes
+                      gera dois papéis diferentes.
+                    */}
+                    {invoice.payments.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {invoice.payments.map((payment) => (
+                          <Button
+                            key={payment.id}
+                            variant="ghost"
+                            onClick={() => setReceipt({ invoice, payment })}
+                          >
+                            Recibo {formatCents(payment.amountCents)}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+
                     <div className="flex items-center gap-2">
                       {canPay ? (
                         <Button
@@ -313,6 +347,14 @@ export function FinanceiroScreen({
         `key` remonta o formulário a cada cobrança: é o que faz o campo de valor
         nascer com o saldo certo sem um efeito sincronizando estado.
       */}
+      <ReceiptModal
+        open={receipt !== null}
+        onOpenChange={(open) => (open ? undefined : setReceipt(null))}
+        clinic={receiptClinic}
+        invoice={receipt?.invoice ?? null}
+        payment={receipt?.payment ?? null}
+      />
+
       <PaymentModal
         key={paying?.id ?? 'sem-cobranca'}
         invoice={paying}

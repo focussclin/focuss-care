@@ -41,6 +41,13 @@ export function toInvoiceDto(invoice: Invoice): InvoiceDto {
       unitPriceCents: item.unitPriceCents,
       totalCents: item.totalCents,
     })),
+    payments: invoice.payments.map((payment) => ({
+      id: payment.id,
+      amountCents: payment.amountCents,
+      method: payment.method,
+      paidAt: payment.paidAt.toISOString(),
+      notes: payment.notes,
+    })),
   }
 }
 

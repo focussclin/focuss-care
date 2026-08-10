@@ -26,9 +26,22 @@ import type {
 } from '../domain/Billing'
 import type { BillingRepository } from '../domain/BillingRepository'
 import { BillingRepositoryError } from '../domain/BillingRepositoryError'
+import { sortPayments } from '../domain/Receipt'
 
 type Client = SupabaseClient<Database>
 
+/**
+ * Os pagamentos vêm junto por causa do RECIBO.
+ *
+ * `paid_cents` é coluna própria da fatura e continua sendo a fonte do saldo —
+ * nada aqui recalcula dinheiro. O que faltava era a linha individual: um recibo
+ * comprova UM recebimento, com valor, método e data próprios, e o total sozinho
+ * não permite emitir comprovante nenhum.
+ *
+ * O comentário mora AQUI, e não dentro da string: o conteúdo do template
+ * literal é enviado ao PostgREST como lista de colunas — comentário ali vira
+ * consulta inválida, e crase dentro dele fecha o literal.
+ */
 const INVOICE_SELECT = `
   id,
   patient_id,
@@ -49,6 +62,13 @@ const INVOICE_SELECT = `
     unit_price_cents,
     discount_cents,
     total_cents
+  ),
+  payments (
+    id,
+    amount_cents,
+    method,
+    paid_at,
+    notes
   )
 `
 
@@ -87,6 +107,15 @@ interface InvoiceRow {
     discount_cents: number
     total_cents: number | null
   }[]
+  payments:
+    | {
+        id: string
+        amount_cents: number
+        method: PaymentMethod
+        paid_at: string
+        notes: string | null
+      }[]
+    | null
 }
 
 interface PayableRow {
@@ -889,6 +918,21 @@ function toInvoice(row: InvoiceRow): Invoice {
       Math.max(item.quantity * item.unit_price_cents - item.discount_cents, 0),
   }))
 
+  /*
+   * A ordem vem do domínio, e não do banco: um relacionamento aninhado não
+   * garante sequência, e o recibo mais recente é o que se entrega no balcão.
+   */
+  const payments: Payment[] = sortPayments(
+    (row.payments ?? []).map((payment) => ({
+      id: payment.id,
+      invoiceId: row.id,
+      amountCents: payment.amount_cents,
+      method: payment.method,
+      paidAt: new Date(payment.paid_at),
+      notes: payment.notes,
+    })),
+  )
+
   return {
     id: row.id,
     patientId: row.patient_id,
@@ -903,6 +947,7 @@ function toInvoice(row: InvoiceRow): Invoice {
     notes: row.notes,
     createdAt: new Date(row.created_at),
     items,
+    payments,
   }
 }
 

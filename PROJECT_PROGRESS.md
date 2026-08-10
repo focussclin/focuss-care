@@ -61,7 +61,7 @@ de estoque).
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
-| `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa e **contas a pagar com baixa** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
+| `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa, **contas a pagar com baixa** e **recibo interno por pagamento** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
 | `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
@@ -2428,6 +2428,66 @@ que esta camada finge ter.
 `records` continua **COMPLETO** para o prontuário e ganha esta superfície, com
 50 testes: 10 de domínio, 16 de schema, 16 de repositório e 18 de action, mais
 17 de UI. Teleatendimento não foi tocado.
+
+---
+
+## 8.30 Feature — Recibo de pagamento (10/08/2026)
+
+Um recibo por **pagamento**, em modal na tela `/financeiro`. Comprovante
+interno — e a distinção com documento fiscal é a fatia inteira.
+
+### Não é nota fiscal, e o aviso vai DENTRO do recibo
+
+A emissão fiscal numerada continua bloqueada por **P-RPC**, e o aviso
+`issuanceUnavailable` segue no topo de `/financeiro`, intocado. O recibo repete
+a distinção em texto próprio (`receiptNotFiscal`), dentro do comprovante: o
+aviso da tela de trás não acompanha o papel impresso, e uma clínica que trate
+este comprovante como nota deixa de emitir a nota.
+
+**Sem numeração própria.** Numerar comprovante exige sequência sem pulo nem
+repetição — o que `document_sequences` garante e esta camada não garante
+sozinha. O recibo referencia a cobrança de origem: número fiscal quando houver
+(hoje nunca há) e id abreviado quando não.
+
+**Imprime pelo navegador, com folha preparada.** `window.print()` sozinho sairia
+com o painel do financeiro atrás e o comprovante cortado no meio da página — o
+diálogo é posicionado com `fixed` e `transform`. A regra em `globals.css` faz
+duas coisas: esconde a página por `visibility` (e não `display`, que quebraria o
+layout dos ancestrais do portal) e neutraliza o posicionamento do diálogo. Só a
+subárvore marcada com `data-receipt-sheet` reaparece; os botões saem por
+`print:hidden`.
+
+**Não há geração de PDF nem arquivo.** Quem salva em PDF é o próprio navegador,
+se quem imprime escolher — este código não gera nada.
+
+### Um recibo por pagamento, não por fatura
+
+O comprovante atesta um valor recebido. Fatura paga em duas vezes rende dois
+papéis diferentes, com valor, método e data próprios — e o total de `paid_cents`
+sozinho não permite emitir comprovante nenhum.
+
+Foi o que exigiu ler `payments` junto da fatura. **`paid_cents` continua sendo a
+fonte do saldo**: nada no recibo recalcula dinheiro, e montar um número novo ali
+criaria uma segunda contabilidade ao lado da que `payments` guarda.
+
+### A identidade da clínica é lida na rota, sem o id
+
+`getClinicSettingsRepository` resolve a clínica ativa pelo banco, na rota, e o
+que atravessa a fronteira é só `tradeName`, `legalName` e `cnpj`. **O `id` não
+vai**: nada no comprovante o usa, e o identificador do tenant não tem por que
+ser impresso. Há teste que guarda essa decisão.
+
+`cnpj` **existe** em `ClinicProfile` — não foi preciso adivinhar identificador.
+Quando ele está em branco no cadastro, o recibo diz que falta em vez de omitir
+em silêncio: quem entrega o papel precisa saber.
+
+Falha na leitura da clínica **não derruba o financeiro**: o recibo informa que
+os dados não carregaram, e a tela continua servindo para cobrar e receber.
+
+### Estado
+
+`billing` continua **EM ANDAMENTO** — o recibo não destrava P-RPC e não muda o
+que falta. 29 testes novos: 12 de domínio e 17 de UI.
 
 ---
 
