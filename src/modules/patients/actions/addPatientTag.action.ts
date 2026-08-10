@@ -41,7 +41,6 @@ const runAddPatientTag = createAction<AddPatientTagInput, PatientTagMutationDto,
 
       const tag = await patientTagRepositoryFor(context.supabase).addToPatient(
         context.clinicId,
-        context.userId,
         input,
       )
       return ok<PatientTagMutationDto>({ ...toPatientTagDto(tag), patientId: patient.id })

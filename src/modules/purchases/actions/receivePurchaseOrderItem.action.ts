@@ -30,7 +30,6 @@ const runReceivePurchaseOrderItem = createAction<
       const item = await purchaseRepositoryFor(context.supabase).receiveOrderItem(
         context.clinicId,
         input.orderItemId,
-        context.userId,
         input.quantity,
       )
       return ok({

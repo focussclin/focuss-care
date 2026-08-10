@@ -136,7 +136,6 @@ export interface ReconciliationRpcArgs {
   p_transaction_id: string
   p_invoice_id: string | null
   p_payable_id: string | null
-  p_reconciled_by: string
   p_notes: string | null
 }
 

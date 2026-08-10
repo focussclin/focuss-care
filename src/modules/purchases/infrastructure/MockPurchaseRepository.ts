@@ -51,11 +51,9 @@ export class MockPurchaseRepository implements PurchaseRepository {
 
   async createOrder(
     _clinicId: string,
-    _createdBy: string,
     _data: NewPurchaseOrderData,
   ): Promise<PurchaseOrder> {
     void _clinicId
-    void _createdBy
     void _data
     throw unavailable()
   }
@@ -63,12 +61,10 @@ export class MockPurchaseRepository implements PurchaseRepository {
   async transitionOrder(
     _clinicId: string,
     _orderId: string,
-    _changedBy: string,
     _status: PurchaseOrderStatus,
   ): Promise<PurchaseOrder> {
     void _clinicId
     void _orderId
-    void _changedBy
     void _status
     throw unavailable()
   }
@@ -76,12 +72,10 @@ export class MockPurchaseRepository implements PurchaseRepository {
   async receiveOrderItem(
     _clinicId: string,
     _orderItemId: string,
-    _receivedBy: string,
     _quantity: number,
   ): Promise<PurchaseOrder['items'][number]> {
     void _clinicId
     void _orderItemId
-    void _receivedBy
     void _quantity
     throw unavailable()
   }

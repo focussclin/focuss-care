@@ -189,7 +189,6 @@ create or replace function public.reconcile_bank_transaction(
   p_transaction_id uuid,
   p_invoice_id uuid,
   p_payable_id uuid,
-  p_reconciled_by uuid,
   p_notes text
 )
 returns public.bank_reconciliations
@@ -249,7 +248,7 @@ begin
     p_payable_id,
     v_transaction.amount_cents,
     nullif(trim(p_notes), ''),
-    p_reconciled_by
+    auth.uid()
   ) returning * into v_reconciliation;
 
   update public.bank_transactions
@@ -261,8 +260,8 @@ begin
 end;
 $$;
 
-revoke all on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, uuid, text) from public;
-grant execute on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, uuid, text) to authenticated;
+revoke all on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, text) from public;
+grant execute on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, text) to authenticated;
 
 commit;
 

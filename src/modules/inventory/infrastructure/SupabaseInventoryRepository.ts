@@ -171,7 +171,6 @@ export class SupabaseInventoryRepository implements InventoryRepository {
 
   async recordMovement(
     clinicId: string,
-    createdBy: string,
     data: NewInventoryMovementData,
   ): Promise<InventoryMovement> {
     const { data: row, error } = await this.client.rpc('record_inventory_movement', {
@@ -181,7 +180,6 @@ export class SupabaseInventoryRepository implements InventoryRepository {
       p_quantity: data.quantity,
       p_unit_cost_cents: data.unitCostCents,
       p_reason: data.reason,
-      p_created_by: createdBy,
     })
 
     if (error) throw toInventoryError(error)

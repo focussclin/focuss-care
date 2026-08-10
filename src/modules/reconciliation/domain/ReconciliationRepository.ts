@@ -15,7 +15,7 @@ export interface ReconciliationRepository {
   createAccount(clinicId: string, createdBy: string, data: NewBankAccountData): Promise<BankAccount>
   updateAccount(clinicId: string, accountId: string, isActive: boolean): Promise<BankAccount>
   createTransaction(clinicId: string, createdBy: string, data: NewBankTransactionData): Promise<BankTransaction>
-  reconcileTransaction(clinicId: string, reconciledBy: string, data: ReconcileBankTransactionData): Promise<BankTransactionReconciliationResult>
+  reconcileTransaction(clinicId: string, data: ReconcileBankTransactionData): Promise<BankTransactionReconciliationResult>
 }
 
 export interface BankTransactionReconciliationResult {

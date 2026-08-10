@@ -164,7 +164,6 @@ export class SupabasePurchaseRepository implements PurchaseRepository {
 
   async createOrder(
     clinicId: string,
-    createdBy: string,
     data: NewPurchaseOrderData,
   ): Promise<PurchaseOrder> {
     const { data: row, error } = await this.client.rpc('create_purchase_order', {
@@ -174,7 +173,6 @@ export class SupabasePurchaseRepository implements PurchaseRepository {
         ? toDateOnly(data.expectedDeliveryDate)
         : null,
       p_notes: data.notes,
-      p_created_by: createdBy,
       p_items: data.items.map((item) => ({
         inventory_item_id: item.inventoryItemId,
         quantity: item.quantity,
@@ -190,7 +188,6 @@ export class SupabasePurchaseRepository implements PurchaseRepository {
   async transitionOrder(
     clinicId: string,
     orderId: string,
-    changedBy: string,
     status: PurchaseOrderStatus,
   ): Promise<PurchaseOrder> {
     const { data: row, error } = await this.client.rpc(
@@ -199,7 +196,6 @@ export class SupabasePurchaseRepository implements PurchaseRepository {
         p_clinic_id: clinicId,
         p_order_id: orderId,
         p_status: status,
-        p_changed_by: changedBy,
       },
     )
 
@@ -211,14 +207,12 @@ export class SupabasePurchaseRepository implements PurchaseRepository {
   async receiveOrderItem(
     clinicId: string,
     orderItemId: string,
-    receivedBy: string,
     quantity: number,
   ): Promise<PurchaseOrderItem> {
     const { data: row, error } = await this.client.rpc('receive_purchase_order_item', {
       p_clinic_id: clinicId,
       p_order_item_id: orderItemId,
       p_quantity: quantity,
-      p_received_by: receivedBy,
     })
 
     if (error) throw toPurchaseError(error)

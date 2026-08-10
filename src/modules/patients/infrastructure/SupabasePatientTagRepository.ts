@@ -41,7 +41,6 @@ export class SupabasePatientTagRepository implements PatientTagRepository {
 
   async addToPatient(
     clinicId: string,
-    createdBy: string,
     data: AddPatientTagData,
   ): Promise<PatientTag> {
     const { data: row, error } = await this.client.rpc('add_patient_tag', {
@@ -49,7 +48,6 @@ export class SupabasePatientTagRepository implements PatientTagRepository {
       p_patient_id: data.patientId,
       p_name: data.name,
       p_color: data.color,
-      p_created_by: createdBy,
     })
 
     if (error) throw toTagError(error)

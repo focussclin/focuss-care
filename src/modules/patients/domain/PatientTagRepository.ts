@@ -4,7 +4,6 @@ export interface PatientTagRepository {
   listByPatient(clinicId: string, patientId: string): Promise<PatientTag[]>
   addToPatient(
     clinicId: string,
-    createdBy: string,
     data: AddPatientTagData,
   ): Promise<PatientTag>
   removeFromPatient(

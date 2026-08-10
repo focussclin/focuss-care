@@ -100,8 +100,7 @@ create or replace function public.add_patient_tag(
   p_clinic_id uuid,
   p_patient_id uuid,
   p_name text,
-  p_color text,
-  p_created_by uuid
+  p_color text
 )
 returns public.patient_tags
 language plpgsql
@@ -134,7 +133,7 @@ begin
   end if;
 
   insert into public.patient_tags (clinic_id, name, color, created_by)
-  values (p_clinic_id, v_name, p_color, p_created_by)
+  values (p_clinic_id, v_name, p_color, auth.uid())
   on conflict do nothing;
 
   select * into v_tag
@@ -150,8 +149,8 @@ begin
 end;
 $$;
 
-revoke all on function public.add_patient_tag(uuid, uuid, text, text, uuid) from public;
-grant execute on function public.add_patient_tag(uuid, uuid, text, text, uuid) to authenticated;
+revoke all on function public.add_patient_tag(uuid, uuid, text, text) from public;
+grant execute on function public.add_patient_tag(uuid, uuid, text, text) to authenticated;
 
 commit;
 

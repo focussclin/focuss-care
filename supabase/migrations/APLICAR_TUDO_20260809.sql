@@ -905,8 +905,7 @@ create or replace function public.add_patient_tag(
   p_clinic_id uuid,
   p_patient_id uuid,
   p_name text,
-  p_color text,
-  p_created_by uuid
+  p_color text
 )
 returns public.patient_tags
 language plpgsql
@@ -939,7 +938,7 @@ begin
   end if;
 
   insert into public.patient_tags (clinic_id, name, color, created_by)
-  values (p_clinic_id, v_name, p_color, p_created_by)
+  values (p_clinic_id, v_name, p_color, auth.uid())
   on conflict do nothing;
 
   select * into v_tag
@@ -955,8 +954,8 @@ begin
 end;
 $$;
 
-revoke all on function public.add_patient_tag(uuid, uuid, text, text, uuid) from public;
-grant execute on function public.add_patient_tag(uuid, uuid, text, text, uuid) to authenticated;
+revoke all on function public.add_patient_tag(uuid, uuid, text, text) from public;
+grant execute on function public.add_patient_tag(uuid, uuid, text, text) to authenticated;
 
 commit;
 
@@ -1375,7 +1374,6 @@ create or replace function public.reconcile_bank_transaction(
   p_transaction_id uuid,
   p_invoice_id uuid,
   p_payable_id uuid,
-  p_reconciled_by uuid,
   p_notes text
 )
 returns public.bank_reconciliations
@@ -1435,7 +1433,7 @@ begin
     p_payable_id,
     v_transaction.amount_cents,
     nullif(trim(p_notes), ''),
-    p_reconciled_by
+    auth.uid()
   ) returning * into v_reconciliation;
 
   update public.bank_transactions
@@ -1447,8 +1445,8 @@ begin
 end;
 $$;
 
-revoke all on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, uuid, text) from public;
-grant execute on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, uuid, text) to authenticated;
+revoke all on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, text) from public;
+grant execute on function public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, text) to authenticated;
 
 commit;
 
@@ -1612,8 +1610,7 @@ create or replace function public.record_inventory_movement(
   p_movement_type text,
   p_quantity integer,
   p_unit_cost_cents integer,
-  p_reason text,
-  p_created_by uuid
+  p_reason text
 )
 returns public.inventory_movements
 language plpgsql
@@ -1660,15 +1657,15 @@ begin
     clinic_id, item_id, movement_type, quantity, unit_cost_cents, reason, created_by
   ) values (
     p_clinic_id, p_item_id, p_movement_type, p_quantity, p_unit_cost_cents,
-    nullif(trim(p_reason), ''), p_created_by
+    nullif(trim(p_reason), ''), auth.uid()
   ) returning * into v_movement;
 
   return v_movement;
 end;
 $$;
 
-revoke all on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text, uuid) from public;
-grant execute on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text, uuid) to authenticated;
+revoke all on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) from public;
+grant execute on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) to authenticated;
 
 commit;
 
@@ -1906,7 +1903,6 @@ create or replace function public.create_purchase_order(
   p_supplier_id uuid,
   p_expected_delivery_date date,
   p_notes text,
-  p_created_by uuid,
   p_items jsonb
 )
 returns public.purchase_orders
@@ -1947,7 +1943,7 @@ begin
     p_supplier_id,
     p_expected_delivery_date,
     nullif(trim(p_notes), ''),
-    p_created_by
+    auth.uid()
   ) returning * into v_order;
 
   for v_item in select value from jsonb_array_elements(p_items)
@@ -2002,8 +1998,7 @@ $$;
 create or replace function public.transition_purchase_order_status(
   p_clinic_id uuid,
   p_order_id uuid,
-  p_status text,
-  p_changed_by uuid
+  p_status text
 )
 returns public.purchase_orders
 language plpgsql
@@ -2056,7 +2051,7 @@ begin
 
   update public.purchase_orders
   set status = v_next,
-      approved_by = case when v_next = 'approved' then p_changed_by else approved_by end,
+      approved_by = case when v_next = 'approved' then auth.uid() else approved_by end,
       updated_at = now()
   where id = p_order_id and clinic_id = p_clinic_id
   returning * into v_order;
@@ -2068,8 +2063,7 @@ $$;
 create or replace function public.receive_purchase_order_item(
   p_clinic_id uuid,
   p_order_item_id uuid,
-  p_quantity integer,
-  p_received_by uuid
+  p_quantity integer
 )
 returns public.purchase_order_items
 language plpgsql
@@ -2141,7 +2135,7 @@ begin
     p_quantity,
     v_line.unit_cost_cents,
     'Recebimento de pedido ' || left(v_order.id::text, 8),
-    p_received_by
+    auth.uid()
   );
 
   update public.purchase_order_items
@@ -2168,14 +2162,14 @@ begin
 end;
 $$;
 
-revoke all on function public.create_purchase_order(uuid, uuid, date, text, uuid, jsonb) from public;
-grant execute on function public.create_purchase_order(uuid, uuid, date, text, uuid, jsonb) to authenticated;
+revoke all on function public.create_purchase_order(uuid, uuid, date, text, jsonb) from public;
+grant execute on function public.create_purchase_order(uuid, uuid, date, text, jsonb) to authenticated;
 
-revoke all on function public.transition_purchase_order_status(uuid, uuid, text, uuid) from public;
-grant execute on function public.transition_purchase_order_status(uuid, uuid, text, uuid) to authenticated;
+revoke all on function public.transition_purchase_order_status(uuid, uuid, text) from public;
+grant execute on function public.transition_purchase_order_status(uuid, uuid, text) to authenticated;
 
-revoke all on function public.receive_purchase_order_item(uuid, uuid, integer, uuid) from public;
-grant execute on function public.receive_purchase_order_item(uuid, uuid, integer, uuid) to authenticated;
+revoke all on function public.receive_purchase_order_item(uuid, uuid, integer) from public;
+grant execute on function public.receive_purchase_order_item(uuid, uuid, integer) to authenticated;
 
 commit;
 

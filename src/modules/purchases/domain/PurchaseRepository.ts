@@ -24,19 +24,16 @@ export interface PurchaseRepository {
   ): Promise<PurchaseSupplier>
   createOrder(
     clinicId: string,
-    createdBy: string,
     data: NewPurchaseOrderData,
   ): Promise<PurchaseOrder>
   transitionOrder(
     clinicId: string,
     orderId: string,
-    changedBy: string,
     status: PurchaseOrderStatus,
   ): Promise<PurchaseOrder>
   receiveOrderItem(
     clinicId: string,
     orderItemId: string,
-    receivedBy: string,
     quantity: number,
   ): Promise<PurchaseOrder['items'][number]>
 }

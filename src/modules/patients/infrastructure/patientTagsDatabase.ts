@@ -21,7 +21,6 @@ export interface PatientTagRpcArgs {
   p_patient_id: string
   p_name: string
   p_color: PatientTagColor
-  p_created_by: string
 }
 
 export interface PatientTagQueryError {

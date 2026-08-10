@@ -30,7 +30,6 @@ const runCreatePurchaseOrder = createAction<
     try {
       const order = await purchaseRepositoryFor(context.supabase).createOrder(
         context.clinicId,
-        context.userId,
         {
           supplierId: input.supplierId,
           expectedDeliveryDate: input.expectedDeliveryDate,

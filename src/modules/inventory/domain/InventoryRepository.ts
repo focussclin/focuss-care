@@ -24,9 +24,20 @@ export interface InventoryRepository {
     itemId: string,
     isActive: boolean,
   ): Promise<InventoryItem>
+  /**
+   * Registra a movimentação. **Quem movimentou sai da sessão, no banco.**
+   *
+   * O autor era parâmetro (`createdBy`), e o `p_created_by` da RPC ia junto. A
+   * aplicação sempre passava `context.userId`, mas a RPC tem `grant execute` a
+   * `authenticated`: quem chamasse pelo PostgREST direto escolhia o autor, e
+   * uma saída de estoque ficava registrada em nome de outra pessoa.
+   *
+   * Agora a função resolve com `auth.uid()`, como `create_invitation` já fazia.
+   * Não é só mais seguro: passar um autor que o banco ignora seria mentira na
+   * assinatura.
+   */
   recordMovement(
     clinicId: string,
-    createdBy: string,
     data: NewInventoryMovementData,
   ): Promise<InventoryMovement>
 }

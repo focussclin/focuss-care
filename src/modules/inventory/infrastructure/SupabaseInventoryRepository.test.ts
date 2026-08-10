@@ -441,10 +441,10 @@ describe('setItemActive', () => {
 })
 
 describe('recordMovement', () => {
-  it('chama a RPC com a clínica e o autor do contexto', async () => {
+  it('chama a RPC com a clínica, e o autor NÃO vai junto', async () => {
     const { fake, subject } = repository({ rpcRow: movementRow() })
 
-    await subject.recordMovement(CLINIC, USER, {
+    await subject.recordMovement(CLINIC, {
       itemId: ITEM,
       movementType: 'out',
       quantity: 2,
@@ -456,6 +456,20 @@ describe('recordMovement', () => {
     const [fn, args] = fake.rpc.mock.calls[0]
 
     expect(fn).toBe('record_inventory_movement')
+
+    /*
+     * `toEqual` exato, e não `objectContaining`: a ausência do autor é o ponto.
+     *
+     * Até 10/08/2026 ia um `p_created_by` daqui. A aplicação sempre mandava o
+     * `context.userId` certo — mas a RPC tem `grant execute` a `authenticated`,
+     * e quem chamasse pelo PostgREST direto escolhia o autor. Uma saída de
+     * estoque ficava registrada em nome de outra pessoa, e a trilha de
+     * auditoria mentia sem nunca ter sido violada.
+     *
+     * Agora a função resolve com `auth.uid()`. Se alguém reintroduzir o
+     * argumento, esta linha falha — e é o que se quer, porque o parâmetro de
+     * volta significa a função de volta a confiar no chamador.
+     */
     expect(args).toEqual({
       p_clinic_id: CLINIC,
       p_item_id: ITEM,
@@ -463,7 +477,6 @@ describe('recordMovement', () => {
       p_quantity: 2,
       p_unit_cost_cents: 1590,
       p_reason: 'Uso no atendimento',
-      p_created_by: USER,
     })
   })
 
@@ -475,7 +488,7 @@ describe('recordMovement', () => {
      */
     const { fake, subject } = repository({ rpcRow: movementRow() })
 
-    await subject.recordMovement(CLINIC, USER, {
+    await subject.recordMovement(CLINIC, {
       itemId: ITEM,
       movementType: 'in',
       quantity: 10,
@@ -492,7 +505,7 @@ describe('recordMovement', () => {
   it('mapeia a movimentação devolvida pela RPC', async () => {
     const { subject } = repository({ rpcRow: movementRow({ quantity: 7 }) })
 
-    const movement = await subject.recordMovement(CLINIC, USER, {
+    const movement = await subject.recordMovement(CLINIC, {
       itemId: ITEM,
       movementType: 'out',
       quantity: 7,
@@ -508,7 +521,7 @@ describe('recordMovement', () => {
     const { subject } = repository({ rpcRow: null })
 
     await expect(
-      subject.recordMovement(CLINIC, USER, {
+      subject.recordMovement(CLINIC, {
         itemId: ITEM,
         movementType: 'out',
         quantity: 1,
@@ -573,7 +586,7 @@ describe('tradução das recusas do banco', () => {
     const { subject } = repository({ error: { message: 'insufficient_stock' } })
 
     await expect(
-      subject.recordMovement(CLINIC, USER, {
+      subject.recordMovement(CLINIC, {
         itemId: ITEM,
         movementType: 'out',
         quantity: 999,

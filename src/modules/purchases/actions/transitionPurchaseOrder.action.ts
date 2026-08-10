@@ -31,7 +31,6 @@ const runTransitionPurchaseOrder = createAction<
       const order = await purchaseRepositoryFor(context.supabase).transitionOrder(
         context.clinicId,
         input.orderId,
-        context.userId,
         input.status,
       )
       return ok(toPurchaseOrderDto(order))

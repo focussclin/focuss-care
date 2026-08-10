@@ -170,6 +170,51 @@ um papel novo entrasse no enum `membership_role`.
 tenant — por papel ou por `auth.uid()` —, com as leituras abertas registradas
 uma a uma.
 
+### O autor sai de `auth.uid()`, e não de parâmetro
+
+> Corrigido em **10/08/2026**, junto com as policies. Se você já aplicou uma
+> versão anterior de qualquer uma destas funções, **a assinatura mudou** — o
+> `create or replace` novo cria uma sobrecarga em vez de substituir. Derrube a
+> antiga antes:
+>
+> ```sql
+> drop function if exists public.record_inventory_movement(uuid, uuid, text, integer, integer, text, uuid);
+> ```
+
+Seis RPCs recebiam quem fez a coisa como parâmetro:
+
+| Função | Parâmetro removido |
+|---|---|
+| `record_inventory_movement` | `p_created_by` |
+| `add_patient_tag` | `p_created_by` |
+| `reconcile_bank_transaction` | `p_reconciled_by` |
+| `create_purchase_order` | `p_created_by` |
+| `transition_purchase_order_status` | `p_changed_by` |
+| `receive_purchase_order_item` | `p_received_by` |
+
+Todas validam o tenant corretamente (`if p_clinic_id is distinct from
+public.current_clinic_id() then raise ... 42501`), e nenhuma comparava o autor
+recebido com `auth.uid()`. Como têm `grant execute ... to authenticated`, quem
+chamasse pelo PostgREST direto informava qualquer UUID como autor.
+
+O caso mais concreto estava em `transition_purchase_order_status`:
+
+```sql
+approved_by = case when v_next = 'approved' then p_changed_by else approved_by end
+```
+
+A aprovação de um pedido de compra ficava registrada em nome de outra pessoa.
+Não é vazamento — é **falsificação de trilha**, que é pior de detectar: a linha
+parece legítima, e a auditoria mente sem nunca ter sido violada.
+
+Agora as seis resolvem com `auth.uid()`, como `create_invitation` já fazia. A
+diferença não é só de segurança: passar um autor que o banco ignora seria
+mentira na assinatura, então o parâmetro saiu também das portas de domínio,
+dos repositórios, das actions e dos mocks.
+
+Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
+direto — ali é a aplicação que preenche a coluna, não uma função do banco.
+
 ### O arquivo combinado é gerado
 
 `APLICAR_TUDO_20260809.sql` sai de `node scripts/build-migration-bundle.mjs`.

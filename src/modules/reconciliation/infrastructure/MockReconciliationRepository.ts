@@ -18,7 +18,7 @@ export class MockReconciliationRepository implements ReconciliationRepository {
   async createAccount(clinicId: string, createdBy: string, data: NewBankAccountData): Promise<BankAccount> { void clinicId; void createdBy; void data; throw unavailable() }
   async updateAccount(clinicId: string, accountId: string, isActive: boolean): Promise<BankAccount> { void clinicId; void accountId; void isActive; throw unavailable() }
   async createTransaction(clinicId: string, createdBy: string, data: NewBankTransactionData): Promise<BankTransaction> { void clinicId; void createdBy; void data; throw unavailable() }
-  async reconcileTransaction(clinicId: string, reconciledBy: string, data: ReconcileBankTransactionData): Promise<BankTransactionReconciliationResult> { void clinicId; void reconciledBy; void data; throw unavailable() }
+  async reconcileTransaction(clinicId: string, data: ReconcileBankTransactionData): Promise<BankTransactionReconciliationResult> { void clinicId; void data; throw unavailable() }
 }
 
 function unavailable(): ReconciliationRepositoryError {

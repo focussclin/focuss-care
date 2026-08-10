@@ -142,8 +142,7 @@ create or replace function public.record_inventory_movement(
   p_movement_type text,
   p_quantity integer,
   p_unit_cost_cents integer,
-  p_reason text,
-  p_created_by uuid
+  p_reason text
 )
 returns public.inventory_movements
 language plpgsql
@@ -190,15 +189,15 @@ begin
     clinic_id, item_id, movement_type, quantity, unit_cost_cents, reason, created_by
   ) values (
     p_clinic_id, p_item_id, p_movement_type, p_quantity, p_unit_cost_cents,
-    nullif(trim(p_reason), ''), p_created_by
+    nullif(trim(p_reason), ''), auth.uid()
   ) returning * into v_movement;
 
   return v_movement;
 end;
 $$;
 
-revoke all on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text, uuid) from public;
-grant execute on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text, uuid) to authenticated;
+revoke all on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) from public;
+grant execute on function public.record_inventory_movement(uuid, uuid, text, integer, integer, text) to authenticated;
 
 commit;
 

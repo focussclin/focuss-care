@@ -111,7 +111,6 @@ export interface PurchaseRpcArgs {
   p_supplier_id?: string
   p_expected_delivery_date?: string | null
   p_notes?: string | null
-  p_created_by?: string
   p_items?: readonly {
     inventory_item_id: string
     quantity: number
@@ -119,10 +118,8 @@ export interface PurchaseRpcArgs {
   }[]
   p_order_id?: string
   p_status?: string
-  p_changed_by?: string
   p_order_item_id?: string
   p_quantity?: number
-  p_received_by?: string
 }
 
 export interface PurchasesClient {

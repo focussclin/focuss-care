@@ -18,7 +18,7 @@ const runReconcileBankTransaction = createAction<ReconcileBankTransactionInput, 
   revalidatePaths: ['/conciliacao'],
   handler: async (input, context) => {
     try {
-      const result = await reconciliationRepositoryFor(context.supabase).reconcileTransaction(context.clinicId, context.userId, input)
+      const result = await reconciliationRepositoryFor(context.supabase).reconcileTransaction(context.clinicId, input)
       return ok(result)
     } catch (cause) {
       return toReconciliationFailure<Fields>('bank_transaction.reconcile', cause)

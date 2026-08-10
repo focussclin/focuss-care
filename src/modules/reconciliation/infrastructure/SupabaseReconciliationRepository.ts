@@ -169,7 +169,6 @@ export class SupabaseReconciliationRepository implements ReconciliationRepositor
 
   async reconcileTransaction(
     clinicId: string,
-    reconciledBy: string,
     data: ReconcileBankTransactionData,
   ): Promise<BankTransactionReconciliationResult> {
     const { data: row, error } = await this.client.rpc('reconcile_bank_transaction', {
@@ -177,7 +176,6 @@ export class SupabaseReconciliationRepository implements ReconciliationRepositor
       p_transaction_id: data.transactionId,
       p_invoice_id: data.invoiceId,
       p_payable_id: data.payableId,
-      p_reconciled_by: reconciledBy,
       p_notes: data.notes,
     })
 

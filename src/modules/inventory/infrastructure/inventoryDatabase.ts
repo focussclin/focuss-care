@@ -89,7 +89,6 @@ export interface InventoryRpcArgs {
   p_quantity: number
   p_unit_cost_cents: number | null
   p_reason: string | null
-  p_created_by: string
 }
 
 export interface InventoryClient {

@@ -19,7 +19,7 @@ const runRecordInventoryMovement = createAction<RecordInventoryMovementInput, In
   revalidatePaths: ['/estoque'],
   handler: async (input, context) => {
     try {
-      const movement = await inventoryRepositoryFor(context.supabase).recordMovement(context.clinicId, context.userId, {
+      const movement = await inventoryRepositoryFor(context.supabase).recordMovement(context.clinicId, {
         itemId: input.itemId,
         movementType: input.movementType,
         quantity: input.quantity,

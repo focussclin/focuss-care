@@ -219,7 +219,6 @@ create or replace function public.create_purchase_order(
   p_supplier_id uuid,
   p_expected_delivery_date date,
   p_notes text,
-  p_created_by uuid,
   p_items jsonb
 )
 returns public.purchase_orders
@@ -260,7 +259,7 @@ begin
     p_supplier_id,
     p_expected_delivery_date,
     nullif(trim(p_notes), ''),
-    p_created_by
+    auth.uid()
   ) returning * into v_order;
 
   for v_item in select value from jsonb_array_elements(p_items)
@@ -315,8 +314,7 @@ $$;
 create or replace function public.transition_purchase_order_status(
   p_clinic_id uuid,
   p_order_id uuid,
-  p_status text,
-  p_changed_by uuid
+  p_status text
 )
 returns public.purchase_orders
 language plpgsql
@@ -369,7 +367,7 @@ begin
 
   update public.purchase_orders
   set status = v_next,
-      approved_by = case when v_next = 'approved' then p_changed_by else approved_by end,
+      approved_by = case when v_next = 'approved' then auth.uid() else approved_by end,
       updated_at = now()
   where id = p_order_id and clinic_id = p_clinic_id
   returning * into v_order;
@@ -381,8 +379,7 @@ $$;
 create or replace function public.receive_purchase_order_item(
   p_clinic_id uuid,
   p_order_item_id uuid,
-  p_quantity integer,
-  p_received_by uuid
+  p_quantity integer
 )
 returns public.purchase_order_items
 language plpgsql
@@ -454,7 +451,7 @@ begin
     p_quantity,
     v_line.unit_cost_cents,
     'Recebimento de pedido ' || left(v_order.id::text, 8),
-    p_received_by
+    auth.uid()
   );
 
   update public.purchase_order_items
@@ -481,14 +478,14 @@ begin
 end;
 $$;
 
-revoke all on function public.create_purchase_order(uuid, uuid, date, text, uuid, jsonb) from public;
-grant execute on function public.create_purchase_order(uuid, uuid, date, text, uuid, jsonb) to authenticated;
+revoke all on function public.create_purchase_order(uuid, uuid, date, text, jsonb) from public;
+grant execute on function public.create_purchase_order(uuid, uuid, date, text, jsonb) to authenticated;
 
-revoke all on function public.transition_purchase_order_status(uuid, uuid, text, uuid) from public;
-grant execute on function public.transition_purchase_order_status(uuid, uuid, text, uuid) to authenticated;
+revoke all on function public.transition_purchase_order_status(uuid, uuid, text) from public;
+grant execute on function public.transition_purchase_order_status(uuid, uuid, text) to authenticated;
 
-revoke all on function public.receive_purchase_order_item(uuid, uuid, integer, uuid) from public;
-grant execute on function public.receive_purchase_order_item(uuid, uuid, integer, uuid) to authenticated;
+revoke all on function public.receive_purchase_order_item(uuid, uuid, integer) from public;
+grant execute on function public.receive_purchase_order_item(uuid, uuid, integer) to authenticated;
 
 commit;
 
