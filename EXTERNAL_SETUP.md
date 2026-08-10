@@ -91,6 +91,11 @@ código; a tela permanece bloqueada até a migration existir no projeto remoto.
 Depois de aplicar, execute `npm run db:types`, verifique o bucket e valide
 upload/download com usuários de duas clínicas.
 
+Se a tabela e o bucket já existirem, mas o upload/download retornar 403, aplique
+também `supabase/migrations/20260810_repair_patient_documents_storage.sql`.
+Esse reparo recria somente as duas policies privadas de `storage.objects`; ele
+não publica arquivos nem altera dados clínicos.
+
 **Tags administrativas de pacientes (09/08/2026):** a migration
 `supabase/migrations/20260809_patient_tags.sql` ainda não foi aplicada. Ela cria
 `patient_tags`, `patient_tag_links`, policies RLS e a RPC idempotente

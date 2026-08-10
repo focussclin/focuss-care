@@ -79,6 +79,12 @@ export type ChannelProvider =
   | 'twilio'
   | 'other'
 
+/**
+ * Provedores aceitos pelo cofre de credenciais server-side.
+ *
+ * A migration desta tabela ainda precisa ser aplicada no projeto remoto;
+ * manter o tipo aqui permite que a aplicação compile enquanto isso.
+ */
 export type IntegrationCredentialProvider =
   | 'brevo'
   | 'evolution'
