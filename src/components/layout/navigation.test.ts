@@ -34,6 +34,14 @@ const EXISTING_ROUTES = new Set([
   '/recepcao',
   '/documentos',
   '/insights',
+  '/crm',
+  '/inbox',
+  '/formularios',
+  '/estoque',
+  '/compras',
+  '/conciliacao',
+  '/salas-e-recursos',
+  '/tarefas',
 ])
 
 describe('navItems', () => {

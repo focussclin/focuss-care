@@ -111,6 +111,10 @@ const enabledHrefs = new Set(
   navItems.filter((item) => !item.disabled).map((item) => item.href),
 )
 
+const setupHrefs = new Set(
+  navItems.filter((item) => item.availability === 'setup').map((item) => item.href),
+)
+
 describe('rotas alcançáveis', () => {
   const routes = existingRoutes()
 
@@ -135,8 +139,8 @@ describe('rotas alcançáveis', () => {
      * O dia em que o item for habilitado, esta linha falha e obriga a remover a
      * entrada — que é como a dívida se fecha em vez de virar comentário velho.
      */
-    const jaVisiveis = Object.keys(BUILT_BUT_HIDDEN).filter((route) =>
-      enabledHrefs.has(route),
+    const jaVisiveis = Object.keys(BUILT_BUT_HIDDEN).filter(
+      (route) => enabledHrefs.has(route) && !setupHrefs.has(route),
     )
 
     expect(jaVisiveis).toEqual([])

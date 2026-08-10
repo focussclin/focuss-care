@@ -61,13 +61,20 @@ export function SidebarNav({
             className="ml-auto size-1.5 shrink-0 rounded-full bg-white/35"
           />
         ) : null}
+        {item.availability === 'setup' && !collapsed ? (
+          <span
+            aria-label="Configuração pendente"
+            title="Configuração pendente"
+            className="ml-auto size-1.5 shrink-0 rounded-full bg-status-pending"
+          />
+        ) : null}
       </>
     )
 
     const className = cn(
       'relative flex min-h-10 w-full items-center rounded-[10px] text-left text-aux transition-[background-color,color,transform] duration-150',
       collapsed ? 'justify-center px-0' : 'gap-3 px-3',
-      item.disabled
+          item.disabled
         ? 'cursor-not-allowed text-white/38'
         : isActive
           ? 'bg-white/12 font-semibold text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
@@ -93,6 +100,7 @@ export function SidebarNav({
         href={item.href}
         onClick={onNavigate}
         aria-current={isActive ? 'page' : undefined}
+        title={item.availability === 'setup' ? `${item.label} — configuração pendente` : undefined}
         className={className}
       >
         {content}
@@ -169,7 +177,9 @@ export function SidebarNav({
                             >
                               {item.disabled
                                 ? `${item.label} — não faz parte desta versão`
-                                : item.label}
+                                : item.availability === 'setup'
+                                  ? `${item.label} — configuração pendente`
+                                  : item.label}
                             </TooltipPrimitive.Content>
                           </TooltipPrimitive.Portal>
                         </TooltipPrimitive.Root>

@@ -101,8 +101,9 @@ describe('a lista de comandos', () => {
     const hrefs = ALL_COMMANDS.map((command) => command.href)
 
     expect(hrefs).not.toContain('/teleatendimento')
-    expect(hrefs).not.toContain('/crm')
-    expect(hrefs).not.toContain('/estoque')
+    expect(hrefs).not.toContain('/portal-paciente')
+    expect(hrefs).toContain('/crm')
+    expect(hrefs).toContain('/estoque')
   })
 
   it('cobre as telas reais do produto', () => {

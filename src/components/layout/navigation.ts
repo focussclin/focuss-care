@@ -61,6 +61,8 @@ export interface NavItem {
    * recursos que já estavam entregues.
    */
   disabled?: boolean
+  /** A tela pode ser revisada, mas ainda depende de migration ou setup externo. */
+  availability?: 'setup'
   /**
    * Permissão exigida pela ROTA para renderizar.
    *
@@ -98,11 +100,11 @@ export const navItems: readonly NavItem[] = [
    * que uma só. A fila está em `/atendimentos`, e o painel dela em `/display`.
    */
 
-  { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', disabled: true },
+  { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', permission: 'clinic.settings', availability: 'setup' },
   { label: 'Teleatendimento', href: '/teleatendimento', icon: Video, section: 'care', disabled: true },
 
-  { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', disabled: true },
-  { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', disabled: true },
+  { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', permission: 'team.read', availability: 'setup' },
+  { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', permission: 'encounter.read', availability: 'setup' },
   { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle, section: 'relationship' },
   { label: 'Portal do paciente', href: '/portal-paciente', icon: ContactRound, section: 'relationship', disabled: true },
   { label: 'Portal do profissional', href: '/portal-profissional', icon: UserRoundCog, section: 'relationship', disabled: true },
@@ -110,7 +112,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },
   { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', permission: 'report.read' },
-  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
+  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', permission: 'team.read', availability: 'setup' },
 
   /*
    * "Pagamentos" e "Caixa" foram REMOVIDOS daqui, e não adiados.
@@ -120,15 +122,15 @@ export const navItems: readonly NavItem[] = [
    * nem fechar o caixa — sobre um recurso que está funcionando uma tela ao lado.
    */
   { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'invoice.read' },
-  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', disabled: true },
+  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'invoice.read', availability: 'setup' },
   { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance', permission: 'insurance.manage' },
-  { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', disabled: true },
-  { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', disabled: true },
+  { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', permission: 'invoice.read', availability: 'setup' },
+  { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', permission: 'invoice.read', availability: 'setup' },
 
   { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management', permission: 'team.read' },
   { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management', permission: 'report.read' },
   { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', permission: 'patient.read' },
-  { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', disabled: true },
+  { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', permission: 'clinic.settings', availability: 'setup' },
   { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', permission: 'clinic.settings' },
   { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', permission: 'audit.read' },
 
