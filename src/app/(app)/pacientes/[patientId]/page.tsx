@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
 import { normalizePatientAdminNote } from '@/modules/patients/application/patientAdminNotes'
@@ -37,6 +38,13 @@ import {
 import { toAllergyDto } from '@/modules/patients/application/toAllergyDto'
 import { isAllergyRepositoryError } from '@/modules/patients/domain/AllergyRepository'
 import { allergyMessages } from '@/modules/patients/schemas/allergy.schema'
+import { createPrescriptionFromPanel } from '@/modules/records/actions/createPrescription.action'
+import { toPrescriptionDto } from '@/modules/records/application/toPrescriptionDto'
+import type { Prescription } from '@/modules/records/domain/Prescription'
+import { isPrescriptionRepositoryError } from '@/modules/records/domain/PrescriptionRepository'
+import { getPrescriptionSource } from '@/modules/records/infrastructure/prescription-repository'
+import { prescriptionMessages } from '@/modules/records/schemas/prescription.schema'
+import { PatientPrescriptionsPanel } from '@/modules/records/ui/PatientPrescriptionsPanel'
 import { recordVitalsFromPanel } from '@/modules/encounters/actions/recordVitals.action'
 import { toVitalsDto } from '@/modules/encounters/application/toVitalsDto'
 import type { VitalsEntry } from '@/modules/encounters/domain/Vitals'
@@ -235,6 +243,40 @@ export default async function PatientProfilePage({
     }
   }
 
+  /*
+   * Prescrições — `record.read` para ver, `record.write` para prescrever.
+   *
+   * A permissão mais restritiva do produto, a mesma do prontuário: `admin` e
+   * `finance` não alcançam. A ficha inteira é visível a quem tem
+   * `patient.read`, mas receita é dado clínico.
+   *
+   * `isProfessional` é a SEGUNDA porta, e vem separada: quem tem o papel mas
+   * não tem cadastro em `professionals` vê a lista e recebe uma mensagem
+   * dizendo o que fazer — em vez de um botão desabilitado sem explicação.
+   */
+  const canReadPrescriptions = isMember && can(session.role, 'record.read')
+  const canWritePrescriptions = isMember && can(session.role, 'record.write')
+  const prescriptionSource = canReadPrescriptions ? await getPrescriptionSource() : null
+  const professionalId = canWritePrescriptions ? await getCurrentProfessionalId() : null
+
+  let prescriptions: Prescription[] = []
+  let prescriptionsError: string | null = null
+
+  if (prescriptionSource) {
+    try {
+      prescriptions = await prescriptionSource.repository.listByPatient(
+        prescriptionSource.clinicId,
+        patient.id,
+      )
+    } catch (cause) {
+      if (!isPrescriptionRepositoryError(cause)) throw cause
+      prescriptionsError =
+        cause.reason === 'forbidden'
+          ? prescriptionMessages.forbidden
+          : prescriptionMessages.unavailable
+    }
+  }
+
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
         consentSource.clinicId,
@@ -370,6 +412,18 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          {prescriptionSource ? (
+            <PatientPrescriptionsPanel
+              patientId={patient.id}
+              prescriptions={prescriptions.map(toPrescriptionDto)}
+              onCreate={createPrescriptionFromPanel}
+              canPrescribe={canWritePrescriptions}
+              isProfessional={professionalId !== null}
+              isLive={prescriptionSource.isLive}
+              loadError={prescriptionsError}
+            />
+          ) : null}
 
           {vitalsSource ? (
             <PatientVitalsPanel

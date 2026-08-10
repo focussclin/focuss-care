@@ -183,7 +183,7 @@ select tablename, policyname, cmd, roles
  where schemaname = 'public'
    and tablename in ('conversations', 'messages', 'workflows', 'allergies',
                      'availability_exceptions', 'services', 'vitals',
-                     'message_templates')
+                     'message_templates', 'prescriptions', 'prescription_items')
  order by tablename, cmd;
 ```
 

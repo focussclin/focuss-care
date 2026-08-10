@@ -57,7 +57,7 @@ de estoque).
 | `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, contatos vinculados com CRUD, consentimento LGPD |
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento e **reserva opcional de sala** — o campo só aparece quando a clínica tem salas, e `room_id` fica fora do payload quando não há |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar e **sinais vitais** na ficha do paciente — append-only, sem classificação de valores |
-| `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
+| `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura e **prescrições** na ficha — texto livre, append-only, **sem assinatura, emissão ou impressão** |
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
@@ -2343,6 +2343,91 @@ enviado, e o cartão de bloqueio permanece no topo de `/whatsapp`. O que mudou �
 que uma parte da tela deixou de ser só contador.
 
 42 testes novos: 13 de domínio, 12 de repositório, 17 de UI.
+
+---
+
+## 8.29 Feature — Prescrições (10/08/2026)
+
+`prescriptions` e `prescription_items` estavam no schema aplicado e nada as
+tocava. Painel na ficha do paciente, módulo `records`.
+
+### O que NÃO foi feito, e é a parte que importa
+
+Não assina, não emite receita oficial, não imprime, não gera PDF, não fala com
+provedor de assinatura e **não interpreta dose**. Nenhum botão para nada disso —
+um que parecesse assinar seria a mentira mais cara que este produto poderia
+contar.
+
+`dosage`, `route`, `frequency`, `duration` e `quantity` são `text` no banco e
+texto livre na aplicação. Não há enum de via nem unidade de dose: inventar um
+obrigaria o profissional a caber numa lista que este código escolheu, além de
+dar a impressão de que a aplicação confere a prescrição. Ela guarda o que foi
+escrito.
+
+### Quatro colunas pertencem a um emissor que não existe
+
+`signed_at`, `signature`, `external_id` e `external_url` seriam preenchidas por
+um sistema de receita com assinatura digital. A aplicação **lê e nunca
+escreve**, e o schema Zod as descarta. `signature` e `external_id` nem entram no
+`select`: `signature` é `jsonb` de um emissor inexistente, e estrutura
+desconhecida no DTO acaba renderizada.
+
+### Três portas antes de gravar
+
+1. **Papel** — `record.write`, a permissão mais restritiva do produto. `admin`,
+   `receptionist` e `finance` não alcançam.
+2. **Cadastro profissional** — `current_professional_id()`. Quem não tem linha
+   em `professionals` não prescreve, mesmo com o papel: `author_id` aponta para
+   quem tem conselho, não para um login. `authorId` **nunca vem do cliente** —
+   aceitá-lo deixaria alguém prescrever em nome de outro profissional. A tela
+   mostra a lista e diz o que fazer, em vez de um botão desabilitado sem
+   explicação.
+3. **Alvo** — paciente desta clínica; atendimento, quando informado, desta
+   clínica **e** deste paciente. As FKs de `prescriptions` são de coluna única e
+   provam existência, não tenancy — mesma lacuna de `vitals`.
+
+### Append-only, e a ordem é a que foi escrita
+
+Nem `prescriptions` nem `prescription_items` têm `updated_at` ou `deleted_at`.
+Não existe editar nem excluir: prescrição corrigida é prescrição nova, e a
+anterior é o que o paciente levou na mão. `sort_order` preserva a sequência
+digitada — a receita não é alfabética, e o paciente lê na ordem em que foi
+escrita.
+
+### Validade é comparação de data, não conduta
+
+O selo "validade vencida" diz que a data passou. Não diz para suspender: uma
+receita vencida pode estar sendo seguida com razão, e uma dentro do prazo pode
+ter sido suspensa na consulta seguinte. Sem `valid_until`, nenhum selo — ausência
+de prazo não é "válida para sempre".
+
+A action recusa validade que já nasce vencida. Isso não é julgamento sobre o
+prazo: a aplicação não opina se trinta dias são muitos ou poucos.
+
+### A auditoria não copia conteúdo clínico
+
+`after` guarda paciente, atendimento e **contagem de itens** — nunca nome de
+medicamento, dose ou orientação. `audit_log` tem outra permissão de leitura
+(`audit.read`, que `admin` tem e `record.read` não), e copiar a receita para lá
+criaria uma segunda via do dado clínico fora da trava que o protege. Há teste
+que serializa o evento e verifica que o medicamento não aparece.
+
+### Limitação conhecida: duas escritas, sem função no banco
+
+Não há RPC para criar cabeçalho e itens juntos, e esta fatia **não cria
+migration**. São dois `insert`, e uma falha no segundo deixaria a prescrição sem
+item. A leitura protege quem lê: a prescrição vazia aparece **como vazia**, com
+aviso, nunca como receita completa — e a saída é registrar de novo, que é o
+mesmo caminho de qualquer correção nesta tabela append-only.
+
+Uma função no banco resolveria de vez; fica como desbloqueio, e não como algo
+que esta camada finge ter.
+
+### Estado
+
+`records` continua **COMPLETO** para o prontuário e ganha esta superfície, com
+50 testes: 10 de domínio, 16 de schema, 16 de repositório e 18 de action, mais
+17 de UI. Teleatendimento não foi tocado.
 
 ---
 
