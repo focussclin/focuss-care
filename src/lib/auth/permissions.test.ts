@@ -67,6 +67,41 @@ describe('matriz papel x acao', () => {
       expect(can('finance', 'encounter.write')).toBe(false)
       expect(can('finance', 'patient.write')).toBe(false)
     })
+
+    /*
+     * A LEITURA e o caso que faltava, e era o que importava.
+     *
+     * O teste acima dizia "nao alcanca agenda" e verificava so a escrita — e o
+     * produto tinha exatamente esse buraco: `appointment.read` nao era exigido
+     * em rota nenhuma ate 10/08/2026, entao `finance` lia a semana inteira da
+     * clinica pela URL. Nao marcar consulta nunca foi o ponto; ver quem consulta
+     * com quem, quando e de que tipo e que e o dado sensivel.
+     */
+    it('finance nao LE agenda nem fila, so a cobranca', () => {
+      expect(can('finance', 'appointment.read')).toBe(false)
+      expect(can('finance', 'encounter.read')).toBe(false)
+      expect(can('finance', 'record.read')).toBe(false)
+
+      // O que ele le, e por que a ficha do paciente continua aberta para ele.
+      expect(can('finance', 'patient.read')).toBe(true)
+      expect(can('finance', 'invoice.read')).toBe(true)
+    })
+
+    /*
+     * `finance` e o UNICO papel sem `appointment.read`. Os portoes de `/agenda`,
+     * `/pacientes/[patientId]` e `/pacientes/[patientId]/historico` foram
+     * escritos com isso em mente: se um segundo papel perder a permissao, as
+     * tres telas passam a negar tambem, e quem mexer na matriz deve saber disso
+     * antes de descobrir por reclamacao.
+     */
+    it('so o financeiro fica fora da agenda', () => {
+      expect(rolesWith('appointment.read')).toEqual([
+        'owner',
+        'admin',
+        'professional',
+        'receptionist',
+      ])
+    })
   })
 
   describe('cadastro de pacientes', () => {

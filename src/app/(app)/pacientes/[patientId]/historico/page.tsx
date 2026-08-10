@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { ArrowLeft, CalendarX2 } from 'lucide-react'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { forbidden, notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { z } from 'zod'
 
@@ -9,6 +9,8 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { formatShortDate, formatTime, startOfDay } from '@/lib/utils/date'
 import { appointmentStatusMeta } from '@/modules/_shared/domain/types'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
@@ -27,10 +29,28 @@ export default async function PatientHistoryPage({
   const { patientId } = await params
   if (!z.uuid().safeParse(patientId).success) notFound()
 
-  const [patientSource, appointmentSource] = await Promise.all([
+  const [patientSource, appointmentSource, role] = await Promise.all([
     getPatientRepository(today),
     getAppointmentRepository(today),
+    getActiveClinicRole(),
   ])
+
+  /*
+   * Esta rota INTEIRA e a agenda de uma pessoa, entao ela e bloqueada por
+   * completo — diferente de `/pacientes/[patientId]`, onde a agenda e uma secao
+   * dentro de uma ficha que `finance` precisa abrir para faturar.
+   *
+   * Quem chega aqui sem `appointment.read` esta pedindo exatamente o que a
+   * matriz nega: a lista de com quem, quando e de que tipo aquela pessoa
+   * consultou. Devolver a pagina vazia seria pior que negar — diria "esta
+   * paciente nunca veio".
+   */
+  if (
+    appointmentSource.isLive &&
+    !(can(role, 'patient.read') && can(role, 'appointment.read'))
+  ) {
+    forbidden()
+  }
 
   const patient = await patientSource.repository.findById(
     patientSource.clinicId,

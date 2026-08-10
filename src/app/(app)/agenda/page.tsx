@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
 
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { addDays, startOfDay, startOfWeek } from '@/lib/utils/date'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
 import { PICKER_RESULT_LIMIT } from '@/modules/patients/schemas/patientPicker.schema'
@@ -34,11 +37,34 @@ export default async function AgendaPage({
   const rangeStart = addDays(startOfWeek(today), -7 * WEEKS_BEFORE)
   const rangeEnd = addDays(startOfWeek(today), 7 * WEEKS_AFTER)
 
-  const [appointmentSource, patientSource, settingsSource] = await Promise.all([
-    getAppointmentRepository(today),
-    getPatientRepository(today),
-    getClinicSettingsRepository(),
-  ])
+  const [appointmentSource, patientSource, settingsSource, role] =
+    await Promise.all([
+      getAppointmentRepository(today),
+      getPatientRepository(today),
+      getClinicSettingsRepository(),
+      getActiveClinicRole(),
+    ])
+
+  /*
+   * `appointment.read` nao era exigido em rota NENHUMA do produto.
+   *
+   * O menu esconde "Agenda" de quem nao tem a permissao, e isso bastava para
+   * ninguem notar — mas menu nao e fronteira: a URL continua digitavel, e o
+   * prefetch de um link vizinho nem depende de alguem digitar.
+   *
+   * `finance` e o unico papel sem `appointment.read`, e a matriz de
+   * `lib/auth/permissions.ts` diz por que, com todas as letras: "o que ele nao
+   * alcanca e agenda, atendimento e prontuario". A intencao estava escrita; a
+   * checagem e que faltava. Sem esta linha, um financeiro convidado so para
+   * faturar lia a semana inteira da clinica — quem consulta com quem, quando e
+   * de que tipo, que e dado de saude por inferencia mesmo sem nenhum diagnostico
+   * junto.
+   *
+   * `isLive` guarda o modo de demonstracao, onde nao ha vinculo nem papel para
+   * consultar e o repositorio nem fala com o banco — mesmo padrao de
+   * `/estoque`, `/documentos` e `/inbox`.
+   */
+  if (appointmentSource.isLive && !can(role, 'appointment.read')) forbidden()
 
   /*
    * Composicao entre modulos acontece na ROTA (regra 4 da arquitetura): a agenda

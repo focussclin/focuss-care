@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
 
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { startOfDay } from '@/lib/utils/date'
 import { toPatientListItem } from '@/modules/patients/application/toPatientDto'
 import { getPatientRepository } from '@/modules/patients/infrastructure/repository'
@@ -40,7 +43,25 @@ export default async function PacientesPage({
   const params = await searchParams
   const query = parsePatientListQuery(params)
 
-  const { repository, clinicId, isLive } = await getPatientRepository(today)
+  const [{ repository, clinicId, isLive }, role] = await Promise.all([
+    getPatientRepository(today),
+    getActiveClinicRole(),
+  ])
+
+  /*
+   * Hoje os cinco papeis tem `patient.read`, entao esta linha nao nega nada a
+   * ninguem — e e por isso que ela precisa existir agora.
+   *
+   * O menu ja declara `patient.read` neste item. Enquanto a rota nao exigia o
+   * mesmo, a matriz de permissoes era a unica coisa segurando a porta: no dia em
+   * que alguem tirasse `patient.read` de um papel — a leitura mais provavel de
+   * uma revisao de LGPD — o item sumiria do menu e a URL continuaria servindo a
+   * lista de pacientes, sem que teste nenhum notasse.
+   *
+   * `routeGates.test.ts` passa a exigir esta correspondencia em toda rota do
+   * menu; aqui esta o lado da rota.
+   */
+  if (isLive && !can(role, 'patient.read')) forbidden()
 
   /*
    * As metricas sao consulta PROPRIA, nao derivacao da pagina.

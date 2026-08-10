@@ -157,7 +157,13 @@ describe('rotas alcançáveis', () => {
   it('todo motivo registrado diz alguma coisa', () => {
     for (const [route, reason] of Object.entries(BUILT_BUT_HIDDEN)) {
       expect(reason.length, route).toBeGreaterThan(60)
-      expect(reason.toLowerCase(), route).not.toContain('todo')
+
+      /*
+       * Palavra inteira e MAIÚSCULA. `toLowerCase().includes('todo')` reprovava
+       * qualquer motivo que dissesse "todo membro" ou "toda escrita" — e o
+       * alvo aqui é o marcador que adia a explicação, não a palavra portuguesa.
+       */
+      expect(reason, route).not.toMatch(/\b(TODO|FIXME)\b/)
     }
   })
 })

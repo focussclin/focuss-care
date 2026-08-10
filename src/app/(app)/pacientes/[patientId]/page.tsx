@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { forbidden, notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { ArrowLeft, CalendarPlus, CalendarX2, StickyNote } from 'lucide-react'
 import Link from 'next/link'
@@ -61,10 +61,20 @@ export default async function PatientProfilePage({
   // O menu da listagem e o botao deste cabecalho linkam `?editar=1`.
   const { editar } = await searchParams
 
-  const [patientSource, appointmentSource] = await Promise.all([
+  const [patientSource, appointmentSource, session] = await Promise.all([
     getPatientRepository(today),
     getAppointmentRepository(today),
+    getSessionState(),
   ])
+
+  /*
+   * `patient.read` antes de buscar, e nao depois: a ficha e o dado, nao a
+   * moldura. Mesmo motivo do portao em `/pacientes` — ver o comentario de la.
+   */
+  const isMember = session.status === 'active'
+  if (patientSource.isLive && !(isMember && can(session.role, 'patient.read'))) {
+    forbidden()
+  }
 
   const patient = await patientSource.repository.findById(
     patientSource.clinicId,
@@ -74,10 +84,34 @@ export default async function PatientProfilePage({
   if (!patient) notFound()
 
   const status = patientStatusMeta[patient.status]
-  const appointments = await appointmentSource.repository.listByPatient(
-    appointmentSource.clinicId,
-    patient.id,
-  )
+
+  /*
+   * A ficha ABRE para quem tem `patient.read`; a agenda dentro dela, nao.
+   *
+   * `finance` tem `patient.read` de proposito — a matriz explica que sem nome e
+   * documento nao se emite fatura — e nao tem `appointment.read`, pela mesma
+   * matriz: "o que ele nao alcanca e agenda, atendimento e prontuario".
+   *
+   * Por isso aqui a decisao NAO e `forbidden()`, como em
+   * `/pacientes/[patientId]/historico`: bloquear a ficha inteira tiraria do
+   * financeiro o cadastro que ele legitimamente usa. As duas secoes de agenda —
+   * "Historico recente" e "Proximo atendimento" — e que somem, junto com o link
+   * para o historico completo, que responderia 403.
+   *
+   * A consulta tambem nao acontece: nao adianta esconder na tela o que ja veio
+   * pelo fio, porque o payload do RSC continua legivel para quem abrir a aba de
+   * rede.
+   */
+  const canReadAgenda =
+    !appointmentSource.isLive ||
+    (isMember && can(session.role, 'appointment.read'))
+
+  const appointments = canReadAgenda
+    ? await appointmentSource.repository.listByPatient(
+        appointmentSource.clinicId,
+        patient.id,
+      )
+    : []
 
   const nextAppointment = appointments
     .filter((appointment) => appointment.startsAt >= today)
@@ -105,8 +139,7 @@ export default async function PatientProfilePage({
    * desabilitados — o painel se anuncia como demonstracao em vez de simular
    * registro (R11 do roadmap).
    */
-  const [session, consentSource, contactSource] = await Promise.all([
-    getSessionState(),
+  const [consentSource, contactSource] = await Promise.all([
     getPatientConsentSource(),
     getPatientContactSource(),
   ])
@@ -142,8 +175,7 @@ export default async function PatientProfilePage({
   }
 
   const consentRows = buildPatientConsentRows(consents.map(toPatientConsentDto))
-  const canManageConsents =
-    session.status === 'active' && can(session.role, 'patient.write')
+  const canManageConsents = isMember && can(session.role, 'patient.write')
 
   return (
     <div className="flex flex-col gap-6">
@@ -242,6 +274,7 @@ export default async function PatientProfilePage({
             canManage={canManageConsents}
           />
 
+          {canReadAgenda ? (
           <Card>
             <CardHeader
               title="Histórico recente"
@@ -291,9 +324,11 @@ export default async function PatientProfilePage({
               </ul>
             )}
           </Card>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-6">
+          {canReadAgenda ? (
           <Card>
             <CardHeader title="Próximo atendimento" />
 
@@ -329,6 +364,7 @@ export default async function PatientProfilePage({
               )}
             </div>
           </Card>
+          ) : null}
 
           {/* Observacoes internas: visualmente discretas e separadas do cadastro */}
           <Card>
