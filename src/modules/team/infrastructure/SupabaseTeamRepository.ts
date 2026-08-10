@@ -17,6 +17,7 @@ import type {
   TimeOff,
 } from '../domain/Employee'
 import type {
+  CreatedInvitation,
   MembershipStatus,
   PendingInvitation,
   TeamMember,
@@ -55,6 +56,39 @@ interface MemberJoinRow {
  */
 export class SupabaseTeamRepository implements TeamRepository {
   constructor(private readonly client: Client) {}
+
+  async createInvitation(
+    _clinicId: string,
+    email: string,
+    role: MembershipRole,
+  ): Promise<CreatedInvitation> {
+    /*
+     * A RPC resolve a clínica e o administrador a partir da sessão. O
+     * `clinicId` permanece na porta por consistência com os demais casos de uso,
+     * mas não é aceito pelo banco vindo do cliente.
+     */
+    const { data, error } = await this.client.rpc('create_invitation', {
+      p_email: email,
+      p_role: role,
+    })
+
+    if (error) throw toWriteError(error)
+
+    // O retorno é text e o token só pode aparecer aqui. Nunca logar este valor.
+    if (typeof data !== 'string' || data.length < 16) {
+      throw new TeamRepositoryError(
+        'unexpected',
+        'RPC de convite devolveu um token inválido',
+      )
+    }
+
+    return {
+      token: data,
+      // O prazo é o default definido pela RPC. A listagem posterior usa a data
+      // gravada pelo banco como fonte de verdade.
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    }
+  }
 
   async listMembers(clinicId: string): Promise<TeamMember[]> {
     const { data, error } = await this.client

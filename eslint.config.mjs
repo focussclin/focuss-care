@@ -39,7 +39,6 @@ const elements = [
   // regra 4 passaria a proibir todo mundo de usá-lo.
   { type: "shared-domain", pattern: "src/modules/_shared/domain" },
   { type: "shared-application", pattern: "src/modules/_shared/application" },
-
   { type: "domain", pattern: "src/modules/*/domain", capture: ["module"] },
   {
     type: "application",
@@ -68,6 +67,7 @@ const elements = [
 const files = [
   // `*.view.tsx` mora dentro de `ui/`, então continua sendo elemento `ui`.
   { category: "view", pattern: "src/modules/*/ui/*.view.tsx" },
+  { category: "public-api", pattern: "src/modules/*/index.ts", capture: ["module"] },
   // Um arquivo só, e o mais perigoso do repositório.
   { category: "supabase-admin", pattern: "src/lib/supabase/admin.ts" },
 ];
@@ -206,6 +206,22 @@ const eslintConfig = defineConfig([
     },
   },
 
+  /*
+   * `index.ts` é a porta pública: suas dependências internas usam caminhos
+   * relativos do próprio módulo. Impedir aliases de `@/modules/*` evita que a
+   * porta pública vire um atalho para atravessar outro módulo; os consumidores
+   * continuam importando a porta, por exemplo `@/modules/patients`.
+   */
+  {
+    files: ["src/modules/*/index.ts"],
+    rules: {
+      "no-restricted-imports": proibirPacotes(
+        ["@/modules/*", "@supabase/*"],
+        REGRA_4,
+      ),
+    },
+  },
+
   // ---------------------------------------------------------------------------
   // Regra 6 — o SDK do Supabase é proibido em src/ inteiro por padrão.
   // As duas exceções vêm logo abaixo, por serem exceções mesmo.
@@ -232,7 +248,6 @@ const eslintConfig = defineConfig([
     files: [
       "src/modules/*/infrastructure/**",
       "src/lib/**",
-      "src/proxy.ts",
     ],
     rules: { "no-restricted-imports": "off" },
   },
@@ -321,6 +336,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".open-next/**",
+    ".wrangler/**",
+    "cloudflare-env.d.ts",
     "out/**",
     "build/**",
     "next-env.d.ts",

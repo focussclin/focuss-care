@@ -27,6 +27,13 @@ const EXISTING_ROUTES = new Set([
   '/whatsapp',
   '/chat-ia',
   '/automacoes',
+  '/auditoria',
+  '/display',
+  '/indicadores',
+  '/assinaturas',
+  '/recepcao',
+  '/documentos',
+  '/insights',
 ])
 
 describe('navItems', () => {

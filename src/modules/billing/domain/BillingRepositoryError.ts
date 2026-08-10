@@ -20,6 +20,8 @@ export type BillingWriteFailure =
    * caminho correto é o estorno, que exige uma decisão que esta fatia não toma.
    */
   | 'invoice-paid'
+  /** Tentativa de baixar uma despesa que já foi baixada. */
+  | 'payable-paid'
   /** Já existe caixa aberto, ou não existe nenhum para a operação pedida. */
   | 'cash-session-conflict'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */

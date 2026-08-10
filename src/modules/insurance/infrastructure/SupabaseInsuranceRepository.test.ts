@@ -18,6 +18,9 @@ const USER = 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f'
 const AUTHORIZATION = '9019956f-bdd8-4d61-868d-09b02332dad0'
 const CARD = '5f2b1a3c-4d5e-4f60-8a71-9b2c3d4e5f60'
 const PATIENT = '11111111-1111-4111-8111-111111111111'
+const PLAN = '44444444-4444-4444-8444-444444444444'
+const INVOICE = '22222222-2222-4222-8222-222222222222'
+const DENIAL = '33333333-3333-4333-8333-333333333333'
 
 interface RecordedCall {
   query: number
@@ -53,6 +56,9 @@ function createFakeClient(results: {
   authorization?: unknown
   /** Linha devolvida ao buscar a carteirinha. */
   card?: unknown
+  patient?: unknown
+  plan?: unknown
+  record?: unknown
   /** O UPDATE da guia encontrou linha pendente? */
   answered?: unknown
   rows?: (table: string) => unknown[]
@@ -92,8 +98,20 @@ function createFakeClient(results: {
     }
 
     const resolve = () => {
+      if (table === 'patients') {
+        return 'patient' in results ? results.patient : { id: PATIENT }
+      }
+
+      if (table === 'insurance_plans') {
+        return 'plan' in results ? results.plan : { id: PLAN }
+      }
+
       if (table === 'patient_insurances' && selectArg() === 'patient_id') {
         return 'card' in results ? results.card : { patient_id: PATIENT }
+      }
+
+      if (table === 'patient_insurances') {
+        return 'record' in results ? results.record : patientInsuranceRow()
       }
 
       if (table === 'insurance_authorizations') {
@@ -148,6 +166,116 @@ function createFakeClient(results: {
     client: { from } as never,
     ofTable: (table: string) => calls.filter((call) => call.table === table),
   }
+}
+
+function patientInsuranceRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: CARD,
+    patient_id: PATIENT,
+    insurance_plan_id: PLAN,
+    card_number: '0001-ABC',
+    holder_name: 'Marina Costa',
+    valid_until: '2027-08-31',
+    is_primary: true,
+    is_active: true,
+    patients: { full_name: 'Marina Costa' },
+    insurance_plans: {
+      name: 'Enfermaria',
+      insurance_providers: { name: 'Unimed' },
+    },
+    ...overrides,
+  }
+}
+
+function claimRow(status: 'received' | 'appealing' = 'received') {
+  return {
+    id: DENIAL,
+    invoice_id: INVOICE,
+    invoice_item_id: null,
+    denial_code: '42',
+    reason: 'Fora de cobertura',
+    amount_cents: 12000,
+    status,
+    denied_at: '2026-08-08',
+    appealed_at: status === 'appealing' ? '2026-08-09T12:00:00.000Z' : null,
+    resolved_at: null,
+    recovered_cents: null,
+    notes: null,
+    invoices: {
+      number: 18,
+      patients: { full_name: 'Marina Costa' },
+      insurance_plans: { name: 'Enfermaria' },
+    },
+    invoice_items: null,
+  }
+}
+
+function createClaimClient(options: {
+  current?: unknown
+  updated?: unknown
+  invoice?: unknown
+}) {
+  const calls: RecordedCall[] = []
+  let queryIndex = -1
+  let claimReads = 0
+
+  const from = vi.fn((table: string) => {
+    queryIndex += 1
+    const index = queryIndex
+    const query: Record<string, unknown> = {}
+    const own = () => calls.filter((call) => call.query === index)
+    const used = (method: string) => own().some((call) => call.method === method)
+
+    for (const method of [
+      'select',
+      'eq',
+      'neq',
+      'in',
+      'order',
+      'limit',
+      'update',
+      'insert',
+    ]) {
+      query[method] = (...args: unknown[]) => {
+        calls.push({ query: index, table, method, args })
+        return query
+      }
+    }
+
+    const resolve = () => {
+      if (table === 'invoices') {
+        return options.invoice ?? {
+          id: INVOICE,
+          payer_type: 'insurance',
+          status: 'issued',
+          total_cents: 50000,
+        }
+      }
+
+      if (table === 'insurance_claim_denials') {
+        if (used('insert') || used('update')) return { id: DENIAL }
+        claimReads += 1
+        return claimReads === 1
+          ? options.current ?? claimRow()
+          : options.updated ?? options.current ?? claimRow()
+      }
+
+      return null
+    }
+
+    query.single = async () => {
+      calls.push({ query: index, table, method: 'single', args: [] })
+      return { data: resolve(), error: null }
+    }
+    query.maybeSingle = async () => {
+      calls.push({ query: index, table, method: 'maybeSingle', args: [] })
+      return { data: resolve(), error: null }
+    }
+
+    return query
+  })
+
+  return { calls, client: { from } as never }
 }
 
 describe('createAuthorization', () => {
@@ -373,5 +501,185 @@ describe('leitura', () => {
     expect(fake.ofTable('patient_insurances')).toContainEqual(
       expect.objectContaining({ method: 'eq', args: ['is_active', true] }),
     )
+  })
+})
+
+describe('carteirinhas', () => {
+  it('lista carteirinhas completas sem perder o vinculo de paciente e plano', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'patient_insurances' ? [patientInsuranceRow()] : [],
+    })
+
+    const records = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).listPatientInsuranceRecords(CLINIC)
+
+    expect(records).toEqual([
+      expect.objectContaining({
+        patientId: PATIENT,
+        patientName: 'Marina Costa',
+        planId: PLAN,
+        planName: 'Enfermaria',
+        providerName: 'Unimed',
+        cardNumber: '0001-ABC',
+        isPrimary: true,
+        isActive: true,
+      }),
+    ])
+    expect(records[0]?.validUntil?.toISOString()).toContain('2027-08-31')
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+  })
+
+  it('confere paciente e plano na clinica antes de inserir e troca a principal anterior', async () => {
+    const fake = createFakeClient({})
+
+    await new SupabaseInsuranceRepository(fake.client).createPatientInsurance(
+      CLINIC,
+      {
+        patientId: PATIENT,
+        planId: PLAN,
+        cardNumber: '0001-ABC',
+        holderName: 'Marina Costa',
+        validUntil: new Date(2027, 7, 31),
+        isPrimary: true,
+      },
+    )
+
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('insurance_plans')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+
+    const demote = fake
+      .ofTable('patient_insurances')
+      .find(
+        (call) =>
+          call.method === 'update' &&
+          (call.args[0] as Record<string, unknown>).is_primary === false,
+      )
+    expect(demote).toBeDefined()
+
+    const insert = fake
+      .ofTable('patient_insurances')
+      .find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+    expect(insert).toEqual(
+      expect.objectContaining({
+        clinic_id: CLINIC,
+        patient_id: PATIENT,
+        insurance_plan_id: PLAN,
+        card_number: '0001-ABC',
+        is_primary: true,
+        is_active: true,
+      }),
+    )
+  })
+
+  it('ativa ou desativa apenas a carteirinha da clinica ativa', async () => {
+    const fake = createFakeClient({})
+
+    const record = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).setPatientInsuranceActive(CLINIC, CARD, false)
+
+    expect(record.isActive).toBe(true)
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('patient_insurances')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['id', CARD] }),
+    )
+  })
+})
+
+describe('glosas', () => {
+  it('só cria glosa para fatura de convênio', async () => {
+    const fake = createClaimClient({})
+
+    await new SupabaseInsuranceRepository(fake.client).createClaimDenial(
+      CLINIC,
+      {
+        invoiceId: INVOICE,
+        denialCode: '42',
+        reason: 'Fora de cobertura',
+        amountCents: 12000,
+        deniedAt: new Date(2026, 7, 8),
+        notes: null,
+      },
+      USER,
+    )
+
+    const insert = fake.calls.find(
+      (call) => call.table === 'insurance_claim_denials' && call.method === 'insert',
+    )?.args[0] as Record<string, unknown>
+
+    expect(insert.status).toBe('received')
+    expect(insert.invoice_id).toBe(INVOICE)
+    expect(insert.amount_cents).toBe(12000)
+  })
+
+  it('recusa glosa maior que o total da fatura', async () => {
+    const fake = createClaimClient({
+      invoice: {
+        id: INVOICE,
+        payer_type: 'insurance',
+        status: 'issued',
+        total_cents: 10000,
+      },
+    })
+
+    await expect(
+      new SupabaseInsuranceRepository(fake.client).createClaimDenial(
+        CLINIC,
+        {
+          invoiceId: INVOICE,
+          denialCode: null,
+          reason: 'Fora de cobertura',
+          amountCents: 12000,
+          deniedAt: new Date(2026, 7, 8),
+          notes: null,
+        },
+        USER,
+      ),
+    ).rejects.toMatchObject({ reason: 'claim-amount-exceeds-invoice' })
+  })
+
+  it('permite apenas a transição received -> appealing', async () => {
+    const fake = createClaimClient({ current: claimRow('received'), updated: claimRow('appealing') })
+
+    const denial = await new SupabaseInsuranceRepository(fake.client).updateClaimDenial(
+      CLINIC,
+      DENIAL,
+      { status: 'appealing', notes: 'Recurso enviado' },
+    )
+
+    expect(denial.status).toBe('appealing')
+    expect(fake.calls).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['status', 'received'] }),
+    )
+  })
+
+  it('não reabre glosa encerrada', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = createClaimClient({
+      current: { ...claimRow('received'), status: 'accepted' },
+    })
+
+    await expect(
+      new SupabaseInsuranceRepository(fake.client).updateClaimDenial(
+        CLINIC,
+        DENIAL,
+        { status: 'appealing', notes: '' },
+      ),
+    ).rejects.toMatchObject({ reason: 'claim-already-resolved' })
+
+    spy.mockRestore()
   })
 })

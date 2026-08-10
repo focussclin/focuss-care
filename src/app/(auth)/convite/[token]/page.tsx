@@ -21,16 +21,27 @@ export const metadata: Metadata = {
  * assim o token sobrevive ao desvio e a pessoa cai direto no aceite depois de
  * entrar. É o mesmo motivo pelo qual o convite não é aceito automaticamente:
  * quem decide é a pessoa, não a navegação.
+ *
+ * Esta frase foi **falsa até 08/08/2026**: o `next` era escrito aqui e ignorado
+ * pelo login, que sempre terminava em `/dashboard`. Quem era convidado entrava,
+ * caía no painel e precisava achar o e-mail de novo — e o link de convite vale
+ * uma vez. Quem faz valer agora é `src/lib/routes/safeNextPath.ts`, que valida o
+ * destino no servidor, tanto na entrada por senha quanto no retorno do Google.
  */
 /**
- * `cacheComponents` (F-02) exige que toda rota produza um shell estático não
- * vazio. Esta lê a sessão em cookie ANTES de decidir se redireciona — não há
- * shell a prerenderizar, porque nem se sabe ainda se a rota renderiza.
+ * P-C2 — este segmento **permanece** com `instant = false`, pelo mesmo motivo
+ * de `/onboarding`: a rota lê a sessão para decidir se redireciona.
  *
- * `instant = false` é a saída documentada para adoção incremental: marca o
- * segmento como "pode bloquear", sem forçar a rota a ser dinâmica e sem cachear
- * nada. Mesmo tratamento já dado à casca de `(app)` — é a pendência P-C2, agora
- * com um segmento a mais.
+ * Empurrar essa leitura para dentro de um `<Suspense>` faria o desvio deixar de
+ * ser um 307 e virar navegação no cliente. Aqui o caso é ainda mais concreto que
+ * no onboarding: quem chega sem sessão precisa ir para o login **com o `next`
+ * carregando o token**, e é esse desvio que faz o convite sobreviver ao login.
+ * Se ele depender de JavaScript, um visitante sem JS fica numa tela de convite
+ * que nunca vai conseguir aceitar — e o link, que costuma vir de e-mail e é
+ * usado uma vez, se perde.
+ *
+ * O que se ganharia em troca é pequeno: o shell seria o título "Você foi
+ * convidado", pintado antes de saber se a pessoa sequer pode aceitar.
  */
 export const instant = false
 

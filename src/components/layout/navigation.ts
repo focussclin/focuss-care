@@ -17,8 +17,6 @@ import {
   MessageCircle,
   MonitorPlay,
   Package,
-  PanelTop,
-  ScanLine,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -77,16 +75,29 @@ export interface NavItem {
 
 export const navItems: readonly NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutGrid, section: 'workspace' },
-  { label: 'Indicadores e BI', href: '/indicadores', icon: Gauge, section: 'workspace', disabled: true },
+  { label: 'Indicadores e BI', href: '/indicadores', icon: Gauge, section: 'workspace', permission: 'report.read' },
 
   { label: 'Agenda', href: '/agenda', icon: CalendarDays, section: 'care', permission: 'appointment.read' },
   { label: 'Pacientes 360', href: '/pacientes', icon: Users, section: 'care', permission: 'patient.read' },
   { label: 'Atendimentos', href: '/atendimentos', icon: Stethoscope, section: 'care', permission: 'encounter.read' },
   { label: 'Prontuários', href: '/prontuarios', icon: ClipboardList, section: 'care', permission: 'record.read' },
-  { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', disabled: true },
-  { label: 'Fila e senhas', href: '/fila', icon: PanelTop, section: 'care', disabled: true },
-  { label: 'Check-in digital', href: '/check-in', icon: ScanLine, section: 'care', disabled: true },
-  { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', disabled: true },
+  { label: 'Recepção', href: '/recepcao', icon: ContactRound, section: 'care', permission: 'encounter.read' },
+  { label: 'Display para TV', href: '/display', icon: MonitorPlay, section: 'care', permission: 'encounter.read' },
+
+  /*
+   * Dois itens foram REMOVIDOS aqui: "Fila e senhas" e "Check-in digital".
+   *
+   * Os dois descreviam o que `/atendimentos` já faz — a fila com prioridade,
+   * chamada e check-in — e ficariam apagados para sempre, porque não há o que
+   * construir além do que existe. "Senhas" exigiria número de senha, coluna que
+   * `waiting_queue` não tem; "check-in digital" é o paciente dando entrada
+   * sozinho, o que é o Portal do paciente, não esta tela.
+   *
+   * Item permanentemente desabilitado é a mesma promessa vazia que fez os quatro
+   * `?tab=` saírem: duas declarações da mesma ausência, uma delas errada, é pior
+   * que uma só. A fila está em `/atendimentos`, e o painel dela em `/display`.
+   */
+
   { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', disabled: true },
   { label: 'Teleatendimento', href: '/teleatendimento', icon: Video, section: 'care', disabled: true },
 
@@ -98,8 +109,8 @@ export const navItems: readonly NavItem[] = [
 
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },
-  { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', disabled: true },
-  { label: 'Tarefas inteligentes', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
+  { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', permission: 'report.read' },
+  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', disabled: true },
 
   /*
    * "Pagamentos" e "Caixa" foram REMOVIDOS daqui, e não adiados.
@@ -116,10 +127,10 @@ export const navItems: readonly NavItem[] = [
 
   { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management', permission: 'team.read' },
   { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management', permission: 'report.read' },
-  { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', disabled: true },
+  { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', permission: 'patient.read' },
   { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', disabled: true },
-  { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', disabled: true },
-  { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', disabled: true },
+  { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', permission: 'clinic.settings' },
+  { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', permission: 'audit.read' },
 
   /*
    * Quatro itens `?tab=…` foram REMOVIDOS: "Convites e tags", "Integrações",

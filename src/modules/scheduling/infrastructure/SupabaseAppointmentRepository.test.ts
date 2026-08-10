@@ -57,6 +57,8 @@ function createFakeClient(results: {
   overlapping?: unknown[]
   /** Conteúdo de `clinic_settings.business_hours`. */
   businessHours?: unknown
+  searchPatients?: unknown[]
+  searchRows?: unknown[]
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
@@ -82,6 +84,9 @@ function createFakeClient(results: {
       'lt',
       'gt',
       'limit',
+      'ilike',
+      'in',
+      'order',
       'update',
       'insert',
     ]) {
@@ -155,6 +160,10 @@ function createFakeClient(results: {
 
       const payload = isOverlapProbe
         ? { data: results.overlapping ?? [], error: null }
+        : table === 'patients' && calls.some((call) => call.method === 'ilike')
+          ? { data: results.searchPatients ?? [], error: null }
+          : table === 'appointments' && calls.some((call) => call.method === 'in')
+            ? { data: results.searchRows ?? [], error: null }
         : isHistory
           ? { data: null, error: null }
           : { data: [], error: null }
@@ -173,6 +182,36 @@ function createFakeClient(results: {
 }
 
 /** Entrada de criação, com o horário podendo ser sobrescrito por teste. */
+describe('SupabaseAppointmentRepository.searchByPatientName', () => {
+  it('busca pacientes ativos e retorna somente atendimentos da mesma clínica', async () => {
+    const fake = createFakeClient({
+      searchPatients: [{ id: '11111111-1111-4111-8111-111111111111' }],
+      searchRows: [joinRow()],
+    })
+
+    const appointments = await new SupabaseAppointmentRepository(
+      fake.client,
+    ).searchByPatientName(CLINIC, 'Marina', 8)
+
+    expect(appointments[0]).toMatchObject({
+      id: APPOINTMENT,
+      patientName: 'Marina Costa',
+    })
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'ilike', args: ['full_name', '%Marina%'] }),
+    )
+    expect(fake.ofTable('appointments')).toContainEqual(
+      expect.objectContaining({
+        method: 'in',
+        args: ['patient_id', ['11111111-1111-4111-8111-111111111111']],
+      }),
+    )
+  })
+})
+
 function newAppointment(overrides: Record<string, unknown> = {}) {
   return {
     patientId: '11111111-1111-4111-8111-111111111111',

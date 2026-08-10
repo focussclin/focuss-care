@@ -2,7 +2,8 @@
 -- audit_log: permitir INSERT do membro autenticado
 -- =============================================================================
 --
--- PROPOSTA — NAO APLICADA. Ver supabase/migrations/PROPOSTAS.md.
+-- APLICADA no projeto Supabase em 08/08/2026. Este arquivo permanece como
+-- migration reproduzível e documentação do motivo da policy.
 --
 -- Problema (verificacao V8 de docs/07-cadastro-de-pacientes.md, pendencia P-P6):
 -- a policy de INSERT de `audit_log` recusa o membro autenticado com 403/42501.

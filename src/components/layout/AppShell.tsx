@@ -24,6 +24,7 @@ export interface AppShellProps {
   role?: MembershipRole | null
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  notificationSlot?: ReactNode
   /**
    * Seletor de clinica, quando ha mais de um vinculo (I-03).
    *
@@ -41,6 +42,7 @@ export function AppShell({
   role,
   clinicName,
   clinicSwitcher,
+  notificationSlot,
   children,
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -82,6 +84,7 @@ export function AppShell({
             userRole={userRole}
             clinicName={clinicName}
             clinicSwitcher={clinicSwitcher}
+            notificationSlot={notificationSlot}
             onMenuClick={() => setDrawerOpen(true)}
             onOpenCommands={() => setCommandsOpen(true)}
           />

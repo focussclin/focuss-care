@@ -6,6 +6,10 @@ import { listUserClinics } from '@/lib/auth/clinics'
 import { describeRole, getSessionState } from '@/lib/auth/session'
 import { currentUser } from '@/lib/mocks/clinic-data'
 import { ClinicSwitcher } from '@/modules/identity/ui/ClinicSwitcher'
+import { toNotificationDto } from '@/modules/notifications/application/toNotificationDto'
+import { getNotificationRepository } from '@/modules/notifications/infrastructure/repository'
+import { NotificationCenter } from '@/modules/notifications/ui/NotificationCenter'
+import type { Notification } from '@/modules/notifications/domain/Notification'
 
 /**
  * Casca da area autenticada.
@@ -57,6 +61,14 @@ export const instant = false
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSessionState()
 
+  /*
+   * Sem sessao, a rota privada deve devolver o usuario ao login. O proxy foi
+   * removido para manter compatibilidade com Cloudflare Workers; por isso esta
+   * guarda server-side e o redirect HTTP sao a protecao definitiva desta casca.
+   * A origem nao e anexada aqui porque layouts nao recebem o pathname atual de
+   * forma portavel entre Next Node e OpenNext. O login continua sendo seguro e
+   * o usuario pode navegar novamente a partir do destino publico.
+   */
   if (session.status === 'anonymous') redirect('/login')
   if (session.status === 'needs-onboarding') redirect('/onboarding')
   if (session.status === 'claims-stale') redirect('/onboarding')
@@ -94,6 +106,38 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       />
     ) : null
 
+  let notificationSlot: ReactNode | undefined
+  if (session.status === 'active') {
+    let notificationData:
+      | { notifications: Notification[]; unreadCount: number }
+      | undefined
+
+    try {
+      const repository = await getNotificationRepository()
+      if (repository) {
+        const [notifications, unreadCount] = await Promise.all([
+          repository.listForUser(session.clinicId, session.user.id, 20),
+          repository.countUnread(session.clinicId, session.user.id),
+        ])
+
+        notificationData = { notifications, unreadCount }
+      }
+    } catch (cause) {
+      console.error('[app] notificacoes indisponiveis', {
+        kind: cause instanceof Error ? cause.name : typeof cause,
+      })
+    }
+
+    if (notificationData) {
+      notificationSlot = (
+        <NotificationCenter
+          notifications={notificationData.notifications.map(toNotificationDto)}
+          unreadCount={notificationData.unreadCount}
+        />
+      )
+    }
+  }
+
   return (
     <AppShell
       userName={identity.name}
@@ -108,6 +152,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       role={session.status === 'active' ? session.role : undefined}
       clinicName={identity.clinicName}
       clinicSwitcher={clinicSwitcher}
+      notificationSlot={notificationSlot}
     >
       {children}
     </AppShell>

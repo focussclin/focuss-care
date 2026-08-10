@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { createEncounterNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -40,6 +41,17 @@ const runCallPatient = createAction<CallPatientInput, QueueEntryDto>({
   // aguardando' do painel conta exatamente status='waiting'. Sem isto o numero
   // fica alto ate alguem recarregar.
   revalidatePaths: ['/atendimentos', '/dashboard'],
+
+  afterSuccess: async (output, _input, context) => {
+    await createEncounterNotification({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      userId: context.userId,
+      kind: 'called',
+      patientName: output.patientName,
+      eventAt: output.calledAt ?? output.arrivedAt,
+    })
+  },
 
   handler: async (input, context) => {
     const repository = encounterRepositoryFor(context.supabase)

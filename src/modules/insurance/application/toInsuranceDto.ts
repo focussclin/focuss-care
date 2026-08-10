@@ -1,14 +1,20 @@
 import type {
   Authorization,
+  ClaimDenial,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
   PatientInsuranceOption,
+  PatientInsurance,
 } from '../domain/Insurance'
 import type {
   AuthorizationDto,
+  ClaimDenialDto,
+  ClaimInvoiceOptionDto,
   InsuranceSummaryDto,
   PatientInsuranceDto,
+  PatientInsuranceRecordDto,
   PlanDto,
   ProviderDto,
 } from '../schemas/insurance.schema'
@@ -74,6 +80,24 @@ export function toPatientInsuranceDto(
   }
 }
 
+export function toPatientInsuranceRecordDto(
+  insurance: PatientInsurance,
+): PatientInsuranceRecordDto {
+  return {
+    id: insurance.id,
+    patientId: insurance.patientId,
+    patientName: insurance.patientName,
+    planId: insurance.planId,
+    planName: insurance.planName,
+    providerName: insurance.providerName,
+    cardNumber: insurance.cardNumber,
+    holderName: insurance.holderName,
+    validUntil: insurance.validUntil?.toISOString().slice(0, 10) ?? null,
+    isPrimary: insurance.isPrimary,
+    isActive: insurance.isActive,
+  }
+}
+
 export function toInsuranceSummaryDto(
   summary: InsuranceSummary,
 ): InsuranceSummaryDto {
@@ -83,4 +107,30 @@ export function toInsuranceSummaryDto(
     pendingAuthorizations: summary.pendingAuthorizations,
     deniedAuthorizations: summary.deniedAuthorizations,
   }
+}
+
+export function toClaimDenialDto(denial: ClaimDenial): ClaimDenialDto {
+  return {
+    id: denial.id,
+    invoiceId: denial.invoiceId,
+    invoiceNumber: denial.invoiceNumber,
+    patientName: denial.patientName,
+    planName: denial.planName,
+    invoiceItemDescription: denial.invoiceItemDescription,
+    denialCode: denial.denialCode,
+    reason: denial.reason,
+    amountCents: denial.amountCents,
+    status: denial.status,
+    deniedAt: denial.deniedAt.toISOString(),
+    appealedAt: denial.appealedAt?.toISOString() ?? null,
+    resolvedAt: denial.resolvedAt?.toISOString() ?? null,
+    recoveredCents: denial.recoveredCents,
+    notes: denial.notes,
+  }
+}
+
+export function toClaimInvoiceOptionDto(
+  invoice: ClaimInvoiceOption,
+): ClaimInvoiceOptionDto {
+  return { id: invoice.id, label: invoice.label }
 }

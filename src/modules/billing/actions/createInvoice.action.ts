@@ -1,6 +1,7 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { createBillingNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -38,6 +39,17 @@ const runCreateInvoice = createAction<CreateInvoiceInput, InvoiceDto, Field>({
     unexpected: billingMessages.unexpected,
   },
   revalidatePaths: ['/financeiro'],
+
+  afterSuccess: async (output, _input, context) => {
+    await createBillingNotification({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      userId: context.userId,
+      kind: 'invoice_created',
+      patientName: output.patientName,
+      amountCents: output.totalCents,
+    })
+  },
 
   handler: async (input, context) => {
     const repository = billingRepositoryFor(context.supabase)

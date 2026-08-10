@@ -44,6 +44,13 @@ export interface ScheduleWriteOptions {
 
 /** PORTA do modulo de agenda. */
 export interface AppointmentRepository {
+  /** Atendimentos ativos encontrados pelo nome do paciente. */
+  searchByPatientName(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Appointment[]>
+
   /** Atendimentos de um intervalo [from, to). */
   listByRange(clinicId: string, from: Date, to: Date): Promise<Appointment[]>
 

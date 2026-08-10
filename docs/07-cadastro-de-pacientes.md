@@ -308,8 +308,43 @@ Antes de P-02a a listagem **não tinha limite nenhum**:
 `listByClinic` **não existe mais**. Não foi substituído por uma versão com
 limite opcional: um método sem teto disponível na porta é convite a reintroduzir
 o problema em outra tela. Quem precisa de "todos" declara um limite e paga por
-ele — é o que a `/agenda` faz agora (`PATIENT_PAGE_MAX_SIZE`, com comentário
-dizendo que seletor de clínica grande é trabalho de A-01).
+ele.
+
+### 8.1.1 O seletor da agenda — o resto da dívida de P-02a
+
+P-02a trocou "a clínica inteira" por "as 50 primeiras" no seletor de paciente do
+Novo Agendamento, e deixou dito que seletor de clínica grande era trabalho de
+A-01. As 50 primeiras tinham o mesmo defeito da base inteira, só mais barato:
+o `datalist` filtrava **no navegador**, então quem não estivesse entre as 50
+primeiras em ordem alfabética simplesmente não existia para a agenda — e a tela
+não dizia que estava procurando num pedaço. Numa clínica com mil pacientes, a
+recepção concluiria que "Zuleica" não tem cadastro.
+
+O que existe agora:
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Contrato | `patients/schemas/patientPicker.schema.ts` | Termo com mínimo de 2 caracteres, higienizado pelo mesmo `sanitizePatientSearch` da listagem; limite fixo de 8; resposta com **id e nome, e nada mais** |
+| Busca | `patients/actions/searchPatients.action.ts` | Server Action pelo `createAction`: sessão, `current_clinic_id()`, `patient.read` e Zod antes do handler. Reusa `listPage` com `status: 'active'` |
+| Campo | `patients/ui/PatientPicker.tsx` | Debounce de 250 ms, número de sequência descartando resposta fora de ordem, spinner, erro do servidor exibido, e o conjunto inicial de volta quando o campo esvazia |
+| Composição | `app/(app)/agenda/page.tsx` | Monta o seletor e o passa como `renderPatientField`; `scheduling` não alcança o interior de `patients` (regra 4) |
+
+Três decisões que não são óbvias:
+
+- **Ação de leitura no pipeline de mutação.** O resto do produto lê na rota, e
+  continua assim. O seletor vive dentro de um modal, e navegar para filtrar
+  fecharia o formulário. Passar pelo `createAction` é reuso, não desvio: o que
+  não se aplica a uma leitura (revalidação, tag, auditoria) fica de fora.
+- **Sem auditoria.** Ler nome numa lista não é auditado em lugar nenhum do
+  produto; o que é auditado é a leitura de **prontuário** (R-01). Auditar cada
+  tecla encheria a trilha de ruído e esconderia o acesso que importa.
+- **As 8 primeiras continuam vindo pela rota**, agora com o limite do seletor e
+  não com os 50 de antes. Servem ao campo vazio: abrir o modal e ver lista em
+  branco não ajuda ninguém.
+
+Sem banco (demonstração local), a Server Action recusaria por falta de sessão. O
+seletor então filtra o conjunto de exemplo no cliente **e diz isso na tela**, em
+vez de mostrar erro vermelho a cada tecla.
 
 ### 8.2 O contrato
 

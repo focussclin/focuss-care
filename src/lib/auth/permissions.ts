@@ -66,12 +66,14 @@ export type Permission =
   | 'invoice.write'
   | 'payment.write'
   | 'cash.manage'
+  | 'payable.write'
   // Convênios
   | 'insurance.manage'
   // Equipe e clínica
   | 'team.read'
   | 'team.manage'
   | 'clinic.settings'
+  | 'audit.read'
   // Relatórios
   | 'report.read'
 
@@ -98,6 +100,7 @@ const FINANCIAL = [
   'invoice.write',
   'payment.write',
   'cash.manage',
+  'payable.write',
   'insurance.manage',
 ] as const satisfies readonly Permission[]
 
@@ -126,6 +129,7 @@ const MATRIX: Record<MembershipRole, readonly Permission[]> = {
     'team.read',
     'team.manage',
     'clinic.settings',
+    'audit.read',
     'report.read',
   ],
 
@@ -135,6 +139,7 @@ const MATRIX: Record<MembershipRole, readonly Permission[]> = {
     'team.read',
     'team.manage',
     'clinic.settings',
+    'audit.read',
     'report.read',
   ],
 

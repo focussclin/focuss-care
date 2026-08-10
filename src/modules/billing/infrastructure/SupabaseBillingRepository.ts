@@ -19,6 +19,9 @@ import type {
   NewInvoiceData,
   NewPaymentData,
   OpenCashSession,
+  Payable,
+  NewPayableData,
+  SettlePayableData,
   Payment,
 } from '../domain/Billing'
 import type { BillingRepository } from '../domain/BillingRepository'
@@ -52,6 +55,9 @@ const INVOICE_SELECT = `
 /** Teto de linhas por consulta de período. Ver `PERIOD_ROW_CAP` em `reporting`. */
 const ROW_CAP = 2000
 
+const PAYABLE_SELECT =
+  'id, description, category, supplier, amount_cents, due_date, paid_at, paid_amount_cents, method, is_recurring, notes, created_at'
+
 /** Status que ainda esperam dinheiro. */
 const OPEN_STATUSES: readonly InvoiceStatus[] = [
   'draft',
@@ -83,6 +89,21 @@ interface InvoiceRow {
   }[]
 }
 
+interface PayableRow {
+  id: string
+  description: string
+  category: string | null
+  supplier: string | null
+  amount_cents: number
+  due_date: string
+  paid_at: string | null
+  paid_amount_cents: number | null
+  method: PaymentMethod | null
+  is_recurring: boolean
+  notes: string | null
+  created_at: string
+}
+
 /**
  * Adapter financeiro — feature **B-01**.
  *
@@ -105,6 +126,119 @@ interface InvoiceRow {
  */
 export class SupabaseBillingRepository implements BillingRepository {
   constructor(private readonly client: Client) {}
+
+  async searchInvoicesByPatientName(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Invoice[]> {
+    const cleanQuery = query.replace(/[\\%_*(),]/g, ' ').trim()
+    if (!cleanQuery) return []
+
+    const { data: patients, error: patientError } = await this.client
+      .from('patients')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('is_active', true)
+      .ilike('full_name', `%${cleanQuery}%`)
+      .limit(Math.min(Math.max(limit * 2, 1), 32))
+
+    if (patientError) {
+      throw readFailure('searchInvoicesByPatientName', patientError)
+    }
+
+    const patientIds = (patients ?? []).map((patient) => patient.id)
+    if (patientIds.length === 0) return []
+
+    const { data, error } = await this.client
+      .from('invoices')
+      .select(INVOICE_SELECT)
+      .eq('clinic_id', clinicId)
+      .in('patient_id', patientIds)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(Math.max(Math.trunc(limit) || 1, 1), 20))
+
+    if (error) throw readFailure('searchInvoicesByPatientName', error)
+
+    return (data as unknown as InvoiceRow[]).map(toInvoice)
+  }
+
+  async listPayables(clinicId: string, through: Date): Promise<Payable[]> {
+    const { data, error } = await this.client
+      .from('payables')
+      .select(PAYABLE_SELECT)
+      .eq('clinic_id', clinicId)
+      .lte('due_date', toDateOnly(through))
+      .order('paid_at', { ascending: true, nullsFirst: true })
+      .order('due_date', { ascending: true })
+      .limit(ROW_CAP)
+
+    if (error) throw readFailure('listPayables', error)
+
+    return ((data ?? []) as unknown as PayableRow[]).map((row) =>
+      toPayable(row),
+    )
+  }
+
+  async createPayable(
+    clinicId: string,
+    data: NewPayableData,
+    createdBy: string,
+  ): Promise<Payable> {
+    const { data: row, error } = await this.client
+      .from('payables')
+      .insert({
+        clinic_id: clinicId,
+        description: data.description,
+        category: data.category,
+        supplier: data.supplier,
+        amount_cents: data.amountCents,
+        due_date: toDateOnly(data.dueDate),
+        is_recurring: data.isRecurring,
+        notes: data.notes,
+        created_by: createdBy,
+      })
+      .select(PAYABLE_SELECT)
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return toPayable(row as unknown as PayableRow)
+  }
+
+  async settlePayable(
+    clinicId: string,
+    data: SettlePayableData,
+  ): Promise<Payable> {
+    const current = await this.requirePayable(clinicId, data.payableId)
+
+    if (current.paidAt) {
+      throw new BillingRepositoryError(
+        'payable-paid',
+        'despesa ja foi baixada',
+      )
+    }
+
+    const now = new Date().toISOString()
+    const { data: row, error } = await this.client
+      .from('payables')
+      .update({
+        paid_at: now,
+        paid_amount_cents: current.amountCents,
+        method: data.method,
+        updated_at: now,
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', data.payableId)
+      .is('paid_at', null)
+      .select(PAYABLE_SELECT)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw new BillingRepositoryError('payable-paid', 'despesa ja foi baixada')
+
+    return toPayable(row as unknown as PayableRow)
+  }
 
   async listInvoices(
     clinicId: string,
@@ -705,6 +839,23 @@ export class SupabaseBillingRepository implements BillingRepository {
     return toInvoice(data as unknown as InvoiceRow)
   }
 
+  private async requirePayable(
+    clinicId: string,
+    payableId: string,
+  ): Promise<Payable> {
+    const { data, error } = await this.client
+      .from('payables')
+      .select(PAYABLE_SELECT)
+      .eq('clinic_id', clinicId)
+      .eq('id', payableId)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) throw notFound(payableId)
+
+    return toPayable(data as unknown as PayableRow)
+  }
+
   /** Nome de quem abriu ou fechou. Ausência não vira linha em branco. */
   private async resolveName(userId: string | null): Promise<string> {
     if (!userId) return 'Alguém da equipe'
@@ -753,6 +904,38 @@ function toInvoice(row: InvoiceRow): Invoice {
     createdAt: new Date(row.created_at),
     items,
   }
+}
+
+function toPayable(row: PayableRow): Payable {
+  const paidAmountCents = row.paid_amount_cents ?? 0
+  const paidAt = row.paid_at ? new Date(row.paid_at) : null
+  const dueDate = new Date(`${row.due_date}T00:00:00`)
+  const status = paidAt
+    ? 'paid'
+    : dueDate.getTime() < startOfToday().getTime()
+      ? 'overdue'
+      : 'open'
+
+  return {
+    id: row.id,
+    description: row.description,
+    category: row.category,
+    supplier: row.supplier,
+    amountCents: row.amount_cents,
+    dueDate,
+    paidAt,
+    paidAmountCents,
+    method: row.method,
+    isRecurring: row.is_recurring,
+    notes: row.notes,
+    status,
+    createdAt: new Date(row.created_at),
+  }
+}
+
+function startOfToday(): Date {
+  const today = new Date()
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate())
 }
 
 /** Abertura + entradas − saídas. A gaveta em um número. */

@@ -368,3 +368,119 @@ describe('recentActivity', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+
+describe('série mensal', () => {
+  /**
+   * A série é a base da tela de indicadores, e o erro que ela pode cometer é
+   * silencioso: janela de mês trocada desloca a curva inteira e ninguém
+   * percebe, porque o gráfico continua bonito.
+   */
+  const REFERENCE = new Date(2026, 7, 8) // 08/08/2026, hora local
+
+  it('devolve um ponto por mês pedido, do mais antigo ao mais recente', async () => {
+    const fake = createFakeClient({ count: () => 3 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    const trend = await repository.monthlyTrend(CLINIC, REFERENCE, 12)
+
+    expect(trend.points).toHaveLength(12)
+
+    const months = trend.points.map((point) => point.month.getTime())
+    expect([...months].sort((a, b) => a - b)).toEqual(months)
+  })
+
+  it('termina no mês da referência, e não no mês seguinte', async () => {
+    const fake = createFakeClient({ count: () => 0 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    const trend = await repository.monthlyTrend(CLINIC, REFERENCE, 3)
+    const last = trend.points.at(-1)?.month
+
+    expect(last?.getFullYear()).toBe(2026)
+    expect(last?.getMonth()).toBe(7)
+    expect(last?.getDate()).toBe(1)
+  })
+
+  it('atravessa a virada do ano sem pular mês', async () => {
+    const fake = createFakeClient({ count: () => 0 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    const trend = await repository.monthlyTrend(CLINIC, new Date(2026, 1, 15), 4)
+
+    expect(
+      trend.points.map((point) => [point.month.getFullYear(), point.month.getMonth()]),
+    ).toEqual([
+      [2025, 10],
+      [2025, 11],
+      [2026, 0],
+      [2026, 1],
+    ])
+  })
+
+  it('filtra a clínica em TODA contagem — a RLS é a última linha, não a única', async () => {
+    const fake = createFakeClient({ count: () => 1 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    await repository.monthlyTrend(CLINIC, REFERENCE, 6)
+
+    const selects = fake.calls.filter((call) => call.method === 'select')
+    expect(selects.length).toBeGreaterThan(0)
+
+    const semTenant = fake.calls.filter(
+      (call) => call.method === 'eq' && call.args[0] === 'clinic_id',
+    )
+    // Três contagens por mês, seis meses.
+    expect(semTenant).toHaveLength(18)
+    expect(semTenant.every((call) => call.args[1] === CLINIC)).toBe(true)
+  })
+
+  it('conta sem transferir linha — `head` em todas as consultas', async () => {
+    const fake = createFakeClient({ count: () => 2 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    await repository.monthlyTrend(CLINIC, REFERENCE, 3)
+
+    const selects = fake.calls.filter((call) => call.method === 'select')
+    expect(
+      selects.every(
+        (call) => (call.args[1] as { head?: boolean } | undefined)?.head === true,
+      ),
+    ).toBe(true)
+  })
+
+  it('exclui cancelado do total e usa `completed` para realizados', async () => {
+    const fake = createFakeClient({ count: () => 5 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    await repository.monthlyTrend(CLINIC, REFERENCE, 1)
+
+    const appointments = fake.ofTable('appointments')
+    const excluiCancelado = appointments.some(
+      (call) => call.method === 'not' && call.args[0] === 'status',
+    )
+    const filtraRealizado = appointments.some(
+      (call) =>
+        call.method === 'eq' &&
+        call.args[0] === 'status' &&
+        call.args[1] === 'completed',
+    )
+
+    expect(excluiCancelado).toBe(true)
+    expect(filtraRealizado).toBe(true)
+  })
+
+  it('ignora paciente removido na contagem de novos', async () => {
+    const fake = createFakeClient({ count: () => 4 })
+    const repository = new SupabaseReportingRepository(fake.client)
+
+    await repository.monthlyTrend(CLINIC, REFERENCE, 1)
+
+    expect(
+      fake
+        .ofTable('patients')
+        .some((call) => call.method === 'is' && call.args[0] === 'deleted_at'),
+    ).toBe(true)
+  })
+})

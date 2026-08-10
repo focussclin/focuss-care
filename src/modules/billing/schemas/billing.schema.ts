@@ -24,6 +24,11 @@ export const billingMessages = {
     'Esta cobrança já recebeu pagamento e não pode ser cancelada. Registre um estorno com o responsável financeiro.',
   cashSessionOpen: 'Já existe um caixa aberto nesta clínica.',
   cashSessionClosed: 'Este caixa não está mais aberto.',
+  payablePaid: 'Esta despesa já foi baixada e não pode ser baixada novamente.',
+  payableDateRequired: 'Informe uma data de vencimento válida.',
+  payableDescriptionRequired: 'Descreva a despesa.',
+  payableUnavailable:
+    'As contas a pagar ainda não estão disponíveis nesta conexão financeira.',
   notFound: 'Este registro não está mais disponível nesta clínica.',
   forbidden: 'Você não tem permissão para movimentar o financeiro.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
@@ -204,6 +209,52 @@ export const closeCashSessionSchema = z.object({
 
 export type CloseCashSessionInput = z.infer<typeof closeCashSessionSchema>
 
+const payableDateField = z.string().transform((value, ctx) => {
+  const parsed = parseDateOnly(value)
+
+  if (!parsed) {
+    ctx.addIssue({ code: 'custom', message: billingMessages.payableDateRequired })
+    return z.NEVER
+  }
+
+  return parsed
+})
+
+export const createPayableSchema = z.object({
+  description: z
+    .string()
+    .trim()
+    .min(1, billingMessages.payableDescriptionRequired)
+    .max(200, billingMessages.invalidFields),
+  category: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value.slice(0, 100))),
+  supplier: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value.slice(0, 160))),
+  amount: moneyField({ min: 1 }),
+  dueDate: payableDateField,
+  isRecurring: z.boolean().default(false),
+  notes: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .transform((value) => (value === '' ? null : value.slice(0, 500))),
+})
+
+export type CreatePayableInput = z.infer<typeof createPayableSchema>
+
+export const settlePayableSchema = z.object({
+  payableId: z.uuid(billingMessages.unexpected),
+  method: z.enum(methodValues),
+})
+
+export type SettlePayableInput = z.infer<typeof settlePayableSchema>
+
 /** 'YYYY-MM-DD' -> Date local, ou null. Data impossível vira null, não erro. */
 function parseDateOnly(value: string | undefined): Date | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
@@ -264,4 +315,19 @@ export interface FinanceSummaryDto {
   openCents: number
   openInvoices: number
   issuedInvoices: number
+}
+
+export interface PayableDto {
+  id: string
+  description: string
+  category: string | null
+  supplier: string | null
+  amountCents: number
+  dueDate: string
+  paidAt: string | null
+  paidAmountCents: number
+  method: PaymentMethod | null
+  isRecurring: boolean
+  status: 'open' | 'overdue' | 'paid'
+  notes: string | null
 }

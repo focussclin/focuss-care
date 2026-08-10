@@ -49,6 +49,11 @@ export class MockTeamRepository implements TeamRepository {
     return []
   }
 
+  /** Convites alteram acesso e exigem persistência real no Supabase. */
+  async createInvitation(): Promise<never> {
+    return this.refuseWrite('createInvitation')
+  }
+
   /**
    * Escrita nao existe na demonstracao.
    *

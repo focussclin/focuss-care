@@ -60,6 +60,34 @@ export function describeRole(role: MembershipRole | null): string {
   return role ? roleLabels[role] : fallbackRoleLabel
 }
 
+/**
+ * Nome a exibir na casca, com o rotulo da demonstracao como ultimo recurso.
+ *
+ * # Por que isto virou funcao
+ *
+ * A casca e o painel decidiam isso cada um do seu jeito, e os dois jeitos nao
+ * eram equivalentes. O layout perguntava "e demonstracao?" e so entao usava o
+ * nome de exemplo. O painel perguntava o contrario — "a sessao esta ATIVA?" — e
+ * caia no nome de exemplo em todos os outros casos, incluindo `claims-stale` e
+ * `needs-onboarding`, que sao pessoas reais, autenticadas, com nome proprio. Nas
+ * duas o layout redireciona antes, entao a tela nao chegava a pintar; a protecao
+ * era o desvio de outro arquivo, e nao a decisao deste.
+ *
+ * Chamar alguem pelo nome de outra pessoa e um erro barato de cometer e caro de
+ * ver acontecendo — ainda mais quando o nome de exemplo e o de uma pessoa de
+ * verdade nos dados de demonstracao.
+ *
+ * A pergunta certa e "ha usuario nesta sessao?". `'user' in session` responde
+ * pela FORMA do estado, entao um estado novo que carregue usuario ja nasce
+ * usando o nome real, sem ninguem lembrar de vir aqui.
+ *
+ * `demoName` entra por parametro de proposito: dado de demonstracao mora em
+ * `lib/mocks`, e a camada de sessao nao pode depender dele.
+ */
+export function displayNameOf(session: SessionState, demoName: string): string {
+  return 'user' in session ? session.user.displayName : demoName
+}
+
 /** Ultimo recurso quando nem profiles nem metadados trazem nome. */
 function nameFromEmail(email: string | null): string {
   if (!email) return 'Usuário'

@@ -221,6 +221,14 @@ export type UpdateAppointmentDefaultsInput = z.infer<
   typeof updateAppointmentDefaultsSchema
 >
 
+export const updateNotificationPreferencesSchema = z.object({
+  operational: z.boolean(),
+})
+
+export type UpdateNotificationPreferencesInput = z.infer<
+  typeof updateNotificationPreferencesSchema
+>
+
 export const storedAppointmentDefaultsSchema = z.object({
   durationMinutes: z.number().int().positive(),
 })
@@ -251,6 +259,9 @@ export interface ClinicSettingsDto {
   days: readonly BusinessDayDto[]
   hoursSource: 'stored' | 'default' | 'unrecognized'
   durationMinutes: number
+  notificationPreferences: {
+    operational: boolean
+  }
 }
 
 /** '11222333000181' -> '11.222.333/0001-81'. Entrada fora do formato volta como veio. */

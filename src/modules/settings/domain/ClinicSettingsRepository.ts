@@ -5,6 +5,7 @@ import type {
   ClinicProfileInput,
   ClinicSettings,
 } from './ClinicSettings'
+import type { NotificationPreferences } from '@/lib/notifications/preferences'
 
 /**
  * PORTA das configurações da clínica.
@@ -20,11 +21,10 @@ import type {
  * `ClinicProfile` porque a tela os MOSTRA; nenhum entra em `ClinicProfileInput`.
  * O motivo de cada um está no cabeçalho de `ClinicSettings.ts`.
  *
- * **Não há `updateBranding` nem `updateNotifications`.** As colunas existem em
- * `clinic_settings` (`branding`, `notification_prefs`, `ai_enabled`), e é
- * justamente por existirem que a ausência precisa estar escrita: nada no produto
- * as lê hoje. Gravar preferência de notificação enquanto nenhum caminho envia
- * notificação é prometer um comportamento que não acontece.
+ * **Não há `updateBranding` nem `updateAi`.** As colunas existem em
+ * `clinic_settings` (`branding`, `ai_enabled`), mas nada no produto as consome
+ * hoje. A preferência de avisos tem método próprio porque os produtores de
+ * agenda, recepção e financeiro já a consultam antes de criar notificações.
  */
 export interface ClinicSettingsRepository {
   /**
@@ -63,4 +63,10 @@ export interface ClinicSettingsRepository {
     clinicId: string,
     defaults: AppointmentDefaults,
   ): Promise<AppointmentDefaults>
+
+  /** Ativa ou silencia os avisos operacionais do centro in-app. */
+  updateNotificationPreferences(
+    clinicId: string,
+    preferences: NotificationPreferences,
+  ): Promise<NotificationPreferences>
 }

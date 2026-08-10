@@ -8,6 +8,12 @@ export const insuranceMessages = {
   planNameRequired: 'Informe o nome do plano.',
   providerRequired: 'Selecione a operadora deste plano.',
   cardRequired: 'Selecione a carteirinha do paciente.',
+  patientRequired: 'Selecione o paciente da carteirinha.',
+  planRequired: 'Selecione um plano ativo.',
+  cardNumberRequired: 'Informe o número da carteirinha.',
+  cardNumberTooLong: 'O número da carteirinha pode ter no máximo 80 caracteres.',
+  holderNameTooLong: 'O nome do titular pode ter no máximo 160 caracteres.',
+  dateInvalid: 'Informe uma data de validade válida.',
   procedureRequired: 'Inclua pelo menos um procedimento na guia.',
   procedureDescription: 'Descreva o procedimento solicitado.',
   quantityInvalid: 'A quantidade precisa ser um número inteiro de 1 a 99.',
@@ -30,14 +36,17 @@ export const insuranceMessages = {
   forbidden: 'Você não tem permissão para gerenciar convênios.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a operação agora. Tente novamente.',
-  /**
-   * Glosa indisponível — texto exibido no lugar da seção.
-   *
-   * Diz o que falta e por quê. "Em breve" faria a clínica esperar por algo que
-   * ninguém está construindo.
-   */
+  /** Explica a diferença entre glosa e negativa de autorização prévia. */
   glossUnavailable:
-    'O controle de glosas ainda não existe: não há onde registrá-las no banco de dados. Guia negada, que aparece abaixo, é outra coisa — é a operadora recusando a autorização ANTES do atendimento. Glosa é a recusa de pagamento depois da fatura enviada.',
+    'Glosa é a recusa de pagamento depois da fatura enviada. Ela fica separada da guia negada, que é a operadora recusando a autorização antes do atendimento.',
+  claimReasonRequired: 'Descreva o motivo informado pela operadora.',
+  claimRecoveredAmountRequired: 'Informe quanto foi recuperado no recurso.',
+  claimAlreadyResolved: 'Esta glosa já foi encerrada e não pode ser alterada.',
+  claimInvalidTransition:
+    'Este status não é válido para o estado atual da glosa.',
+  claimAmountTooHigh: 'O valor glosado não pode superar o valor da fatura.',
+  claimRecoveryTooHigh:
+    'O valor recuperado não pode superar o valor originalmente glosado.',
   /** Texto sobre elegibilidade, exibido junto às carteirinhas. */
   eligibilityUnavailable:
     'A validade abaixo é a que a clínica cadastrou. O sistema não consulta a operadora para confirmar elegibilidade.',
@@ -51,11 +60,11 @@ export const authorizationStatusLabels: Record<string, string> = {
 }
 
 /** Texto de dinheiro -> centavos, no servidor. Ver `billing.schema` para o porquê. */
-function moneyField() {
+function moneyField(options: { min?: number } = {}) {
   return z.string().transform((value, ctx) => {
     const cents = parseCents(value)
 
-    if (cents === null || cents < 0) {
+    if (cents === null || cents < (options.min ?? 0)) {
       ctx.addIssue({ code: 'custom', message: insuranceMessages.amountInvalid })
       return z.NEVER
     }
@@ -143,6 +152,46 @@ export type CreateAuthorizationInput = z.infer<
   typeof createAuthorizationSchema
 >
 
+function validDateOnly(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.toISOString().slice(0, 10) === value
+}
+
+export const createPatientInsuranceSchema = z.object({
+  patientId: z.uuid(insuranceMessages.patientRequired),
+  planId: z.uuid(insuranceMessages.planRequired),
+  cardNumber: z
+    .string()
+    .trim()
+    .min(1, insuranceMessages.cardNumberRequired)
+    .max(80, insuranceMessages.cardNumberTooLong),
+  holderName: optionalText(160),
+  validUntil: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || validDateOnly(value),
+      insuranceMessages.dateInvalid,
+    )
+    .transform((value) => (value === '' ? null : value)),
+  isPrimary: z.boolean(),
+})
+
+export type CreatePatientInsuranceInput = z.infer<
+  typeof createPatientInsuranceSchema
+>
+
+export const setPatientInsuranceActiveSchema = z.object({
+  insuranceId: z.uuid(insuranceMessages.unexpected),
+  isActive: z.boolean(),
+})
+
+export type SetPatientInsuranceActiveInput = z.infer<
+  typeof setPatientInsuranceActiveSchema
+>
+
 /**
  * A resposta da operadora.
  *
@@ -175,6 +224,55 @@ export const answerAuthorizationSchema = z.discriminatedUnion('outcome', [
 export type AnswerAuthorizationInput = z.infer<
   typeof answerAuthorizationSchema
 >
+
+const claimDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, insuranceMessages.invalidFields)
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    )
+  }, insuranceMessages.invalidFields)
+
+export const createClaimDenialSchema = z.object({
+  invoiceId: z.uuid(insuranceMessages.unexpected),
+  denialCode: optionalText(30),
+  reason: z
+    .string()
+    .trim()
+    .min(1, insuranceMessages.claimReasonRequired)
+    .max(500, insuranceMessages.invalidFields),
+  amount: moneyField({ min: 1 }),
+  deniedAt: claimDate,
+  notes: optionalText(500),
+})
+
+export type CreateClaimDenialInput = z.infer<typeof createClaimDenialSchema>
+
+export const updateClaimDenialSchema = z.discriminatedUnion('status', [
+  z.object({
+    denialId: z.uuid(insuranceMessages.unexpected),
+    status: z.literal('appealing'),
+    notes: optionalText(500),
+  }),
+  z.object({
+    denialId: z.uuid(insuranceMessages.unexpected),
+    status: z.literal('recovered'),
+    recoveredAmount: moneyField({ min: 1 }),
+    notes: optionalText(500),
+  }),
+  z.object({
+    denialId: z.uuid(insuranceMessages.unexpected),
+    status: z.literal('accepted'),
+    notes: optionalText(500),
+  }),
+])
+
+export type UpdateClaimDenialInput = z.infer<typeof updateClaimDenialSchema>
 
 /**
  * O formato guardado em `insurance_authorizations.procedures`.
@@ -233,9 +331,53 @@ export interface PatientInsuranceDto {
   validUntil: string | null
 }
 
+export interface PatientInsuranceRecordDto {
+  id: string
+  patientId: string
+  patientName: string
+  planId: string
+  planName: string
+  providerName: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: string | null
+  isPrimary: boolean
+  isActive: boolean
+}
+
 export interface InsuranceSummaryDto {
   activeProviders: number
   activePlans: number
   pendingAuthorizations: number
   deniedAuthorizations: number
+}
+
+export interface ClaimDenialDto {
+  id: string
+  invoiceId: string
+  invoiceNumber: number | null
+  patientName: string
+  planName: string
+  invoiceItemDescription: string | null
+  denialCode: string | null
+  reason: string
+  amountCents: number
+  status: string
+  deniedAt: string
+  appealedAt: string | null
+  resolvedAt: string | null
+  recoveredCents: number | null
+  notes: string | null
+}
+
+export interface ClaimInvoiceOptionDto {
+  id: string
+  label: string
+}
+
+export const claimDenialStatusLabels: Record<string, string> = {
+  received: 'Recebida',
+  appealing: 'Em recurso',
+  recovered: 'Recuperada',
+  accepted: 'Prejuízo aceito',
 }

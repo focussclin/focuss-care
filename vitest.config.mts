@@ -5,24 +5,41 @@ import { defineConfig } from 'vitest/config'
 /**
  * Harness de teste — feature F-04 do roadmap (divida D5).
  *
- * Escopo deliberado: **logica pura**. Schemas Zod, normalizacao, mappers e
- * comparacao de campos — o que decide se um dado entra certo no banco, e o que
- * quebra em silencio quando alguem mexe.
+ * Escopo: **logica pura** e, desde a paleta de comandos, **componente**.
  *
- * O que NAO esta aqui, e por que:
+ * # O ambiente e `node` por padrao, e isso e deliberado
  *
- *  - **Teste de componente.** Exige `@testing-library/react` + ambiente DOM, e
- *    entra junto com o primeiro teste que precise dele. Instalar agora seria
- *    dependencia sem chamador.
+ * A esmagadora maioria dos testes daqui e schema Zod, normalizacao e mapper —
+ * nada disso toca DOM, e montar um jsdom por arquivo custaria tempo em todo
+ * `npm test` para nada.
+ *
+ * Quem precisa de DOM declara no PROPRIO arquivo:
+ *
+ * ```ts
+ * // @vitest-environment jsdom
+ * ```
+ *
+ * A alternativa seria `environmentMatchGlobs` na config, e o docblock ganha por
+ * um motivo pratico: quem abre o teste ve o ambiente na primeira linha, em vez
+ * de precisar cruzar o caminho do arquivo com um padrao escrito em outro lugar.
+ *
+ * `include` cobre `.test.ts` e `.test.tsx`. Sem o segundo, um teste de
+ * componente novo simplesmente **nao rodaria** — e um arquivo de teste que nunca
+ * executa passa despercebido, porque a suite continua verde.
+ *
+ * # O que continua fora
+ *
  *  - **Teste de tenancy (pgTAP).** Roda no banco, nao no Node — `supabase test db`
  *    com `supabase/tests/`. E o gate do R1 do roadmap e continua pendente; as
  *    sondas manuais da §7.1 de docs/07-cadastro-de-pacientes.md sao o que existe
  *    hoje no lugar dele.
+ *  - **Teste de ponta a ponta.** Navegacao real, sessao real, banco real. Exige
+ *    Playwright e um projeto Supabase de teste — nenhum dos dois existe aqui.
  */
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
   resolve: {
     alias: [

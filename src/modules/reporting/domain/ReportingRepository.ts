@@ -1,6 +1,10 @@
 import type { ActivityEntry } from '@/modules/_shared/domain/types'
 
-import type { DailySnapshot, PeriodReport } from './ClinicMetrics'
+import type {
+  DailySnapshot,
+  MonthlyTrend,
+  PeriodReport,
+} from './ClinicMetrics'
 
 /**
  * PORTA dos indicadores — feature **T-01**.
@@ -51,4 +55,18 @@ export interface ReportingRepository {
 
   /** Relatório de um período `[from, to)`. */
   periodReport(clinicId: string, from: Date, to: Date): Promise<PeriodReport>
+
+  /**
+   * Série mensal terminando no mês de `reference`, inclusive.
+   *
+   * Responde "a clínica está crescendo?", que nenhum número isolado responde.
+   * É contagem pura — `count` com `head`, sem transferir linha —, então doze
+   * meses custam doze contagens e nenhum `PERIOD_ROW_CAP`: não há amostra a
+   * truncar, e portanto não há relatório truncado em silêncio.
+   */
+  monthlyTrend(
+    clinicId: string,
+    reference: Date,
+    months: number,
+  ): Promise<MonthlyTrend>
 }

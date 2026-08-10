@@ -17,6 +17,8 @@ interface AppHeaderProps {
   userRole: string
   /** Clinica ativa da sessao. Ausente no modo de demonstracao local. */
   clinicName?: string
+  /** Centro real de notificações, montado na casca com sessão e tenant. */
+  notificationSlot?: ReactNode
   /** Seletor de clinica (I-03), quando ha mais de um vinculo. */
   clinicSwitcher?: ReactNode
   onMenuClick: () => void
@@ -26,17 +28,32 @@ interface AppHeaderProps {
 
 const titles: Record<string, { title: string; description: string }> = {
   '/dashboard': { title: 'Dashboard', description: 'Visão geral da sua clínica' },
+  '/indicadores': { title: 'Indicadores e BI', description: 'Acompanhe os números que orientam a clínica' },
   '/agenda': { title: 'Agenda', description: 'Organize seus atendimentos' },
   '/pacientes': { title: 'Pacientes', description: 'Acompanhe sua base de pacientes' },
   '/atendimentos': { title: 'Atendimentos', description: 'Acompanhe a operação da clínica' },
+  '/recepcao': { title: 'Recepção', description: 'Organize chegadas e atendimentos do dia' },
+  '/display': { title: 'Display para TV', description: 'Exiba chamadas com privacidade na recepção' },
   '/prontuarios': { title: 'Prontuários', description: 'Cuidado contínuo e protegido' },
   '/financeiro': { title: 'Financeiro', description: 'Clareza sobre receitas e despesas' },
   '/convenios': { title: 'Convênios', description: 'Operadoras e tabelas da clínica' },
+  '/conciliacao': { title: 'Conciliação bancária', description: 'Relacione transações e lançamentos da clínica' },
+  '/estoque': { title: 'Estoque', description: 'Controle insumos, saldos e movimentações' },
+  '/compras': { title: 'Compras', description: 'Acompanhe fornecedores e pedidos' },
   '/whatsapp': { title: 'WhatsApp', description: 'Converse com seus pacientes' },
+  '/inbox': { title: 'Inbox de atendimento', description: 'Centralize conversas e responsáveis' },
+  '/crm': { title: 'CRM e Leads', description: 'Conduza oportunidades até o agendamento' },
   '/chat-ia': { title: 'Assistente Focuss', description: 'Inteligência aplicada à sua rotina' },
   '/automacoes': { title: 'Automações', description: 'Reduza tarefas repetitivas' },
+  '/insights': { title: 'Insights proativos', description: 'Identifique sinais operacionais antes que virem problemas' },
+  '/tarefas': { title: 'Tarefas', description: 'Coordene pendências e próximos passos da equipe' },
   '/equipe': { title: 'Equipe', description: 'Gerencie profissionais e acessos' },
   '/relatorios': { title: 'Relatórios', description: 'Indicadores para decisões melhores' },
+  '/documentos': { title: 'Documentos', description: 'Organize arquivos vinculados aos pacientes' },
+  '/formularios': { title: 'Formulários digitais', description: 'Crie e colete informações da clínica' },
+  '/assinaturas': { title: 'Assinaturas', description: 'Acompanhe plano, estado e limites da clínica' },
+  '/auditoria': { title: 'Auditoria', description: 'Consulte a trilha de ações da clínica' },
+  '/salas-e-recursos': { title: 'Salas e recursos', description: 'Organize salas, equipamentos e disponibilidade' },
   '/configuracoes': { title: 'Configurações', description: 'Preferências do espaço' },
 }
 
@@ -45,6 +62,7 @@ export function AppHeader({
   userRole,
   clinicName,
   clinicSwitcher,
+  notificationSlot,
   onMenuClick,
   onOpenCommands,
 }: AppHeaderProps) {
@@ -89,9 +107,9 @@ export function AppHeader({
           Campo que aceita digitação e não faz nada é pior que botão
           desabilitado: a pessoa digita, espera, e conclui que a busca não
           encontrou o paciente. Virou um botão — que é o que ele sempre foi — e
-          abre a paleta de comandos. O texto também mudou: a paleta vai a telas
-          e ações, não procura registros, e prometer o contrário reintroduziria
-          o mesmo engano com outra roupa.
+          abre a paleta de comandos. A paleta navega por telas e ações e também
+          pesquisa pacientes, agendamentos e cobranças reais quando o usuário
+          tem permissão.
         */}
         <button
           type="button"
@@ -101,7 +119,7 @@ export function AppHeader({
         >
           <Search aria-hidden className="size-4 shrink-0" />
           <span className="h-10 min-w-0 flex-1 content-center truncate text-aux">
-            Ir para uma tela ou criar…
+            Buscar paciente, cobrança ou agendamento…
           </span>
           <kbd className="hidden items-center gap-1 rounded-md border border-border-card bg-surface px-1.5 py-0.5 text-[10px] text-muted lg:inline-flex">
             <Command aria-hidden className="size-3" /> K
@@ -117,15 +135,17 @@ export function AppHeader({
             ensina a pessoa a ignorá-lo, e é o primeiro que ela vai ignorar
             quando houver um de verdade.
           */}
-          <button
-            type="button"
-            aria-label="Notificações: o sistema ainda não envia avisos automáticos"
-            title="O sistema ainda não envia avisos automáticos"
-            disabled
-            className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
-          >
-            <Bell aria-hidden className="size-[18px]" />
-          </button>
+          {notificationSlot ?? (
+            <button
+              type="button"
+              aria-label="Notificações indisponíveis nesta demonstração"
+              title="Notificações indisponíveis nesta demonstração"
+              disabled
+              className="relative inline-flex size-10 cursor-not-allowed items-center justify-center rounded-[10px] text-muted opacity-70"
+            >
+              <Bell aria-hidden className="size-[18px]" />
+            </button>
+          )}
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>

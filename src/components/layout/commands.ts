@@ -1,4 +1,5 @@
 import { can, type Permission } from '@/lib/auth/permissions'
+import { patientSearchHref } from '@/lib/routes/patientRoutes'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 
 import { navItems } from './navigation'
@@ -8,18 +9,19 @@ import { navItems } from './navigation'
  *
  * # O que entra aqui, e o que não entra
  *
- * Só **navegação para rota que existe** e **criação que abre um formulário de
- * verdade**. Nada mais.
+ * Quatro coisas, e nada além delas: **navegação para rota que existe**,
+ * **criação que abre um formulário de verdade**, busca real de pacientes,
+ * agendamentos e cobranças por paciente.
  *
- * O campo de busca do cabeçalho prometia "Buscar pacientes, agenda…" e não fazia
- * nada — um input inerte é pior que um botão desabilitado, porque a pessoa
- * digita, espera e conclui que a busca não achou nada. A paleta resolve o
- * inerte; ela **não** resolve a busca. Procurar um paciente pelo nome exige
- * consulta ao banco com recorte por clínica, e isso é outra fatia.
+ * A busca por nome tem dois caminhos seguros: a paleta consulta a Server Action
+ * para mostrar resultados inline, e o comando `patientSearchCommand` leva a
+ * `/pacientes?q=…` quando a pessoa prefere abrir a lista completa. Em ambos os
+ * casos a consulta passa pelo servidor e pela RLS.
  *
- * Por isso o estado vazio da paleta diz, em texto, que ela navega entre telas e
- * não procura registros. Sem isso, trocaríamos um campo que não faz nada por um
- * que parece fazer e devolve "nenhum resultado" para um paciente que existe.
+ * A agenda e o financeiro são consultados por actions tenant-scoped que primeiro
+ * encontram pacientes ativos e depois carregam seus registros. O restante —
+ * prontuário e convênios — ainda não tem contrato de busca por termo, e o estado
+ * vazio da paleta diz isso em vez de simular resultado.
  */
 export interface Command {
   id: string
@@ -30,7 +32,7 @@ export interface Command {
   keywords?: readonly string[]
   /** Mesma matriz de I-05 do menu: não oferecer o que o papel não alcança. */
   permission?: Permission
-  group: 'Ir para' | 'Criar'
+  group: 'Buscar' | 'Ir para' | 'Criar'
 }
 
 /**
@@ -120,6 +122,72 @@ export function visibleCommands(
   return ALL_COMMANDS.filter(
     (command) => !command.permission || can(role, command.permission),
   )
+}
+
+/**
+ * A partir de quantos caracteres a busca de pacientes é oferecida.
+ *
+ * Uma letra casaria com quase toda a base, e o resultado seria a lista inteira
+ * com um filtro no meio — pior que não filtrar, porque parece filtrado.
+ */
+export const MIN_SEARCH_LENGTH = 2
+
+/**
+ * O comando de buscar paciente — o fallback da busca inline.
+ *
+ * # Por que ele existe, e por que só ele
+ *
+ * `/pacientes` já faz busca no SERVIDOR, por parâmetro de URL (P-02a). Então
+ * este comando não consulta nada: ele leva a pessoa para uma tela que consulta,
+ * com o termo já no endereço. Nenhuma linha é lida no navegador, nenhum
+ * resultado é inventado, e o que aparece é o que a RLS deixou passar.
+ *
+ * Agenda e financeiro já possuem buscas inline por Server Action, e os
+ * resultados levam às telas correspondentes. Prontuário e convênios ainda não
+ * têm contrato de termo; o estado vazio diz isso em vez de simular resultado.
+ */
+export function patientSearchCommand(
+  role: MembershipRole | null | undefined,
+  query: string,
+): Command | null {
+  const term = query.trim()
+  if (term.length < MIN_SEARCH_LENGTH) return null
+
+  // Mesma matriz do resto: quem não lê paciente não recebe o caminho.
+  if (role !== undefined && !can(role, 'patient.read')) return null
+
+  return {
+    id: 'buscar-pacientes',
+    label: `Buscar pacientes por "${term}"`,
+    href: patientSearchHref(term),
+    permission: 'patient.read',
+    group: 'Buscar',
+  }
+}
+
+/**
+ * O que a paleta mostra para este papel e esta consulta.
+ *
+ * # A busca vem por ÚLTIMO, e isso foi corrigido depois
+ *
+ * A primeira versão a punha em primeiro lugar, com o argumento de que quem
+ * digita um nome quer o nome. O teste de componente mostrou o custo: digitar
+ * "financeiro" e apertar `Enter` levava a `/pacientes?q=financeiro` — uma busca
+ * por paciente chamado "financeiro" — em vez de abrir a tela Financeiro.
+ *
+ * A regra certa é mais simples: **tela primeiro, busca depois**. Quando o termo
+ * casa com alguma tela, é quase sempre a tela que se quer; quando não casa com
+ * nenhuma — que é o caso de todo nome de pessoa — a busca fica sozinha na lista
+ * e continua sendo o primeiro item, sem precisar de regra especial.
+ */
+export function commandsFor(
+  role: MembershipRole | null | undefined,
+  query: string,
+): readonly Command[] {
+  const matches = filterCommands(visibleCommands(role), query)
+  const search = patientSearchCommand(role, query)
+
+  return search ? [...matches, search] : matches
 }
 
 /** Sem acento e sem caixa — 'Prontuários' é encontrado por 'prontuarios'. */

@@ -1,10 +1,8 @@
-# Migrations propostas — aguardando aprovação e acesso ao banco
+# Migrations aplicadas — histórico e justificativas
 
-> **Nenhuma destas foi aplicada.** Não há `DATABASE_URL`, senha do banco nem
-> `SUPABASE_ACCESS_TOKEN` neste ambiente (bloqueio **B1** do roadmap), e mudança
-> de schema exige aprovação do Codex e PR isolado (§7.4). Os arquivos existem
-> para serem revisados e aplicados por quem tem acesso — não para dar a impressão
-> de que o banco já mudou.
+> As quatro migrations abaixo foram aplicadas no projeto Supabase em 08/08/2026
+> e verificadas estruturalmente. Os arquivos continuam versionados para
+> reproduzir o schema e preservar a justificativa técnica de cada mudança.
 
 Cada arquivo é idempotente e reversível. Depois de aplicar, rodar
 `npm run db:types` e repetir a verificação indicada.
@@ -82,6 +80,9 @@ cancelado (funciona).
 
 ## 4. `20260808_insurance_claim_denials.sql`
 
+**Estado:** aplicada em 08/08/2026 e verificada estruturalmente. O módulo de
+convênios agora registra glosas e acompanha recurso, recuperação e aceite.
+
 **Problema.** Não há onde registrar **glosa** — a recusa de pagamento da
 operadora depois de a fatura ser enviada. O schema tem
 `insurance_authorizations.status = 'denied'`, que é negativa de **autorização
@@ -92,13 +93,12 @@ glosa acontece com o atendimento já prestado e vira prejuízo ou recurso. Somar
 duas no mesmo status faria o relatório de convênios misturar duas coisas e
 esconder exatamente o número que a clínica precisa acompanhar.
 
-**Consequência hoje:** V-01 entregou operadoras, planos e guias, e deixou a
-glosa **explicitamente ausente**, com o motivo escrito na tela. Nada finge
-funcionar.
+**Consequência:** V-01 entregou operadoras, planos e guias; esta migration
+destravou o registro e o ciclo de glosas sem reutilizar o status de guia negada.
 
-**Atenção do revisor:** a policy usa `can_access_financial()`, cujo corpo não é
-legível deste ambiente (B1). Se ela não cobrir `finance`, a tela ficará vazia
-justamente para quem trabalha com glosa.
+**Atenção do revisor:** a policy usa `can_access_financial()`. A verificação
+estrutural foi feita; a validação funcional com uma conta `finance` continua
+recomendada quando houver acesso de teste ao ambiente remoto.
 
 **Verificar depois:** `npm run db:types`, `INSERT` como `finance` (201) e como
 `receptionist` (403), e o teste de tenancy pgTAP que R1 exige para toda tabela
@@ -112,3 +112,67 @@ Ainda **não escritos**, porque dependem de saber o que já existe: sem acesso S
 não dá para verificar quais índices e extensões o banco tem, e criar um índice
 duplicado é custo sem ganho. As quatro consultas de diagnóstico estão em
 `docs/07-cadastro-de-pacientes.md` §8.11.
+
+---
+
+# Propostas pendentes de aplicação
+
+## 5. `20260809_rooms.sql` — **NÃO APLICADA**
+
+**Problema.** "Salas e recursos" é item de menu sem tabela. A consequência não é
+cosmética: a agenda já impede que o mesmo **profissional** tenha dois
+atendimentos sobrepostos (constraint `appointments_no_overlap`, aplicada em
+08/08/2026), e **não impede que dois profissionais sejam mandados para a mesma
+sala no mesmo horário**. Numa clínica com três consultórios e cinco
+profissionais, é o conflito que acontece toda semana — e o único que o sistema
+ainda não vê.
+
+**O que a migration cria.** `public.rooms` (com `kind` distinguindo consultório,
+sala de exame, sala de procedimento e equipamento móvel), a coluna opcional
+`appointments.room_id`, e uma constraint de exclusão parcial que espelha a do
+profissional.
+
+**Por que é seguro aplicar.** `room_id` nasce nulo em todos os atendimentos
+existentes, e a constraint só vale quando ele é preenchido — clínica que não
+controla sala não sente diferença, e **não há backfill nem sobreposição prévia a
+limpar**, ao contrário da constraint de profissional.
+
+**Verificar depois:** as sete checagens listadas no rodapé do arquivo, incluindo
+o caso `d` (marcar sem sala continua funcionando) e o `g` (membro de outra
+clínica lê zero linhas).
+
+**Depois de aplicar, no código:** `npm run db:types`; distinguir sala de
+profissional na tradução do `23P01` em `SupabaseAppointmentRepository` — hoje a
+recepção leria "profissional ocupado" e trocaria a pessoa errada; e habilitar o
+item em `navigation.ts`.
+
+## 6. `20260809_clinic_tasks.sql` — **NÃO APLICADA**
+
+**Problema.** "Tarefas inteligentes" é item de menu sem tabela, e o adjetivo é o
+que travou a feature: "inteligentes" sugere geração por IA, que depende de W-01,
+de provedor de modelo e da aprovação de `docs/04-agente-ia.md`.
+
+O que a clínica precisa antes disso não depende de IA nenhuma: "ligar para a
+paciente que faltou", "conferir a guia que a operadora devolveu", "cobrar o exame
+que não voltou". Hoje isso vive em papel na recepção, e some junto com o papel.
+
+**O que a migration cria.** `public.clinic_tasks` para a tarefa **humana**, com
+`status` de quatro estados, prioridade, prazo, responsável e alvo opcional
+(paciente, atendimento ou fatura). `source` já nasce com `automation` previsto,
+para que a geração automática — se um dia existir — escreva na mesma tabela sem
+exigir migration nova.
+
+**Decisões que o revisor confere.** O alvo é opcional e usa **colunas separadas
+com chave estrangeira**, não um par genérico `(entity_type, entity_id)`: o par
+não tem FK, então o banco não impede apontar para linha apagada, e um dia a
+tarefa abriria uma ficha que não existe mais. `assigned_to` referencia
+`profiles`, não `professionals`, porque quem executa tarefa administrativa é a
+recepção — que não tem linha em `professionals`.
+
+**Verificar depois:** RLS ativa, tenant cruzado devolvendo zero linhas, INSERT só
+com título funcionando, e `patient_id` inexistente falhando com 23503.
+
+**Depois de aplicar, no código:** `npm run db:types`; módulo `tasks` com a
+escrita pelo `createAction` (é mutação tenant-scoped, entra no pipeline com
+auditoria); e **renomear o item de menu para "Tarefas"**, sem "inteligentes" —
+o adjetivo prometeria a geração automática que esta migration não entrega.

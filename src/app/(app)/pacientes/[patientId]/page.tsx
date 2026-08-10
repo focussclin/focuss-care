@@ -12,16 +12,24 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
+import { normalizePatientAdminNote } from '@/modules/patients/application/patientAdminNotes'
 import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
 import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
+import { toPatientContactDto } from '@/modules/patients/application/toPatientContactDto'
+import { toPatientTagDto } from '@/modules/patients/application/toPatientTagDto'
 import { toIsoDate } from '@/modules/patients/application/toPatientDto'
+import { isPatientTagRepositoryError } from '@/modules/patients/domain/PatientTagRepositoryError'
 import { getMockPatientNotes } from '@/modules/patients/infrastructure/MockPatientRepository'
 import {
   getPatientConsentSource,
+  getPatientContactSource,
   getPatientRepository,
+  getPatientTagSource,
 } from '@/modules/patients/infrastructure/repository'
 import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel'
+import { PatientContactsPanel } from '@/modules/patients/ui/PatientContactsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
+import { PatientTagsPanel } from '@/modules/patients/ui/PatientTagsPanel'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
   formatDayHeading,
@@ -81,6 +89,7 @@ export default async function PatientProfilePage({
     .slice(0, MAX_HISTORY)
 
   const notes = patientSource.isLive ? [] : getMockPatientNotes(today)
+  const adminNote = normalizePatientAdminNote(patient.adminNotes)
 
   /*
    * Consentimentos LGPD (P-03).
@@ -96,10 +105,13 @@ export default async function PatientProfilePage({
    * desabilitados — o painel se anuncia como demonstracao em vez de simular
    * registro (R11 do roadmap).
    */
-  const [session, consentSource] = await Promise.all([
+  const [session, consentSource, contactSource] = await Promise.all([
     getSessionState(),
     getPatientConsentSource(),
+    getPatientContactSource(),
   ])
+
+  const tagSource = await getPatientTagSource()
 
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
@@ -107,6 +119,27 @@ export default async function PatientProfilePage({
         patient.id,
       )
     : []
+
+  const contacts = contactSource.isLive
+    ? await contactSource.repository.listByPatient(
+        contactSource.clinicId,
+        patient.id,
+      )
+    : []
+
+  let tags = [] as Awaited<ReturnType<typeof tagSource.repository.listByPatient>>
+  let tagsSchemaPending = false
+  if (tagSource.isLive) {
+    try {
+      tags = await tagSource.repository.listByPatient(tagSource.clinicId, patient.id)
+    } catch (cause) {
+      if (isPatientTagRepositoryError(cause) && cause.reason === 'schema-not-ready') {
+        tagsSchemaPending = true
+      } else {
+        throw cause
+      }
+    }
+  }
 
   const consentRows = buildPatientConsentRows(consents.map(toPatientConsentDto))
   const canManageConsents =
@@ -186,6 +219,21 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          <PatientTagsPanel
+            patientId={patient.id}
+            tags={tags.map(toPatientTagDto)}
+            isLive={tagSource.isLive}
+            canManage={canManageConsents}
+            schemaPending={tagsSchemaPending}
+          />
+
+          <PatientContactsPanel
+            patientId={patient.id}
+            contacts={contacts.map(toPatientContactDto)}
+            isLive={contactSource.isLive}
+            canManage={canManageConsents}
+          />
 
           <PatientConsentsPanel
             patientId={patient.id}
@@ -286,9 +334,23 @@ export default async function PatientProfilePage({
           <Card>
             <CardHeader
               title="Observações"
-              description="Notas internas da equipe."
+              description="Notas administrativas da equipe, separadas do prontuário clínico."
             />
-            {notes.length === 0 ? (
+            {patientSource.isLive ? (
+              adminNote ? (
+                <div className="mx-5 mb-5 rounded-field bg-background p-4">
+                  <p className="text-aux text-foreground">{adminNote}</p>
+                  <p className="mt-2 text-label text-muted">
+                    Observação atual do cadastro
+                  </p>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={StickyNote}
+                  title="Nenhuma observação registrada."
+                />
+              )
+            ) : notes.length === 0 ? (
               <EmptyState
                 icon={StickyNote}
                 title="Nenhuma observação registrada."

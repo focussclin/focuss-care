@@ -1,4 +1,7 @@
-import type { AuthorizationStatus } from '@/lib/supabase/database.types'
+import type {
+  AuthorizationStatus,
+  ClaimDenialStatus,
+} from '@/lib/supabase/database.types'
 
 /**
  * Convênios — feature **V-01**.
@@ -15,13 +18,8 @@ import type { AuthorizationStatus } from '@/lib/supabase/database.types'
  *  - **`insurance_authorizations`** — a GUIA: o pedido de autorização de um
  *    procedimento, com a resposta da operadora.
  *
- * # O que NÃO existe no schema, e por que importa dizer
- *
- * **Glosa não tem tabela.** `AuthorizationStatus` tem `denied`, e isso é outra
- * coisa: negativa de autorização PRÉVIA, que acontece antes do atendimento. A
- * glosa é a recusa de pagamento DEPOIS da fatura enviada — mesmo procedimento
- * autorizado, mesmo atendimento feito, e a operadora não paga. Não há coluna,
- * tabela nem status que a represente. Ver `InsuranceRepository`.
+ * Glosas vivem em entidade própria porque são recusa de pagamento depois da
+ * fatura enviada, não negativa de autorização prévia.
  */
 
 export interface InsuranceProvider {
@@ -120,9 +118,73 @@ export interface PatientInsuranceOption {
   validUntil: Date | null
 }
 
+export interface PatientInsurance {
+  id: string
+  patientId: string
+  patientName: string
+  planId: string
+  planName: string
+  providerName: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: Date | null
+  isPrimary: boolean
+  isActive: boolean
+}
+
+export interface NewPatientInsuranceData {
+  patientId: string
+  planId: string
+  cardNumber: string
+  holderName: string | null
+  validUntil: Date | null
+  isPrimary: boolean
+}
+
 export interface InsuranceSummary {
   activeProviders: number
   activePlans: number
   pendingAuthorizations: number
   deniedAuthorizations: number
 }
+
+export interface ClaimDenial {
+  id: string
+  invoiceId: string
+  invoiceNumber: number | null
+  patientName: string
+  planName: string
+  invoiceItemDescription: string | null
+  denialCode: string | null
+  reason: string
+  amountCents: number
+  status: ClaimDenialStatus
+  deniedAt: Date
+  appealedAt: Date | null
+  resolvedAt: Date | null
+  recoveredCents: number | null
+  notes: string | null
+}
+
+/** Fatura de convênio ainda apta a receber um registro de glosa. */
+export interface ClaimInvoiceOption {
+  id: string
+  label: string
+  patientName: string
+  invoiceNumber: number | null
+  totalCents: number
+}
+
+export interface NewClaimDenialData {
+  invoiceId: string
+  denialCode: string | null
+  reason: string
+  amountCents: number
+  deniedAt: Date
+  notes: string | null
+}
+
+export type ClaimDenialUpdate =
+  | { status: 'appealing'; notes: string | null }
+  | { status: 'recovered'; recoveredCents: number; notes: string | null }
+  | { status: 'accepted'; notes: string | null }

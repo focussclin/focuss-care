@@ -89,6 +89,43 @@ function toAppointment(row: AppointmentJoinRow): Appointment {
 export class SupabaseAppointmentRepository implements AppointmentRepository {
   constructor(private readonly client: Client) {}
 
+  async searchByPatientName(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<Appointment[]> {
+    const cleanQuery = query.replace(/[\\%_*(),]/g, ' ').trim()
+    if (!cleanQuery) return []
+
+    const { data: patients, error: patientError } = await this.client
+      .from('patients')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('is_active', true)
+      .ilike('full_name', `%${cleanQuery}%`)
+      .limit(Math.min(Math.max(limit * 2, 1), 32))
+
+    if (patientError) {
+      throw new Error(`Falha ao buscar pacientes da agenda: ${patientError.message}`)
+    }
+
+    const patientIds = (patients ?? []).map((patient) => patient.id)
+    if (patientIds.length === 0) return []
+
+    const { data, error } = await this.client
+      .from('appointments')
+      .select(SELECT_WITH_NAMES)
+      .eq('clinic_id', clinicId)
+      .in('patient_id', patientIds)
+      .not('status', 'in', RELEASES_SLOT)
+      .order('starts_at', { ascending: false })
+      .limit(Math.min(Math.max(Math.trunc(limit) || 1, 1), 20))
+
+    if (error) throw new Error(`Falha ao buscar atendimentos: ${error.message}`)
+
+    return (data as unknown as AppointmentJoinRow[]).map(toAppointment)
+  }
+
   async listByRange(
     clinicId: string,
     from: Date,

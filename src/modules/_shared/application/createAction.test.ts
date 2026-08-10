@@ -89,6 +89,37 @@ beforeEach(() => {
   sessionState.mockResolvedValue(activeSession())
 })
 
+describe('efeitos pÃ³s-sucesso', () => {
+  it('executa o efeito com contexto derivado da sessÃ£o, sem expor a entrada crua', async () => {
+    const afterSuccess = vi.fn(async () => {})
+    const action = patientAction({ afterSuccess })
+
+    const result = await action({ name: 'Maria' })
+
+    expect(result).toEqual({ ok: true, data: { id: PATIENT } })
+    expect(afterSuccess).toHaveBeenCalledWith(
+      { id: PATIENT },
+      { name: 'Maria' },
+      expect.objectContaining({ clinicId: CLINIC, userId: USER }),
+    )
+  })
+
+  it('nÃ£o executa o efeito quando a mutaÃ§Ã£o devolve erro', async () => {
+    const afterSuccess = vi.fn(async () => {})
+    const action = patientAction({
+      afterSuccess,
+      handler: async () => {
+        const { err } = await import('../domain/Result')
+        return err('conflict', 'nao deu')
+      },
+    })
+
+    await action({ name: 'Maria' })
+
+    expect(afterSuccess).not.toHaveBeenCalled()
+  })
+})
+
 describe('tags de invalidacao', () => {
   it('invalida a tag da clinica ativa depois do sucesso', async () => {
     const action = patientAction({

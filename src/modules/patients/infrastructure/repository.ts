@@ -8,10 +8,15 @@ import { resolveDataSource } from '@/lib/data-source'
 import type { Database } from '@/lib/supabase/database.types'
 
 import type { PatientConsentRepository } from '../domain/PatientConsentRepository'
+import type { PatientContactRepository } from '../domain/PatientContactRepository'
 import type { PatientRepository } from '../domain/PatientRepository'
+import type { PatientTagRepository } from '../domain/PatientTagRepository'
 import { MockPatientRepository } from './MockPatientRepository'
 import { SupabasePatientConsentRepository } from './SupabasePatientConsentRepository'
+import { SupabasePatientContactRepository } from './SupabasePatientContactRepository'
 import { SupabasePatientRepository } from './SupabasePatientRepository'
+import { MockPatientTagRepository } from './MockPatientTagRepository'
+import { SupabasePatientTagRepository } from './SupabasePatientTagRepository'
 
 /**
  * Composicao do modulo: escolhe o adapter conforme o ambiente.
@@ -64,6 +69,40 @@ export function patientRepositoryFor(
 }
 
 // ---------------------------------------------------------------------------
+// Tags do paciente (P-04)
+// ---------------------------------------------------------------------------
+
+export async function getPatientTagSource(): Promise<
+  | { repository: PatientTagRepository; clinicId: string; isLive: true }
+  | { repository: PatientTagRepository; clinicId: string; isLive: false }
+> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabasePatientTagRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return {
+    repository: new MockPatientTagRepository(),
+    clinicId: source.clinicId,
+    isLive: false,
+  }
+}
+
+export function patientTagRepositoryFor(
+  client: SupabaseClient<Database>,
+): PatientTagRepository {
+  return new SupabasePatientTagRepository(client)
+}
+
+// ---------------------------------------------------------------------------
 // Consentimentos LGPD (P-03)
 // ---------------------------------------------------------------------------
 
@@ -112,4 +151,31 @@ export function patientConsentRepositoryFor(
   client: SupabaseClient<Database>,
 ): PatientConsentRepository {
   return new SupabasePatientConsentRepository(client)
+}
+
+/** Leitura de contatos: sem adapter demo para não apresentar dados pessoais falsos. */
+export async function getPatientContactSource(): Promise<
+  | { repository: PatientContactRepository; clinicId: string; isLive: true }
+  | { repository: null; clinicId: null; isLive: false }
+> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabasePatientContactRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return { repository: null, clinicId: null, isLive: false }
+}
+
+export function patientContactRepositoryFor(
+  client: SupabaseClient<Database>,
+): PatientContactRepository {
+  return new SupabasePatientContactRepository(client)
 }

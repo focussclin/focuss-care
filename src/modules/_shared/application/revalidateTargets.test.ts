@@ -159,20 +159,37 @@ function readRevalidations(): ActionRevalidation[] {
 }
 
 /**
- * Os templates de caminho que um helper de rota produz.
+ * Os templates de caminho que UM helper produz.
+ *
+ * # Lê só o corpo da função, não o arquivo
+ *
+ * A primeira versão varria o arquivo inteiro, e quebrou assim que
+ * `patientRoutes.ts` ganhou um segundo helper: `patientSearchHref` monta
+ * `/pacientes?q=…`, que é URL de navegação e **não** caminho de revalidação. O
+ * teste acusou um caminho inexistente que nunca seria revalidado.
+ *
+ * O recorte por função é o que separa as duas coisas. Um arquivo pode legitimar
+ * os dois tipos de helper — só o mapeado em `ROUTE_HELPERS` é auditado.
  *
  * Comentários saem antes da leitura, e não por elegância: o JSDoc de
  * `patientRoutes` explica a decisão citando `/pacientes/` e `/pacientes/<id>`
  * entre crases, como exemplos do que NÃO fazer. Lidos como código, viravam dois
  * caminhos inexistentes e faziam o teste acusar o próprio comentário.
  */
-function helperTemplates(relativeFile: string): string[] {
+function helperTemplates(relativeFile: string, helperName: string): string[] {
   const source = readFileSync(join(ROOT, relativeFile), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|\s)\/\/[^\n]*/g, '$1')
 
+  const start = source.indexOf(`export function ${helperName}(`)
+  if (start === -1) return []
+
+  // O corpo vai ate a primeira chave que fecha na coluna zero.
+  const end = source.indexOf('\n}', start)
+  const body = source.slice(start, end === -1 ? undefined : end)
+
   // Template literal que comeca com barra: e um caminho de rota.
-  return [...source.matchAll(/`(\/[^`]*)`/g)].map((match) => match[1])
+  return [...body.matchAll(/`(\/[^`]*)`/g)].map((match) => match[1])
 }
 
 const revalidations = readRevalidations()
@@ -280,7 +297,7 @@ describe('caminhos derivados por helper', () => {
     const broken: string[] = []
 
     for (const [name, file] of Object.entries(ROUTE_HELPERS)) {
-      const templates = helperTemplates(file)
+      const templates = helperTemplates(file, name)
 
       // Helper sem template nenhum e leitura quebrada, nao helper vazio.
       expect(templates.length).toBeGreaterThan(0)
@@ -340,6 +357,13 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/pacientes/:seg/historico',
       ],
       records: ['/prontuarios'],
+      rooms: ['/salas-e-recursos', '/agenda'],
+      leads: ['/crm'],
+      forms: ['/formularios'],
+      inventory: ['/estoque'],
+      purchases: ['/compras', '/estoque'],
+      reconciliation: ['/conciliacao'],
+      documents: ['/documentos'],
       scheduling: [
         '/agenda',
         '/dashboard',
@@ -348,6 +372,15 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/pacientes/:seg/historico',
       ],
       settings: ['/', '/configuracoes', '/agenda'],
+      /*
+       * `tasks` invalida SÓ a própria tela.
+       *
+       * Tentador acrescentar `/pacientes/:seg`, já que a tarefa pode apontar
+       * para um paciente — e errado: a ficha não mostra tarefas. Invalidar rota
+       * que não lê o dado é custo sem efeito, e some do radar justamente por
+       * não quebrar nada.
+       */
+      tasks: ['/tarefas'],
       team: ['/equipe'],
     }
 
@@ -360,7 +393,7 @@ describe('nenhuma action revalida rota que não alimenta', () => {
 
       const derived = entry.helpers.flatMap((call) => {
         const file = ROUTE_HELPERS[call.name]
-        return file ? helperTemplates(file).map(toPattern) : []
+        return file ? helperTemplates(file, call.name).map(toPattern) : []
       })
 
       return [...literal, ...derived]

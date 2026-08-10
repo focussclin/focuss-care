@@ -1,5 +1,7 @@
 import type {
   Authorization,
+  ClaimDenial,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
@@ -32,6 +34,10 @@ export class MockInsuranceRepository implements InsuranceRepository {
     return []
   }
 
+  async listPatientInsuranceRecords(): Promise<never[]> {
+    return []
+  }
+
   async summary(): Promise<InsuranceSummary> {
     return {
       activeProviders: 0,
@@ -53,12 +59,36 @@ export class MockInsuranceRepository implements InsuranceRepository {
     return this.refuseWrite('createPlan')
   }
 
+  async createPatientInsurance(): Promise<never> {
+    return this.refuseWrite('createPatientInsurance')
+  }
+
+  async setPatientInsuranceActive(): Promise<never> {
+    return this.refuseWrite('setPatientInsuranceActive')
+  }
+
   async createAuthorization(): Promise<never> {
     return this.refuseWrite('createAuthorization')
   }
 
   async answerAuthorization(): Promise<never> {
     return this.refuseWrite('answerAuthorization')
+  }
+
+  async listClaimDenials(): Promise<ClaimDenial[]> {
+    return []
+  }
+
+  async listClaimInvoiceOptions(): Promise<ClaimInvoiceOption[]> {
+    return []
+  }
+
+  async createClaimDenial(): Promise<never> {
+    return this.refuseWrite('createClaimDenial')
+  }
+
+  async updateClaimDenial(): Promise<never> {
+    return this.refuseWrite('updateClaimDenial')
   }
 
   private refuseWrite(operation: string): never {

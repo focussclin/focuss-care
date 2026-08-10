@@ -1,14 +1,14 @@
 'use client'
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useId, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useState, type ReactNode } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
-import type { Appointment, Patient, Professional } from '@/modules/_shared/domain/types'
+import type { Appointment, Professional } from '@/modules/_shared/domain/types'
 
 import {
   appointmentMessages,
@@ -18,10 +18,24 @@ import {
   type NewAppointmentInput,
 } from '../schemas/appointment.schema'
 
+/**
+ * O que o slot de paciente recebe do formulário.
+ *
+ * É função, e não `ReactNode`: o seletor precisa LER e ESCREVER o campo
+ * `patientId`, e um nó pronto não teria como. É a diferença entre este slot e o
+ * do seletor de clínicas, que só precisa ser renderizado.
+ */
+export type PatientFieldRenderer = (control: {
+  value: string
+  onChange: (patientId: string) => void
+  error?: string
+}) => ReactNode
+
 export interface NewAppointmentModalProps {
+  /** Seletor de paciente, montado pela rota — ver o uso no corpo do modal. */
+  renderPatientField: PatientFieldRenderer
   open: boolean
   onOpenChange: (open: boolean) => void
-  patients: readonly Patient[]
   professionals: readonly Professional[]
   /** Base para detectar conflito de horario antes de salvar. */
   existingAppointments: readonly Appointment[]
@@ -106,16 +120,14 @@ function findConflict(
 export function NewAppointmentModal({
   open,
   onOpenChange,
-  patients,
   professionals,
   existingAppointments,
   defaultDate,
   defaultTime = '09:00',
   defaultDurationMinutes = 30,
+  renderPatientField,
   onSubmit,
 }: NewAppointmentModalProps) {
-  const patientListId = useId()
-
   const initialDuration = durationOptions.some(
     (option) => option.value === String(defaultDurationMinutes),
   )
@@ -128,6 +140,7 @@ export function NewAppointmentModal({
     setError,
     reset,
     setValue,
+    control,
     formState: { errors },
   } = useForm<NewAppointmentInput>({
     resolver: zodResolver(newAppointmentSchema),
@@ -143,6 +156,13 @@ export function NewAppointmentModal({
       notes: '',
     },
   })
+
+  /*
+   * `useWatch` e nao `watch()`: o segundo devolve uma funcao que o React
+   * Compiler nao consegue memoizar, e usa-lo aqui desligaria a compilacao do
+   * modal inteiro. O primeiro assina UM campo e devolve o valor.
+   */
+  const patientId = useWatch({ control, name: 'patientId' })
 
   const [isSubmitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -317,31 +337,26 @@ export function NewAppointmentModal({
         ) : null}
 
         {/*
-          Busca por nome com datalist nativo: acessivel e sem JS extra.
-          Com a base real (milhares de pacientes) isto vira um combobox com busca
-          no servidor — o contrato do campo nao muda.
+          O seletor de paciente vem de FORA, como slot.
+
+          Ele busca no servidor e pertence ao módulo `patients`; este modal é do
+          `scheduling`, e a regra 4 impede um módulo de alcançar o interior do
+          outro. A rota monta os dois — é o mesmo desenho do seletor de clínicas
+          na casca da aplicação, com uma diferença: aqui o slot precisa do estado
+          do formulário, então recebe valor, setter e erro.
+
+          O que este arquivo NÃO faz mais: filtrar no cliente. A lista chegava
+          com as 50 primeiras pessoas da clínica e o `datalist` filtrava aqui —
+          procurar alguém fora dessas 50 não devolvia nada, e a tela não dizia
+          que estava procurando num pedaço.
         */}
-        <div>
-          <TextField
-            label="Paciente"
-            list={patientListId}
-            placeholder="Buscar por nome"
-            autoComplete="off"
-            error={errors.patientId?.message}
-            onChange={(event) => {
-              const match = patients.find(
-                (patient) => patient.name === event.target.value,
-              )
-              setValue('patientId', match?.id ?? '', { shouldValidate: false })
-            }}
-          />
-          <datalist id={patientListId}>
-            {patients.map((patient) => (
-              <option key={patient.id} value={patient.name} />
-            ))}
-          </datalist>
-          <input type="hidden" {...register('patientId')} />
-        </div>
+        {renderPatientField({
+          value: patientId,
+          onChange: (patientId) =>
+            setValue('patientId', patientId, { shouldValidate: false }),
+          error: errors.patientId?.message,
+        })}
+        <input type="hidden" {...register('patientId')} />
 
         <SelectField
           label="Profissional"

@@ -7,6 +7,7 @@ import {
   Info,
   Plus,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -24,19 +25,28 @@ import {
   answerAuthorizationAction,
   createAuthorizationAction,
 } from '../actions/authorizations.action'
+import {
+  createPatientInsuranceAction,
+  setPatientInsuranceActiveAction,
+} from '../actions/patientInsurances.action'
 import { setProviderActiveAction } from '../actions/providers.action'
 import {
   authorizationStatusLabels,
   insuranceMessages,
+  type ClaimDenialDto,
+  type ClaimInvoiceOptionDto,
   type AuthorizationDto,
   type InsuranceSummaryDto,
   type PatientInsuranceDto,
+  type PatientInsuranceRecordDto,
   type PlanDto,
   type ProviderDto,
 } from '../schemas/insurance.schema'
 import { AnswerAuthorizationModal } from './AnswerAuthorizationModal'
+import { ClaimDenialsPanel } from './ClaimDenialsPanel'
 import { NewAuthorizationModal } from './NewAuthorizationModal'
 import { NewProviderModal } from './NewProviderModal'
+import { PatientInsuranceModal } from './PatientInsuranceModal'
 
 export interface ConveniosScreenProps {
   summary: InsuranceSummaryDto
@@ -44,6 +54,10 @@ export interface ConveniosScreenProps {
   plans: readonly PlanDto[]
   authorizations: readonly AuthorizationDto[]
   cards: readonly PatientInsuranceDto[]
+  claimDenials: readonly ClaimDenialDto[]
+  claimInvoices: readonly ClaimInvoiceOptionDto[]
+  patientInsurances: readonly PatientInsuranceRecordDto[]
+  patients: readonly { id: string; name: string }[]
   canManage: boolean
   isLive?: boolean
 }
@@ -62,13 +76,7 @@ const statusTone: Record<string, StatusTone> = {
  * operadoras com "842 pacientes" e "14 guias pendentes" estavam escritas no
  * arquivo.
  *
- * # Duas ausências que a tela declara em vez de esconder
- *
- * **Glosas.** Não há onde registrá-las: o schema não tem tabela, coluna nem
- * status para a recusa de pagamento após o faturamento. Guia negada, que
- * aparece aqui, é outra coisa — negativa de autorização, decidida antes do
- * atendimento. Tratar uma como a outra misturaria fatos com consequências
- * financeiras opostas.
+ * # Uma ausência que a tela declara em vez de esconder
  *
  * **Elegibilidade.** A validade exibida é a que a clínica cadastrou. Nenhuma
  * consulta é feita à operadora, e chamar isso de "elegível" faria a recepção
@@ -80,6 +88,10 @@ export function ConveniosScreen({
   plans,
   authorizations,
   cards,
+  claimDenials,
+  claimInvoices,
+  patientInsurances,
+  patients,
   canManage,
   isLive = false,
 }: ConveniosScreenProps) {
@@ -87,6 +99,7 @@ export function ConveniosScreen({
   const [, startTransition] = useTransition()
   const [creatingProvider, setCreatingProvider] = useState(false)
   const [creatingAuthorization, setCreatingAuthorization] = useState(false)
+  const [creatingPatientInsurance, setCreatingPatientInsurance] = useState(false)
   const [answering, setAnswering] = useState<AuthorizationDto | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -123,6 +136,21 @@ export function ConveniosScreen({
               >
                 <Plus aria-hidden className="size-4" />
                 Nova guia
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setCreatingPatientInsurance(true)}
+                disabled={plans.length === 0 || patients.length === 0}
+                title={
+                  plans.length === 0
+                    ? 'Cadastre um plano ativo antes de criar uma carteirinha.'
+                    : patients.length === 0
+                      ? 'Cadastre um paciente antes de criar uma carteirinha.'
+                      : undefined
+                }
+              >
+                <CreditCard aria-hidden className="size-4" />
+                Nova carteirinha
               </Button>
             </>
           ) : undefined
@@ -349,10 +377,80 @@ export function ConveniosScreen({
         </Card>
       </div>
 
-      <p className="flex items-start gap-2.5 rounded-card border border-border-card bg-surface px-4 py-3 text-aux text-muted">
-        <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
-        {insuranceMessages.glossUnavailable}
-      </p>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Carteirinhas de pacientes"
+          description="Validade e vínculo cadastrados pela clínica para uso em guias."
+        />
+
+        {patientInsurances.length === 0 ? (
+          <EmptyState
+            icon={CreditCard}
+            title="Nenhuma carteirinha cadastrada."
+            description="Cadastre uma carteirinha para vincular paciente e plano antes de solicitar uma guia."
+            action={
+              editable ? (
+                <Button
+                  onClick={() => setCreatingPatientInsurance(true)}
+                  disabled={plans.length === 0 || patients.length === 0}
+                >
+                  <Plus aria-hidden className="size-4" />
+                  Adicionar carteirinha
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul className="divide-y divide-border-card border-t border-border-card">
+            {patientInsurances.map((insurance) => (
+              <li key={insurance.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-aux font-semibold text-foreground">
+                      {insurance.patientName}
+                    </p>
+                    <StatusBadge tone={insurance.isActive ? 'positive' : 'negative'}>
+                      {insurance.isActive ? 'Ativa' : 'Inativa'}
+                    </StatusBadge>
+                    {insurance.isPrimary ? <StatusBadge tone="pending">Principal</StatusBadge> : null}
+                  </div>
+                  <p className="truncate text-label text-muted">
+                    {insurance.providerName} · {insurance.planName} · cartão {insurance.cardNumber}
+                  </p>
+                  <p className="text-label text-muted">
+                    {insurance.holderName ? `Titular: ${insurance.holderName} · ` : ''}
+                    Validade cadastrada: {insurance.validUntil ? formatShortDate(new Date(`${insurance.validUntil}T00:00:00`)) : 'não informada'}
+                  </p>
+                </div>
+
+                {editable ? (
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      setError(null)
+                      const result = await setPatientInsuranceActiveAction({
+                        insuranceId: insurance.id,
+                        isActive: !insurance.isActive,
+                      })
+                      if (!result.ok) setError(result.error.message)
+                      else refresh()
+                    }}
+                  >
+                    {insurance.isActive ? 'Desativar' : 'Reativar'}
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <ClaimDenialsPanel
+        denials={claimDenials}
+        invoices={claimInvoices}
+        canManage={canManage}
+        isLive={isLive}
+      />
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
@@ -372,6 +470,21 @@ export function ConveniosScreen({
         cards={cards}
         onSubmit={async (values) => {
           const result = await createAuthorizationAction(values)
+          if (!result.ok) return result.error.message
+
+          refresh()
+          return null
+        }}
+      />
+
+      <PatientInsuranceModal
+        open={creatingPatientInsurance}
+        onOpenChange={setCreatingPatientInsurance}
+        patients={patients}
+        plans={plans}
+        isLive={isLive}
+        onSubmit={async (values) => {
+          const result = await createPatientInsuranceAction(values)
           if (!result.ok) return result.error.message
 
           refresh()

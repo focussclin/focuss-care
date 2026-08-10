@@ -47,6 +47,8 @@ function invoiceRow(overrides: Record<string, unknown> = {}) {
 
 function createFakeClient(results: {
   invoice?: unknown
+  searchPatients?: { id: string }[]
+  searchInvoices?: unknown[]
   /** Linhas de `payments` devolvidas ao recalcular o saldo. */
   payments?: { amount_cents: number }[]
   /** Sessão de caixa aberta, ou null. */
@@ -82,6 +84,7 @@ function createFakeClient(results: {
       'eq',
       'neq',
       'in',
+      'ilike',
       'gte',
       'lt',
       'order',
@@ -197,9 +200,15 @@ function createFakeClient(results: {
     ) => {
       let data: unknown = []
 
+      if (table === 'patients') data = results.searchPatients ?? []
       if (table === 'payments') data = results.payments ?? []
       if (table === 'cash_entries') data = results.cashEntries ?? []
-      if (table === 'invoices' && hasEq('clinic_id', CLINIC)) data = []
+      if (table === 'invoices' && usedMethod('in')) {
+        data = results.searchInvoices ?? []
+      }
+      if (table === 'invoices' && hasEq('clinic_id', CLINIC) && !usedMethod('in')) {
+        data = []
+      }
 
       return Promise.resolve({ data, count: 0, error: null }).then(
         onFulfilled,
@@ -216,6 +225,34 @@ function createFakeClient(results: {
     ofTable: (table: string) => calls.filter((call) => call.table === table),
   }
 }
+
+describe('searchInvoicesByPatientName', () => {
+  it('separa a busca de paciente da cobrança e mantém o tenant', async () => {
+    const fake = createFakeClient({
+      searchPatients: [{ id: 'patient-1' }],
+      searchInvoices: [invoiceRow({ patient_id: 'patient-1' })],
+    })
+
+    const invoices = await new SupabaseBillingRepository(
+      fake.client,
+    ).searchInvoicesByPatientName(CLINIC, 'Marina', 8)
+
+    expect(invoices[0]).toMatchObject({
+      id: INVOICE,
+      patientName: 'Marina Costa',
+      totalCents: 30000,
+    })
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({ method: 'ilike', args: ['full_name', '%Marina%'] }),
+    )
+    expect(fake.ofTable('invoices')).toContainEqual(
+      expect.objectContaining({ method: 'in', args: ['patient_id', ['patient-1']] }),
+    )
+  })
+})
 
 describe('registerPayment', () => {
   it('recusa valor acima do saldo devedor', async () => {

@@ -2,18 +2,29 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import type { AuthorizationStatus, Database, Json } from '@/lib/supabase/database.types'
+import type {
+  AuthorizationStatus,
+  ClaimDenialStatus,
+  Database,
+  Json,
+} from '@/lib/supabase/database.types'
 
 import type {
   Authorization,
   AuthorizationAnswer,
   AuthorizationProcedure,
+  ClaimDenial,
+  ClaimDenialUpdate,
+  ClaimInvoiceOption,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
   NewAuthorizationData,
+  NewClaimDenialData,
+  NewPatientInsuranceData,
   NewPlanData,
   NewProviderData,
+  PatientInsurance,
   PatientInsuranceOption,
 } from '../domain/Insurance'
 import type { InsuranceRepository } from '../domain/InsuranceRepository'
@@ -44,6 +55,43 @@ const AUTHORIZATION_SELECT = `
   )
 `
 
+const CLAIM_DENIAL_SELECT = `
+  id,
+  invoice_id,
+  invoice_item_id,
+  denial_code,
+  reason,
+  amount_cents,
+  status,
+  denied_at,
+  appealed_at,
+  resolved_at,
+  recovered_cents,
+  notes,
+  invoices (
+    number,
+    patients ( full_name ),
+    insurance_plans ( name )
+  ),
+  invoice_items ( description )
+`
+
+const PATIENT_INSURANCE_SELECT = `
+  id,
+  patient_id,
+  insurance_plan_id,
+  card_number,
+  holder_name,
+  valid_until,
+  is_primary,
+  is_active,
+  patients ( full_name ),
+  insurance_plans (
+    name,
+    insurance_providers ( name )
+  )
+`
+
 interface AuthorizationRow {
   id: string
   patient_id: string
@@ -61,6 +109,43 @@ interface AuthorizationRow {
       name: string
       insurance_providers: { name: string } | null
     } | null
+  } | null
+}
+
+interface ClaimDenialRow {
+  id: string
+  invoice_id: string
+  invoice_item_id: string | null
+  denial_code: string | null
+  reason: string
+  amount_cents: number
+  status: 'received' | 'appealing' | 'recovered' | 'accepted'
+  denied_at: string
+  appealed_at: string | null
+  resolved_at: string | null
+  recovered_cents: number | null
+  notes: string | null
+  invoices: {
+    number: number | null
+    patients: { full_name: string } | null
+    insurance_plans: { name: string } | null
+  } | null
+  invoice_items: { description: string } | null
+}
+
+interface PatientInsuranceRow {
+  id: string
+  patient_id: string
+  insurance_plan_id: string
+  card_number: string
+  holder_name: string | null
+  valid_until: string | null
+  is_primary: boolean
+  is_active: boolean
+  patients: { full_name: string } | null
+  insurance_plans: {
+    name: string
+    insurance_providers: { name: string } | null
   } | null
 }
 
@@ -168,6 +253,156 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     return (data as unknown as AuthorizationRow[]).map(toAuthorization)
   }
 
+  async listClaimDenials(
+    clinicId: string,
+    limit: number,
+  ): Promise<ClaimDenial[]> {
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .select(CLAIM_DENIAL_SELECT)
+      .eq('clinic_id', clinicId)
+      .order('denied_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listClaimDenials', error)
+
+    return (data as unknown as ClaimDenialRow[]).map(toClaimDenial)
+  }
+
+  async listClaimInvoiceOptions(
+    clinicId: string,
+    limit: number,
+  ): Promise<ClaimInvoiceOption[]> {
+    const { data, error } = await this.client
+      .from('invoices')
+      .select(
+        'id, number, total_cents, patients ( full_name ), insurance_plans ( name )',
+      )
+      .eq('clinic_id', clinicId)
+      .eq('payer_type', 'insurance')
+      .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listClaimInvoiceOptions', error)
+
+    const rows = data as unknown as {
+      id: string
+      number: number | null
+      total_cents: number
+      patients: { full_name: string } | null
+      insurance_plans: { name: string } | null
+    }[]
+
+    return rows.map((row) => ({
+      id: row.id,
+      patientName: row.patients?.full_name ?? 'Paciente',
+      invoiceNumber: row.number,
+      totalCents: row.total_cents,
+      label: `Fatura ${row.number ? `nº ${row.number}` : row.id.slice(0, 8)} · ${
+        row.patients?.full_name ?? 'Paciente'
+      } · ${row.insurance_plans?.name ?? 'Convênio'}`,
+    }))
+  }
+
+  async createClaimDenial(
+    clinicId: string,
+    input: NewClaimDenialData,
+    createdBy: string,
+  ): Promise<ClaimDenial> {
+    const { data: invoice, error: invoiceError } = await this.client
+      .from('invoices')
+      .select('id, payer_type, status, total_cents')
+      .eq('clinic_id', clinicId)
+      .eq('id', input.invoiceId)
+      .eq('payer_type', 'insurance')
+      .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
+      .maybeSingle()
+
+    if (invoiceError) throw toWriteError(invoiceError)
+    if (!invoice) throw notFound(input.invoiceId)
+    if (input.amountCents > invoice.total_cents) {
+      throw new InsuranceRepositoryError(
+        'claim-amount-exceeds-invoice',
+        'valor glosado acima do total da fatura',
+      )
+    }
+
+    const { data: row, error } = await this.client
+      .from('insurance_claim_denials')
+      .insert({
+        clinic_id: clinicId,
+        invoice_id: input.invoiceId,
+        denial_code: input.denialCode,
+        reason: input.reason,
+        amount_cents: input.amountCents,
+        status: 'received',
+        denied_at: toDateOnly(input.deniedAt),
+        notes: input.notes,
+        created_by: createdBy,
+      })
+      .select('id')
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return this.requireClaimDenial(clinicId, row.id)
+  }
+
+  async updateClaimDenial(
+    clinicId: string,
+    denialId: string,
+    update: ClaimDenialUpdate,
+  ): Promise<ClaimDenial> {
+    const current = await this.requireClaimDenial(clinicId, denialId)
+    assertClaimTransition(current.status, update.status)
+
+    if (
+      update.status === 'recovered' &&
+      update.recoveredCents > current.amountCents
+    ) {
+      throw new InsuranceRepositoryError(
+        'claim-recovery-exceeds-denial',
+        'valor recuperado acima da glosa',
+      )
+    }
+
+    const now = new Date().toISOString()
+    const patch = {
+      status: update.status,
+      appealed_at:
+        update.status === 'appealing'
+          ? current.appealedAt?.toISOString() ?? now
+          : current.appealedAt?.toISOString() ?? null,
+      resolved_at:
+        update.status === 'recovered' || update.status === 'accepted'
+          ? now
+          : current.resolvedAt?.toISOString() ?? null,
+      recovered_cents:
+        update.status === 'recovered'
+          ? update.recoveredCents
+          : current.recoveredCents,
+      notes: update.notes,
+      updated_at: now,
+    }
+
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .update(patch)
+      .eq('clinic_id', clinicId)
+      .eq('id', denialId)
+      // Compare-and-swap: duas pessoas não podem avançar a mesma glosa
+      // partindo de estados diferentes.
+      .eq('status', current.status)
+      .select('id')
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) throw new InsuranceRepositoryError('claim-already-resolved', 'glosa já encerrada')
+
+    return this.requireClaimDenial(clinicId, denialId)
+  }
+
   async listPatientInsurances(
     clinicId: string,
   ): Promise<PatientInsuranceOption[]> {
@@ -197,6 +432,106 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
       cardNumber: row.card_number,
       validUntil: row.valid_until ? new Date(`${row.valid_until}T00:00:00`) : null,
     }))
+  }
+
+  async listPatientInsuranceRecords(
+    clinicId: string,
+  ): Promise<PatientInsurance[]> {
+    const { data, error } = await this.client
+      .from('patient_insurances')
+      .select(PATIENT_INSURANCE_SELECT)
+      .eq('clinic_id', clinicId)
+      .order('is_active', { ascending: false })
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(ROW_CAP)
+
+    if (error) throw readFailure('listPatientInsuranceRecords', error)
+
+    return ((data ?? []) as unknown as PatientInsuranceRow[]).map(
+      toPatientInsurance,
+    )
+  }
+
+  async createPatientInsurance(
+    clinicId: string,
+    data: NewPatientInsuranceData,
+  ): Promise<PatientInsurance> {
+    const [patientResult, planResult] = await Promise.all([
+      this.client
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('id', data.patientId)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      this.client
+        .from('insurance_plans')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('id', data.planId)
+        .eq('is_active', true)
+        .maybeSingle(),
+    ])
+
+    if (patientResult.error) throw toWriteError(patientResult.error)
+    if (planResult.error) throw toWriteError(planResult.error)
+    if (!patientResult.data || !planResult.data) {
+      throw new InsuranceRepositoryError('not-found', 'paciente ou plano indisponivel')
+    }
+
+    // Sem uma constraint parcial verificada no schema, manter uma única primária
+    // é uma regra explícita da aplicação. A linha nova só entra depois disso.
+    if (data.isPrimary) {
+      const { error } = await this.client
+        .from('patient_insurances')
+        .update({ is_primary: false, updated_at: new Date().toISOString() })
+        .eq('clinic_id', clinicId)
+        .eq('patient_id', data.patientId)
+        .eq('is_primary', true)
+        .eq('is_active', true)
+
+      if (error) throw toWriteError(error)
+    }
+
+    const { data: row, error } = await this.client
+      .from('patient_insurances')
+      .insert({
+        clinic_id: clinicId,
+        patient_id: data.patientId,
+        insurance_plan_id: data.planId,
+        card_number: data.cardNumber,
+        holder_name: data.holderName,
+        valid_until: data.validUntil ? toDateOnly(data.validUntil) : null,
+        is_primary: data.isPrimary,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select(PATIENT_INSURANCE_SELECT)
+      .single()
+
+    if (error) throw toWriteError(error)
+
+    return toPatientInsurance(row as unknown as PatientInsuranceRow)
+  }
+
+  async setPatientInsuranceActive(
+    clinicId: string,
+    insuranceId: string,
+    isActive: boolean,
+  ): Promise<PatientInsurance> {
+    const { data: row, error } = await this.client
+      .from('patient_insurances')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('id', insuranceId)
+      .select(PATIENT_INSURANCE_SELECT)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw notFound(insuranceId)
+
+    return toPatientInsurance(row as unknown as PatientInsuranceRow)
   }
 
   async summary(clinicId: string): Promise<InsuranceSummary> {
@@ -472,6 +807,41 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
 
     return toAuthorization(data as unknown as AuthorizationRow)
   }
+
+  private async requireClaimDenial(
+    clinicId: string,
+    denialId: string,
+  ): Promise<ClaimDenial> {
+    const { data, error } = await this.client
+      .from('insurance_claim_denials')
+      .select(CLAIM_DENIAL_SELECT)
+      .eq('clinic_id', clinicId)
+      .eq('id', denialId)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) throw notFound(denialId)
+
+    return toClaimDenial(data as unknown as ClaimDenialRow)
+  }
+}
+
+function toPatientInsurance(row: PatientInsuranceRow): PatientInsurance {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: row.patients?.full_name ?? 'Paciente',
+    planId: row.insurance_plan_id,
+    planName: row.insurance_plans?.name ?? 'Plano',
+    providerName: row.insurance_plans?.insurance_providers?.name ?? 'Operadora',
+    cardNumber: row.card_number,
+    holderName: row.holder_name,
+    validUntil: row.valid_until
+      ? new Date(`${row.valid_until}T00:00:00`)
+      : null,
+    isPrimary: row.is_primary,
+    isActive: row.is_active,
+  }
 }
 
 function toAuthorization(row: AuthorizationRow): Authorization {
@@ -491,6 +861,56 @@ function toAuthorization(row: AuthorizationRow): Authorization {
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     denialReason: row.denial_reason,
   }
+}
+
+function toClaimDenial(row: ClaimDenialRow): ClaimDenial {
+  return {
+    id: row.id,
+    invoiceId: row.invoice_id,
+    invoiceNumber: row.invoices?.number ?? null,
+    patientName: row.invoices?.patients?.full_name ?? 'Paciente',
+    planName: row.invoices?.insurance_plans?.name ?? 'Convênio',
+    invoiceItemDescription: row.invoice_items?.description ?? null,
+    denialCode: row.denial_code,
+    reason: row.reason,
+    amountCents: row.amount_cents,
+    status: row.status,
+    deniedAt: new Date(`${row.denied_at}T00:00:00`),
+    appealedAt: row.appealed_at ? new Date(row.appealed_at) : null,
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at) : null,
+    recoveredCents: row.recovered_cents,
+    notes: row.notes,
+  }
+}
+
+function assertClaimTransition(
+  current: ClaimDenialStatus,
+  next: ClaimDenialUpdate['status'],
+): void {
+  if (current === 'recovered' || current === 'accepted') {
+    throw new InsuranceRepositoryError(
+      'claim-already-resolved',
+      'glosa ja encerrada',
+    )
+  }
+
+  const valid =
+    (current === 'received' && (next === 'appealing' || next === 'accepted')) ||
+    (current === 'appealing' && (next === 'recovered' || next === 'accepted'))
+
+  if (!valid) {
+    throw new InsuranceRepositoryError(
+      'claim-invalid-transition',
+      `transicao de glosa ${current} para ${next} invalida`,
+    )
+  }
+}
+
+/** `Date` -> `YYYY-MM-DD`, sem deslocar o dia por fuso. */
+function toDateOnly(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 /**

@@ -23,6 +23,14 @@ export function toInsuranceFailure<F extends string>(
     switch (cause.reason) {
       case 'already-answered':
         return err<F>('conflict', insuranceMessages.alreadyAnswered)
+      case 'claim-already-resolved':
+        return err<F>('conflict', insuranceMessages.claimAlreadyResolved)
+      case 'claim-invalid-transition':
+        return err<F>('conflict', insuranceMessages.claimInvalidTransition)
+      case 'claim-amount-exceeds-invoice':
+        return err<F>('conflict', insuranceMessages.claimAmountTooHigh)
+      case 'claim-recovery-exceeds-denial':
+        return err<F>('conflict', insuranceMessages.claimRecoveryTooHigh)
       case 'duplicate':
         return err<F>('conflict', insuranceMessages.duplicate)
       case 'not-found':

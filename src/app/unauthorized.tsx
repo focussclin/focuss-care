@@ -1,18 +1,19 @@
 import { LogIn } from 'lucide-react'
-import Link from 'next/link'
 
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ContinueToLogin } from '@/modules/identity/ui/ContinueToLogin'
 
 /**
  * 401 — não há sessão válida, ou ela expirou.
  *
  * Diferente do 403: aqui entrar de novo RESOLVE, e por isso a ação é o login.
  *
- * O `proxy.ts` já redireciona quem chega sem sessão nas rotas privadas — esta
- * página cobre o caso em que a sessão morre no meio do request, depois do proxy
- * ter deixado passar. É a borda que o middleware não alcança.
+ * Esta é a tela nativa para chamadas explícitas a `unauthorized()` em segmentos
+ * que precisem responder 401. O portão comum de `(app)` usa `redirect('/login')`
+ * para manter o contrato de navegação das rotas privadas em Cloudflare Workers.
+ * O componente continua preparado para preservar a origem quando esta tela
+ * for usada por uma decisão de autorização específica.
  */
 export default function Unauthorized() {
   return (
@@ -22,11 +23,7 @@ export default function Unauthorized() {
           icon={LogIn}
           title="Sua sessão expirou."
           description="Entre novamente para continuar de onde parou."
-          action={
-            <Button asChild>
-              <Link href="/login">Entrar</Link>
-            </Button>
-          }
+          action={<ContinueToLogin />}
         />
       </Card>
     </main>

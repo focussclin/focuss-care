@@ -31,6 +31,8 @@ export function toBillingFailure<F extends string>(
         return err<F>('conflict', billingMessages.overpayment)
       case 'invoice-paid':
         return err<F>('conflict', billingMessages.invoicePaid)
+      case 'payable-paid':
+        return err<F>('conflict', billingMessages.payablePaid)
       case 'cash-session-conflict':
         return err<F>('conflict', billingMessages.cashSessionOpen)
       case 'not-found':
