@@ -6,6 +6,7 @@ import { useState, useTransition, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectField } from '@/components/ui/select-field'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
@@ -48,6 +49,7 @@ export function ClaimDenialsPanel({
   const [isPending, startTransition] = useTransition()
   const [creating, setCreating] = useState(false)
   const [recovering, setRecovering] = useState<string | null>(null)
+  const [acceptingLoss, setAcceptingLoss] = useState<ClaimDenialDto | null>(null)
   const [invoiceId, setInvoiceId] = useState(invoices[0]?.id ?? '')
   const [denialCode, setDenialCode] = useState('')
   const [reason, setReason] = useState('')
@@ -119,6 +121,28 @@ export function ClaimDenialsPanel({
 
       return { ok: result.ok, message: result.ok ? undefined : result.error.message }
     })
+  }
+
+  /**
+   * "Aceitar prejuízo" desiste do dinheiro, e desistia em um clique.
+   *
+   * Das três transições desta tela, é a única que fecha a glosa sem recurso:
+   * "enviar para recurso" e "registrar recuperação" continuam a disputa, esta
+   * a encerra. E ela fica ao lado das outras duas, com o mesmo peso visual —
+   * a distância entre continuar cobrando e desistir de cobrar era um pixel.
+   */
+  async function acceptLoss(denial: ClaimDenialDto): Promise<string | null> {
+    const result = await updateClaimDenialAction({
+      denialId: denial.id,
+      status: 'accepted',
+      notes: denial.notes ?? '',
+    })
+
+    if (!result.ok) return result.error.message
+
+    setAcceptingLoss(null)
+    router.refresh()
+    return null
   }
 
   return (
@@ -251,7 +275,7 @@ export function ClaimDenialsPanel({
                   <Button variant="secondary" disabled={isPending} onClick={() => updateStatus(denial, 'appealing')}>
                     Enviar para recurso
                   </Button>
-                  <Button variant="ghost" disabled={isPending} onClick={() => updateStatus(denial, 'accepted')}>
+                  <Button variant="ghost" disabled={isPending} onClick={() => setAcceptingLoss(denial)}>
                     Aceitar prejuízo
                   </Button>
                 </div>
@@ -276,7 +300,7 @@ export function ClaimDenialsPanel({
                     <Button variant="secondary" disabled={isPending} onClick={() => setRecovering(denial.id)}>
                       Registrar recuperação
                     </Button>
-                    <Button variant="ghost" disabled={isPending} onClick={() => updateStatus(denial, 'accepted')}>
+                    <Button variant="ghost" disabled={isPending} onClick={() => setAcceptingLoss(denial)}>
                       Aceitar prejuízo
                     </Button>
                   </div>
@@ -286,6 +310,35 @@ export function ClaimDenialsPanel({
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={acceptingLoss !== null}
+        onOpenChange={(open) => {
+          if (!open) setAcceptingLoss(null)
+        }}
+        title="Aceitar prejuízo"
+        description="A glosa é encerrada sem recurso, e o valor deixa de ser cobrado."
+        confirmLabel="Aceitar prejuízo"
+        pendingLabel="Registrando…"
+        cancelLabel="Continuar cobrando"
+        onConfirm={async () =>
+          acceptingLoss ? acceptLoss(acceptingLoss) : null
+        }
+      >
+        <p className="text-aux leading-6 text-foreground">
+          Valor glosado:{' '}
+          <strong className="font-semibold">
+            {acceptingLoss ? formatCents(acceptingLoss.amountCents) : ''}
+          </strong>
+          . {acceptingLoss?.reason}
+        </p>
+
+        <p className="rounded-field border border-border-card bg-background px-3.5 py-2.5 text-label leading-5 text-muted">
+          A glosa continua registrada, com a data e quem decidiu. O que muda é
+          que ela para de contar como valor a recuperar — e sai do que a clínica
+          ainda espera receber da operadora.
+        </p>
+      </ConfirmDialog>
     </Card>
   )
 }
