@@ -8,9 +8,8 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1101 testes em 101 arquivos · `typecheck` limpo ·
-`build` compila com 42 rotas. ESLint dos arquivos alterados limpo; a execução
-global excedeu o limite local de 120s e deve ser repetida em CI.
+**Validação atual (10/08/2026):** 1135 testes em 106 arquivos · `typecheck`,
+`lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
 `npm run db:types` e continua expondo 56 tabelas; as migrations de módulos
@@ -772,6 +771,107 @@ que não funciona:
 | Disponibilidade por profissional | `/agenda` | Convenção de `weekday` não verificável; adivinhar recusaria agendamento legítimo |
 | Escalas de trabalho | `/equipe` | Mesmo `weekday` de `work_schedules`: errar desloca a semana e põe alguém para trabalhar no dia errado |
 | Salário e CPF de funcionário | `/equipe` | Colunas existem; o produto não tem folha, e guardá-los agora seria acumular risco sem contrapartida |
+
+---
+
+## 8.9 Rodada de correções — 10/08/2026
+
+Sete fatias, todas de defeito real encontrado por auditoria. Nenhuma feature
+nova, nenhum DDL remoto, nenhuma credencial usada.
+
+### O que estava errado, em ordem de gravidade
+
+**1. `appointment.read` não era exigido em rota nenhuma** (`acc1746`).
+A permissão era declarada no item "Agenda" do menu, e o menu não é fronteira.
+`finance` é o único papel sem ela, e a matriz diz com todas as letras que ele
+não alcança agenda. Na prática, um financeiro convidado só para faturar lia
+pela URL a semana inteira da clínica, o histórico completo de qualquer paciente
+e as duas seções de agenda da ficha. Quem consulta com quem, quando e de que
+tipo é dado de saúde por inferência.
+
+`/pacientes/[patientId]` **não** foi bloqueada: `finance` tem `patient.read` de
+propósito, porque sem nome e documento não se emite fatura. As seções de agenda
+somem, e a consulta também não acontece — esconder na tela o que já veio no
+payload do RSC não esconde nada.
+
+**2. Cancelar atendimento falhava em silêncio** (`83de40b`).
+Duas portas para a mesma ação irreversível, e a mais fácil era a
+desprotegida: "Cancelar" no menu da lista chamava a action direto, enquanto o
+caminho pelo modal exigia confirmação. Pior, `cancelError` era **inalcançável
+nos dois caminhos** — o botão chamava a action e fechava o modal na linha
+seguinte, sem esperar. O arquivo tinha até um comentário explicando por que a
+prop era necessária, sobre um código que nunca a renderizou.
+
+**3. As policies das tabelas novas não verificavam papel** (`062dcc6`).
+Oito migrations tinham `using (clinic_id = current_clinic_id())` e mais nada.
+Isso isola a clínica e não separa papéis — e a separação por papel não pode
+viver só na aplicação, porque o navegador tem a chave publicável e o JWT do
+próprio membro. `POST /rest/v1/bank_transactions` com token de recepcionista
+teria funcionado. 36 policies corrigidas **antes** de o DDL rodar.
+
+**4. Seis RPCs aceitavam o autor como parâmetro** (`953c739`).
+Sem confronto com `auth.uid()`, e com `grant execute to authenticated`. A
+aprovação de um pedido de compra ficava registrada em nome de outra pessoa —
+falsificação de trilha, que é pior de detectar que vazamento: a linha parece
+legítima e a auditoria mente sem nunca ter sido violada.
+
+**5. Cancelar cobrança: um clique, motivo sempre vazio** (`4c84822`).
+`reason: ''` fixo no `onClick`, sobre uma action cujo `audit` promete registrar
+por quê. Motivo opcional que ninguém pede é motivo que não existe.
+
+**6. Quinze rotas sem `loading.tsx`** (`e988890`).
+Mais da metade. Todas fazem de 4 a 6 `await` antes de renderizar, e sem o
+arquivo o Next segura a navegação na tela anterior. A falha se parece com
+lentidão, e lentidão não tem dono.
+
+**7. Vinte e cinco rotas sem error boundary, e nenhum `not-found.tsx`**
+(`aa92cbf`). Apesar de `notFound()` ser chamado. Os dois boundaries que
+existiam usavam `reset`, que re-renderiza sem refazer o fetch: o botão "Tentar
+novamente" reexibia o mesmo erro.
+
+### Guardas novos
+
+Quatro testes que impedem a reincidência, no estilo de registro-com-motivo que
+o projeto já usa:
+
+| Teste | O que prende |
+|---|---|
+| `src/app/routeGates.test.ts` | Permissão declarada no menu é exigida pela rota, com `forbidden()`. Rota privada sem portão precisa de motivo escrito |
+| `src/app/migrationBundle.test.ts` | `APLICAR_TUDO` é o que o gerador produz; policy nova precisa estreitar além do tenant |
+| `src/app/routeLoading.test.ts` | Toda rota privada tem `loading.tsx` |
+| `src/components/ui/confirm-dialog.test.tsx` | Confirmação não fecha sem sucesso do servidor |
+
+`scripts/build-migration-bundle.mjs` passa a gerar o arquivo combinado, que
+antes mandava "gere de novo" sem existir com o quê.
+
+### Acessibilidade
+
+Skip-link para `#conteudo` (a sidebar tem até 31 itens antes do `<main>`);
+rótulos de seção da sidebar de 3,15:1 para 5,36:1; `--fc-attention-600` de
+3,45:1 para 4,83:1 na pior superfície. `PageSkeleton` anuncia o carregamento
+por `role="status"` — antes, como todo `loading.tsx` é feito de `Skeleton`
+(`aria-hidden`, corretamente), a página era silenciosa e indistinguível de
+erro.
+
+### O que foi apontado e NÃO mudei
+
+**Fechamento de caixa sem confirmação.** Aparecia na lista de ações
+destrutivas sem modal, mas já exige contar a gaveta e digitar o valor — e o
+comentário do arquivo diz que pré-preencher "transformaria o fechamento em um
+clique". Digitar um valor conferido é guarda mais forte que um sim/não.
+
+**Nove outras ações destrutivas sem confirmação** — desativar operadora,
+arquivar formulário, cancelar pedido, remover tag, negar ausência, aceitar
+glosa como perda, arquivar paciente, encerrar atendimento, desativar conta
+bancária. `ConfirmDialog` torna cada uma barata; ficaram para a próxima fatia.
+
+**Contrastes limítrofes**: `border-default` 1,31:1 (WCAG 1.4.11 pede 3:1 para
+contorno), badge neutro 4,38:1, `text-muted` sobre `row-hover` 4,46:1. Os três
+reprovam por pouco e mexem na identidade visual — é decisão de design, não
+correção.
+
+**`CommandPalette`**: `role="listbox"` com `<li>` envolvendo
+`<button role="option">` é estrutura ARIA inválida. Funciona na prática.
 
 ---
 
