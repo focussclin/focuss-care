@@ -82,6 +82,18 @@ export interface BankTransactionInsert {
   created_by: string
 }
 
+/**
+ * O UPDATE da transação só alcança `status`.
+ *
+ * Valor, data, sentido e descrição vêm do extrato; deixá-los mutáveis por aqui
+ * abriria a porta para "consertar" um lançamento até ele casar com alguma
+ * fatura, que é o oposto do que uma conciliação serve para provar.
+ */
+export interface BankTransactionUpdate {
+  status: BankTransactionStatus
+  updated_at: string
+}
+
 export interface ReconciliationQueryError {
   code?: string | null
   message?: string | null
@@ -111,12 +123,15 @@ export interface TransactionQueryBuilder
   limit(count: number): TransactionQueryBuilder
   select(columns: string): TransactionQueryBuilder
   insert(values: BankTransactionInsert): TransactionQueryBuilder
+  update(values: BankTransactionUpdate): TransactionQueryBuilder
   single(): PromiseLike<ReconciliationQueryResponse<BankTransactionRow | null>>
+  maybeSingle(): PromiseLike<ReconciliationQueryResponse<BankTransactionRow | null>>
 }
 
 export interface InvoiceQueryBuilder
   extends PromiseLike<ReconciliationQueryResponse<readonly InvoiceCandidateRow[] | null>> {
   eq(column: string, value: string): InvoiceQueryBuilder
+  in(column: string, values: readonly string[]): InvoiceQueryBuilder
   order(column: string, options: { ascending: boolean }): InvoiceQueryBuilder
   limit(count: number): InvoiceQueryBuilder
   select(columns: string): InvoiceQueryBuilder

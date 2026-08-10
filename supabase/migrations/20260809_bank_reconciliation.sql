@@ -163,6 +163,18 @@ create policy "bank_transactions_update"
       array['owner', 'admin', 'finance']::membership_role[]
     ));
 
+-- `pending` ↔ `ignored` é um UPDATE comum, e não precisa de função.
+--
+-- Tarifa, transferência entre contas da própria clínica e estorno duplicado
+-- nunca terão fatura nem despesa para casar; sem poder descartá-los, a fila de
+-- pendências cresce para sempre e deixa de ser uma fila.
+--
+-- A aplicação faz o UPDATE com `.eq('status', <origem>)` no mesmo comando, o
+-- que torna a troca atômica sem lock explícito: quem perder a corrida atualiza
+-- zero linhas e recebe `not-found`. O que NÃO pode existir é ignorar uma
+-- transação já conciliada — a linha de `bank_reconciliations` continuaria de
+-- pé, apontando para uma transação que diz não ter sido conciliada.
+
 drop policy if exists "bank_reconciliations_select" on public.bank_reconciliations;
 create policy "bank_reconciliations_select"
   on public.bank_reconciliations
@@ -193,6 +205,15 @@ create or replace function public.reconcile_bank_transaction(
 )
 returns public.bank_reconciliations
 language plpgsql
+-- `search_path` fixo, como em todas as outras funções do produto.
+--
+-- Era a única sem. Sem esta linha o caminho de resolução de nomes vem da
+-- sessão, então `public.invoices` dentro do corpo passa a depender de quem
+-- chamou: basta existir um schema antes de `public` no `search_path` do papel
+-- para que `invoices` ali dentro resolva para outra tabela. O linter do
+-- Supabase acusa isso como `function_search_path_mutable`.
+security invoker
+set search_path = public
 as $$
 declare
   v_transaction public.bank_transactions;

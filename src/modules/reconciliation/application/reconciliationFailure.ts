@@ -12,6 +12,15 @@ export function toReconciliationFailure<F extends string>(action: string, cause:
       case 'not-found': return err<F>('not-found', reconciliationMessages.notFound)
       case 'duplicate': return err<F>('conflict', reconciliationMessages.duplicate)
       case 'invalid': return err<F>('validation', reconciliationMessages.targetRequired)
+      /*
+       * Estes dois vinham dobrados em `invalid`, e as duas situações viravam
+       * "escolha uma fatura ou uma despesa" — uma instrução que não resolve
+       * nenhuma delas. Quem esbarrava numa transação já conciliada trocava de
+       * alvo e falhava de novo, sem nunca descobrir que o alvo não era o
+       * problema.
+       */
+      case 'already-processed': return err<F>('conflict', reconciliationMessages.alreadyProcessed)
+      case 'direction-mismatch': return err<F>('validation', reconciliationMessages.directionMismatch)
       case 'unavailable': return err<F>('unavailable', reconciliationMessages.unavailable)
       case 'unexpected': return err<F>('unexpected', reconciliationMessages.unexpected)
     }

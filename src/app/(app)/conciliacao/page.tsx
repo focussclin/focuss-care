@@ -6,6 +6,7 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import {
   reconcileBankTransactionFromScreen,
+  setBankTransactionStatusFromScreen,
   submitBankAccountFromScreen,
   submitBankTransactionFromScreen,
   toggleBankAccountFromScreen,
@@ -66,6 +67,7 @@ export default async function ReconciliationPage() {
       onToggleAccount={toggleBankAccountFromScreen}
       onSubmitTransaction={submitBankTransactionFromScreen}
       onReconcile={reconcileBankTransactionFromScreen}
+      onChangeStatus={setBankTransactionStatusFromScreen}
       isLive={source.isLive}
       schemaPending={schemaPending}
     />

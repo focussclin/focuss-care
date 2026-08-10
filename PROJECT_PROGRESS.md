@@ -1627,6 +1627,87 @@ incluindo o `alter table` para quem já aplicou uma versão anterior do arquivo.
 
 ---
 
+## 8.20 Feature — Conciliação bancária (10/08/2026)
+
+Contas, transações manuais, candidatos e o vínculo atômico já existiam. A
+auditoria contra `20260809_bank_reconciliation.sql` achou **sete coisas** — uma
+de segurança, três de estado mentindo, uma de dado descartado e duas de
+cobertura.
+
+### 1. A função era a única do produto sem `search_path` fixo
+
+`reconcile_bank_transaction` não declarava `security invoker` nem
+`set search_path = public`. Sem isso, `public.invoices` dentro do corpo passa a
+depender do `search_path` de quem chamou — `function_search_path_mutable` no
+linter do Supabase. Corrigido na migration, que continua **não aplicada**.
+
+### 2. O filtro "Ignoradas" existia sem nenhuma forma de ignorar
+
+A tela oferecia o filtro e `statusMeta` tinha o rótulo, mas nenhuma action
+alcançava o status: o filtro só devolvia lista vazia, sempre. Tarifa,
+transferência entre contas da própria clínica e estorno duplicado nunca vão casar
+com fatura ou despesa — sem descarte, a fila de pendências só cresce e o número
+no topo da tela deixa de significar trabalho a fazer.
+
+`pending` ↔ `ignored` é UPDATE comum, com `.eq('status', <origem>)` no mesmo
+comando: quem perder a corrida atualiza zero linhas. `reconciled` fica de fora
+nos dois sentidos — ignorar uma conciliada deixaria a evidência de pé apontando
+para uma transação que nega ter sido conciliada, e o vínculo não tem DELETE.
+
+### 3. A evidência do vínculo era carregada e jogada fora
+
+`TRANSACTION_SELECT` já trazia `bank_reconciliations` no mesmo SELECT, e a tela
+não usava em lugar nenhum: a transação conciliada mostrava um selo verde e mais
+nada. Como a conciliação não tem UPDATE nem DELETE, é justamente o dado que mais
+precisa ser conferível. Agora a linha mostra com o que casou e por quanto.
+
+### 4. Faturas em rascunho e canceladas entravam como candidatas
+
+`listPayableCandidates` filtrava `paid_at is null`; `listInvoiceCandidates` não
+filtrava nada. A RPC também não protege — ela só confere que a fatura existe na
+clínica. Casar uma entrada do extrato com uma fatura `canceled` gravaria
+evidência de recebimento de um valor que a clínica anulou de propósito, sem
+desfazer possível. Restrito a `issued`, `partially_paid`, `paid` e `overdue`.
+
+### 5. "Divergente" não existe no schema — e não foi inventado
+
+A função grava `matched_amount_cents` com o valor **cheio da transação**, nunca
+com o da fatura. Casar R$ 500 do extrato com uma fatura de R$ 450 é aceito em
+silêncio. Como criar um status `divergente` seria mentir sobre o que está
+gravado, a divergência é **derivada** dos dois valores reais e avisada no modal,
+*antes* do vínculo — a única hora em que ainda dá para desistir.
+
+### 6. Quatro recusas do banco viravam a mesma mensagem
+
+As quatro chegam como `22023`. Todas diziam "escolha uma fatura ou uma despesa",
+inclusive `bank_transaction_already_processed`: quem esbarrasse numa transação
+conciliada por um colega trocava de alvo e falhava de novo, indefinidamente — o
+alvo nunca foi o problema. Agora `already-processed` e `direction-mismatch` têm
+motivo e mensagem próprios. `42883`/`PGRST202` também viram `schema-not-ready`.
+
+### 7. O módulo não tinha teste de repositório
+
+Era o único com uma RPC de quatro recusas distintas e nenhuma cobertura de
+adapter. Novo arquivo com 21 testes: escopo de tenant, argumentos da RPC, a trava
+do UPDATE por estado de origem e a tradução de cada código.
+
+### Sem Open Finance
+
+A entrada automática de extrato continua sendo um adapter de provedor externo que
+não existe. Nenhuma credencial bancária entra no banco nem no código. O núcleo é
+registro manual mais `external_id`, cujo índice único por
+`(clinic_id, bank_account_id, external_id)` deixa a importação repetível sem
+duplicar lançamento quando esse adapter existir.
+
+### O que continua bloqueado
+
+`20260809_bank_reconciliation.sql` **não foi aplicada** — nada rodou em banco
+remoto. `/conciliacao` mantém `schemaPending` honesto e as gravações
+desabilitadas. Desbloqueio em `docs/supabase-migrations-runbook.md` §3.63,
+incluindo o `drop function` para quem já aplicou uma versão anterior.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

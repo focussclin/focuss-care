@@ -1,8 +1,12 @@
 import { z } from 'zod'
 
-import { BANK_DIRECTIONS, type BankDirection } from '../domain/Reconciliation'
+import {
+  BANK_DIRECTIONS,
+  BANK_TRANSACTION_STATUSES,
+  type BankDirection,
+} from '../domain/Reconciliation'
 
-export type { BankDirection } from '../domain/Reconciliation'
+export type { BankDirection, BankTransactionStatus } from '../domain/Reconciliation'
 
 export const reconciliationMessages = {
   invalidFields: 'Revise os campos destacados e tente novamente.',
@@ -22,6 +26,10 @@ export const reconciliationMessages = {
   targetRequired: 'Escolha uma fatura ou uma despesa para conciliar.',
   targetConflict: 'Escolha somente uma fatura ou uma despesa.',
   targetNotesTooLong: 'Use no máximo 500 caracteres.',
+  alreadyProcessed: 'Esta transação já foi conciliada ou ignorada. Atualize a página para ver o estado atual.',
+  directionMismatch: 'Entrada só concilia com fatura, e saída só com despesa. Recarregue a lista e tente novamente.',
+  statusTransitionInvalid: 'Só uma transação pendente pode ser ignorada, e só uma ignorada pode voltar para a fila.',
+  divergenceWarning: 'O valor da transação difere do registro escolhido. O vínculo grava o valor CHEIO da transação e não pode ser desfeito.',
   forbidden: 'Você não tem permissão para gerenciar a conciliação nesta clínica.',
   notFound: 'Este registro não está mais disponível nesta clínica.',
   duplicate: 'Esta transação já foi importada ou esta conta já existe.',
@@ -92,6 +100,21 @@ export const reconcileBankTransactionSchema = z
     }
   })
 export type ReconcileBankTransactionInput = z.infer<typeof reconcileBankTransactionSchema>
+
+/**
+ * `from` viaja junto de propósito.
+ *
+ * Ele não é o estado que a action vai gravar — é o estado que a TELA VIU, e vai
+ * para o `WHERE` do UPDATE. Sem ele, clicar "Ignorar" numa linha que outra
+ * pessoa acabou de conciliar rebaixaria o status e deixaria a evidência de pé,
+ * apontando para uma transação que afirma não ter sido conciliada.
+ */
+export const setBankTransactionStatusSchema = z.object({
+  transactionId: z.uuid(reconciliationMessages.transactionInvalid),
+  from: z.enum(BANK_TRANSACTION_STATUSES, reconciliationMessages.statusTransitionInvalid),
+  to: z.enum(BANK_TRANSACTION_STATUSES, reconciliationMessages.statusTransitionInvalid),
+})
+export type SetBankTransactionStatusInput = z.infer<typeof setBankTransactionStatusSchema>
 
 export interface BankAccountDto {
   id: string

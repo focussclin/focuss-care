@@ -7,6 +7,7 @@ import type { Database } from '@/lib/supabase/database.types'
 import type {
   BankAccount,
   BankTransaction,
+  BankTransactionStatus,
   NewBankAccountData,
   NewBankTransactionData,
   ReconcileBankTransactionData,
@@ -43,6 +44,26 @@ const TRANSACTION_SELECT = `
   account:bank_accounts ( id, name ),
   reconciliation:bank_reconciliations ( id, transaction_id, invoice_id, payable_id, matched_amount_cents, notes )
 `
+/**
+ * Só fatura emitida pode receber dinheiro no extrato.
+ *
+ * A consulta trazia TODAS as faturas da clínica — as despesas já filtravam
+ * `paid_at is null`, mas aqui não havia filtro nenhum. `draft` é uma fatura que
+ * ninguém cobrou ainda, e `canceled` é uma que foi anulada de propósito: casar
+ * uma entrada do banco com qualquer uma das duas grava evidência de recebimento
+ * de um valor que a clínica não estava cobrando.
+ *
+ * A RPC não protege disso — ela confere que a fatura existe e pertence à
+ * clínica, e nada mais. E `bank_reconciliations` não tem UPDATE nem DELETE:
+ * o vínculo errado fica.
+ */
+const RECONCILABLE_INVOICE_STATUSES = [
+  'issued',
+  'partially_paid',
+  'paid',
+  'overdue',
+] as const
+
 const ACCOUNT_ROW_CAP = 100
 const TRANSACTION_ROW_CAP = 500
 const CANDIDATE_ROW_CAP = 300
@@ -84,6 +105,7 @@ export class SupabaseReconciliationRepository implements ReconciliationRepositor
       .from('invoices')
       .select('id, total_cents, due_date, created_at, patients ( full_name )')
       .eq('clinic_id', clinicId)
+      .in('status', RECONCILABLE_INVOICE_STATUSES)
       .order('created_at', { ascending: false })
       .limit(CANDIDATE_ROW_CAP)
 
@@ -161,6 +183,34 @@ export class SupabaseReconciliationRepository implements ReconciliationRepositor
       })
       .select(TRANSACTION_SELECT)
       .single()
+
+    if (error) throw toReconciliationError(error)
+    if (!row) throw notFound()
+    return toTransaction(row as unknown as BankTransactionRow)
+  }
+
+  async setTransactionStatus(
+    clinicId: string,
+    transactionId: string,
+    from: BankTransactionStatus,
+    to: BankTransactionStatus,
+  ): Promise<BankTransaction> {
+    /*
+     * O `.eq('status', from)` é a trava, e é ele que dispensa uma função.
+     *
+     * O UPDATE só encontra a linha se ela ainda estiver no estado que a tela
+     * viu. Se outra pessoa conciliou nesse intervalo, zero linhas mudam e o
+     * `maybeSingle` devolve nulo — vira `not-found` em vez de rebaixar para
+     * `ignored` uma transação que já tem evidência gravada.
+     */
+    const { data: row, error } = await this.client
+      .from('bank_transactions')
+      .update({ status: to, updated_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('id', transactionId)
+      .eq('status', from)
+      .select(TRANSACTION_SELECT)
+      .maybeSingle()
 
     if (error) throw toReconciliationError(error)
     if (!row) throw notFound()
@@ -263,9 +313,26 @@ function toReconciliationError(error: ReconciliationQueryError): ReconciliationR
   const message = error.message ?? ''
 
   if (code === '42P01' || code === 'PGRST205') return new ReconciliationRepositoryError('schema-not-ready', 'conciliação ausente', code)
+  // Função ausente é a mesma situação de tabela ausente: falta aplicar a
+  // migration. Cair no `unexpected` do final faria a tela pedir "tente de novo"
+  // numa função que não vai existir por tentativa.
+  if (code === '42883' || code === 'PGRST202') return new ReconciliationRepositoryError('schema-not-ready', 'função de conciliação ausente', code)
   if (code === '42501' || /clinic_scope/i.test(message)) return new ReconciliationRepositoryError('forbidden', 'operação recusada pela policy', code)
   if (code === '23505') return new ReconciliationRepositoryError('duplicate', 'transação duplicada', code)
   if (code === 'P0002') return notFound()
+  /*
+   * As quatro recusas de regra da RPC chegam TODAS como `22023`. Só a mensagem
+   * as separa, e separá-las é o que decide se a pessoa consegue agir:
+   *
+   *   already_processed  -> alguém conciliou antes; trocar de alvo não resolve
+   *   direction invalid  -> entrada casada com despesa (ou o inverso)
+   *   target invalid     -> nenhum alvo, ou os dois
+   *
+   * A ordem importa: `bank_transaction_already_processed` contém "transaction",
+   * então precisa ser testada antes do padrão genérico que existia aqui.
+   */
+  if (/already_processed/i.test(message)) return new ReconciliationRepositoryError('already-processed', 'transação já processada', code)
+  if (/invoice_reconciliation_invalid|payable_reconciliation_invalid/i.test(message)) return new ReconciliationRepositoryError('direction-mismatch', 'sentido incompatível com o alvo', code)
   if (code === '22023' || /reconciliation|transaction|invoice|payable/i.test(message)) return new ReconciliationRepositoryError('invalid', 'conciliação inválida', code)
   if (/fetch|network|timeout|econnrefused/i.test(message)) return new ReconciliationRepositoryError('unavailable', 'falha de conexão', code)
   return new ReconciliationRepositoryError('unexpected', 'falha ao acessar conciliação', code)

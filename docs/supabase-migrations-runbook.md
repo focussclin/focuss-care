@@ -227,6 +227,79 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.63 Conciliação: `search_path` fixo, e o vínculo que não se desfaz
+
+> Revisado em **10/08/2026**. `20260809_bank_reconciliation.sql` continua **não
+> aplicada** — nada rodou em banco remoto. Quem já aplicou uma versão anterior
+> precisa derrubar a função antes: a assinatura não mudou, mas os atributos sim,
+> e `create or replace` não altera `security`/`search_path` de uma função que já
+> existe com outra volatilidade declarada.
+>
+> ```sql
+> drop function if exists public.reconcile_bank_transaction(uuid, uuid, uuid, uuid, text);
+> ```
+
+### `reconcile_bank_transaction` era a única função do produto sem `search_path`
+
+Agora declara `security invoker` e `set search_path = public`, como todas as
+outras. Sem isso o caminho de resolução de nomes vem da sessão: `public.invoices`
+dentro do corpo passa a depender de quem chamou, e basta existir um schema antes
+de `public` no `search_path` do papel para `invoices` ali resolver para outra
+tabela. O linter do Supabase acusa como `function_search_path_mutable`.
+
+`src/modules/reconciliation/domain/Reconciliation.test.ts` lê este `.sql` e falha
+se a linha sumir.
+
+### Não existe status `divergente`, e a aplicação não inventa um
+
+O schema tem `pending`, `reconciled` e `ignored`. A função grava
+`matched_amount_cents` com o valor **cheio da transação** — nunca com o da
+fatura —, então casar uma entrada de R$ 500 com uma fatura de R$ 450 é aceito em
+silêncio.
+
+Como `bank_reconciliations` **não tem policy de UPDATE nem de DELETE** (decisão
+registrada no próprio arquivo: conciliação é evidência), o vínculo errado fica.
+A divergência é portanto **derivada** de dois valores reais e mostrada *antes* do
+vínculo, no modal — não é um estado gravado. O teste de domínio verifica que as
+duas únicas policies da tabela continuam sendo `select` e `insert`; se algum dia
+existir `update`, o aviso deixa de ser a última defesa e o teste avisa.
+
+### `pending` ↔ `ignored` é UPDATE comum, sem função
+
+Tarifa, transferência entre contas da própria clínica e estorno duplicado nunca
+terão fatura ou despesa para casar. A aplicação faz
+`.update({status}).eq('status', <origem>)`, o que torna a troca atômica sem lock
+explícito: quem perder a corrida atualiza zero linhas e recebe `not-found`. É o
+que impede rebaixar para `ignored` uma transação que outra pessoa acabou de
+conciliar. A policy `bank_transactions_update` (owner/admin/finance) já cobre.
+
+### As quatro recusas da função chegam com o mesmo `22023`
+
+Só a mensagem as separa, e a aplicação passou a separá-las:
+
+| Mensagem do banco | Motivo no domínio | O que a tela diz |
+|---|---|---|
+| `bank_transaction_already_processed` | `already-processed` | recarregue a lista |
+| `invoice_reconciliation_invalid` / `payable_…` | `direction-mismatch` | entrada casa com fatura, saída com despesa |
+| `reconciliation_target_invalid` | `invalid` | escolha uma fatura ou despesa |
+
+Antes as três viravam a última mensagem. Quem esbarrasse numa transação já
+conciliada por um colega trocaria de alvo e falharia de novo, indefinidamente —
+o alvo nunca foi o problema. **A ordem dos testes importa:**
+`bank_transaction_already_processed` contém "transaction", então precisa ser
+verificada antes do padrão genérico.
+
+`42883`/`PGRST202` (função ausente) passaram a virar `schema-not-ready`, como já
+acontecia com `42P01`/`PGRST205` para tabela ausente.
+
+### Nada de Open Finance
+
+A entrada automática de extrato continua sendo um adapter de provedor externo que
+**não existe**. Nenhuma credencial bancária entra no banco nem no código; o
+núcleo é registro manual mais `external_id`, cujo índice único por
+`(clinic_id, bank_account_id, external_id)` deixa a importação repetível sem
+duplicar lançamento quando esse adapter existir.
+
 ## 3.62 Estoque: a contagem manda o saldo apurado, não a diferença
 
 > Acrescentado em **10/08/2026**. `20260809_inventory.sql` continua **não
