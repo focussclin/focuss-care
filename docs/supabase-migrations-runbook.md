@@ -227,6 +227,58 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.59 Formulários: o schema NÃO suporta resposta pública
+
+> Levantado em **10/08/2026** contra `20260809_clinic_forms.sql` (não
+> aplicada). Esta seção existe para que a ausência seja uma decisão registrada,
+> e não uma feature esquecida.
+
+`clinic_form_responses` tem esta forma:
+
+```sql
+patient_id  uuid not null,   -- FK composta com clinic_id
+created_by  uuid references public.profiles(id),
+```
+
+Não há **token**, não há **expiração**, e `patient_id` é obrigatório. As
+policies exigem `has_clinic_role(owner, admin, professional, receptionist)`.
+
+Consequência: o fluxo que existe é **da equipe** — `/formularios/[formId]/responder`
+exige `patient.write`, carrega a lista de pacientes e a recepção preenche
+junto com a pessoa. Isso funciona e persiste de verdade.
+
+**Um link público que o paciente abre sozinho não é implementável sobre este
+schema.** Não é questão de código: não há por onde identificar quem respondeu
+sem uma sessão, e afrouxar a policy para `anon` abriria `clinic_form_responses`
+inteira — anamnese, que é dado de saúde — para qualquer chamador do PostgREST.
+
+### O que uma fatia posterior precisaria acrescentar
+
+1. `form_response_links`: `token_hash`, `form_id`, `patient_id`, `expires_at`,
+   `status`, `used_at`. Só o hash, como em `patient_portal_invites`.
+2. RPC `submit_form_response_by_token(p_token, p_answers)`, `security definer`,
+   com `grant execute to anon`. Ela resolve o paciente **pelo link**, valida
+   validade e uso único, e escreve — sem que o chamador escolha `patient_id`.
+3. RPC de pré-visualização devolvendo **só** nome do formulário e campos.
+   Nunca o nome do paciente: o token viaja por WhatsApp.
+4. Rota fora de `(app)`, como `(portal)`: quem responde não tem vínculo de
+   clínica, e o layout de `(app)` o mandaria ao onboarding.
+
+O desenho é o mesmo do portal do paciente, e o precedente está em
+`20260810_patient_portal.sql`. **Não foi feito nesta fatia** porque o pedido
+delimitou "o fluxo que o schema local suporta", e este não é.
+
+### Versão do formulário — corrigido em 10/08/2026
+
+`clinic_forms.version` existia na migration, aparecia na entidade e no DTO, e
+**nada a escrevia**: ficava em 1 para sempre, e a tela mostrava o número.
+
+`answers` é um objeto chaveado por id de campo. Uma resposta coletada quando o
+formulário tinha as perguntas A e B é lida depois contra A e C — e sem a versão
+ninguém sabe sob qual questionário aquela anamnese foi respondida. Agora
+`update` incrementa quando os **campos** mudam, e só então: renomear ou
+publicar não move o número.
+
 ## 3.58 CRM: a conversão é FUNÇÃO, e o motivo é `patients` já existir
 
 > `20260809_clinic_leads.sql` continua **não aplicada**. A função

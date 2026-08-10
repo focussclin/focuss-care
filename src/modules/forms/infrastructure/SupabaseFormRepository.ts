@@ -120,7 +120,37 @@ export class SupabaseFormRepository implements FormRepository {
     if (data.description !== undefined) patch.description = data.description
     if (data.type !== undefined) patch.form_type = data.type
     if (data.status !== undefined) patch.status = data.status
-    if (data.fields !== undefined) patch.fields = data.fields
+
+    /*
+     * Mudar os CAMPOS incrementa a versão. Mudar nome, descrição ou situação
+     * não.
+     *
+     * `clinic_forms.version` existia na migration, aparecia na entidade e no
+     * DTO, e **nada a escrevia**: ficava em 1 para sempre. O número era exibido
+     * na tela como se significasse alguma coisa.
+     *
+     * O que ele significa: `clinic_form_responses.answers` é um objeto chaveado
+     * por id de campo. Uma resposta coletada quando o formulário tinha as
+     * perguntas A e B é lida depois contra as perguntas A e C — e sem a versão
+     * ninguém consegue saber sob qual questionário aquela anamnese foi
+     * respondida. Em dado clínico isso não é detalhe de auditoria: é a
+     * diferença entre uma resposta interpretável e uma resposta órfã.
+     *
+     * O `findById` a mais só acontece quando os campos mudam — ou seja, ao
+     * salvar o construtor, e não a cada renomeação.
+     */
+    if (data.fields !== undefined) {
+      const current = await this.findById(clinicId, formId)
+      if (!current) throw notFound()
+
+      const fieldsChanged =
+        JSON.stringify(current.fields) !== JSON.stringify(data.fields)
+
+      if (fieldsChanged) {
+        patch.fields = data.fields
+        patch.version = current.version + 1
+      }
+    }
 
     const { data: row, error } = await this.client
       .from('clinic_forms')

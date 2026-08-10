@@ -1374,6 +1374,61 @@ em vez de fingir que criou a ficha.
 
 ---
 
+## 8.16 Feature — Formulários digitais (10/08/2026)
+
+Builder, CRUD, coleta de resposta, validação e os dois estados de tela já
+existiam e persistem de verdade. A auditoria encontrou **um defeito silencioso
+e um limite de escopo que precisa estar escrito**.
+
+### `version` era exibida e nunca escrita
+
+`clinic_forms.version` existia na migration, chegava à entidade e ao DTO, e
+**nenhum caminho a atualizava**. Ficava em 1 para sempre, e a tela mostrava o
+número como se ele significasse alguma coisa.
+
+O que ele significa: `clinic_form_responses.answers` é um objeto chaveado por
+id de campo. Uma resposta coletada quando o formulário tinha as perguntas A e B
+é lida depois contra as perguntas A e C — e sem a versão ninguém consegue saber
+sob qual questionário aquela anamnese foi respondida. Em dado clínico isso não
+é detalhe de auditoria: é a diferença entre uma resposta interpretável e uma
+resposta órfã.
+
+`update` agora incrementa quando os **campos** mudam, e só então. Renomear ou
+publicar não move o número — incrementar ali faria o valor perder o significado
+que acabou de ganhar. O `findById` a mais só acontece ao salvar o construtor.
+
+### Resposta pública/convite NÃO é implementável sobre este schema
+
+`clinic_form_responses` exige `patient_id`, não tem token nem expiração, e as
+policies exigem papel de equipe. O fluxo que existe é **da equipe**: a rota de
+resposta pede `patient.write`, carrega a lista de pacientes, e a recepção
+preenche junto com a pessoa. Isso funciona.
+
+Um link que o paciente abre sozinho exigiria tabela de token, RPC
+`security definer` com `grant to anon`, e rota fora de `(app)` — o mesmo
+desenho do portal do paciente. Afrouxar a policy atual para `anon` abriria
+`clinic_form_responses` inteira, que é dado de saúde, para qualquer chamador do
+PostgREST.
+
+**Não implementei**, porque o pedido delimitou "o fluxo que o schema local
+suporta" e este não é. O desbloqueio está especificado item a item no runbook
+§3.59 — quatro passos, com o precedente já no repositório.
+
+### Cobertura
+
+O repositório de formulários não tinha **nenhum** teste. Agora tem 16: tenant
+em toda consulta, `findById` de outra clínica devolvendo `null` em vez de erro,
+o versionamento nos três casos (campos sobem, renomear e publicar não), e a
+tradução de `42P01`/`42501`.
+
+### O que continua pendente
+
+`20260809_clinic_forms.sql` **não foi aplicada**: `/formularios` mantém
+`availability: 'setup'`, as duas telas declaram a pendência, e os shims
+`formsDatabase.ts`/`formResponsesDatabase.ts` seguem sendo a fonte dos tipos.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
