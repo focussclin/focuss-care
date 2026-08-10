@@ -1,5 +1,6 @@
 'use server'
 
+import { rolesWith } from '@/lib/auth/permissions'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -18,6 +19,7 @@ type Fields = 'title' | 'notes' | 'assigneeId' | 'dueAt' | 'priority' | 'patient
 const runCreateTask = createAction<CreateTaskInput, TaskDto, Fields>({
   name: 'task.create',
   schema: createTaskSchema,
+  roles: rolesWith('team.read'),
   messages: {
     validation: taskMessages.invalidFields,
     unavailable: taskMessages.unavailable,

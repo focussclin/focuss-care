@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
+
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 
 import {
   setFormStatusFromScreen,
@@ -18,7 +22,13 @@ export const metadata: Metadata = {
 export default async function FormsPage() {
   await connection()
 
-  const source = await getFormRepository()
+  const [source, role] = await Promise.all([
+    getFormRepository(),
+    getActiveClinicRole(),
+  ])
+
+  if (source.isLive && !can(role, 'clinic.settings')) forbidden()
+
   let forms = [] as Awaited<ReturnType<typeof source.repository.list>>
   let schemaPending = false
 

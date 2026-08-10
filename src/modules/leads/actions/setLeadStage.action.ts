@@ -1,5 +1,6 @@
 'use server'
 
+import { rolesWith } from '@/lib/auth/permissions'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -18,6 +19,7 @@ type Fields = 'leadId' | 'stage'
 const runSetLeadStage = createAction<SetLeadStageInput, LeadDto, Fields>({
   name: 'lead.setStage',
   schema: setLeadStageSchema,
+  roles: rolesWith('team.read'),
   messages: {
     validation: leadMessages.invalidFields,
     unavailable: leadMessages.unavailable,

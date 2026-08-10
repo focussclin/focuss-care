@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
+
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 
 import {
   moveLeadFromScreen,
@@ -20,10 +24,15 @@ export const metadata: Metadata = {
 export default async function CrmPage() {
   await connection()
 
-  const [leadSource, teamSource] = await Promise.all([
+  const [leadSource, teamSource, role] = await Promise.all([
     getLeadRepository(),
     getTeamRepository(),
+    getActiveClinicRole(),
   ])
+
+  if (leadSource.isLive && (!can(role, 'patient.read') || !can(role, 'team.read'))) {
+    forbidden()
+  }
 
   let leads = [] as Awaited<ReturnType<typeof leadSource.repository.list>>
   let schemaPending = false

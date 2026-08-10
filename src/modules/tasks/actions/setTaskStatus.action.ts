@@ -1,5 +1,6 @@
 'use server'
 
+import { rolesWith } from '@/lib/auth/permissions'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -18,6 +19,7 @@ type Fields = 'taskId' | 'status'
 const runSetTaskStatus = createAction<SetTaskStatusInput, TaskDto, Fields>({
   name: 'task.setStatus',
   schema: setTaskStatusSchema,
+  roles: rolesWith('team.read'),
   messages: {
     validation: taskMessages.invalidFields,
     unavailable: taskMessages.unavailable,

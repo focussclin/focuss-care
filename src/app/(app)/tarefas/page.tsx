@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
 
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
 import { startOfDay } from '@/lib/utils/date'
 import { toTaskGroups } from '@/modules/tasks/application/toTaskDto'
@@ -25,12 +28,17 @@ export default async function TarefasPage() {
   await connection()
 
   const today = startOfDay(new Date())
-  const [taskSource, patientSource, teamSource, session] = await Promise.all([
+  const [taskSource, patientSource, teamSource, session, role] = await Promise.all([
     getTaskRepository(),
     getPatientRepository(today),
     getTeamRepository(),
     getSessionState(),
+    getActiveClinicRole(),
   ])
+
+  if (taskSource.isLive && (!can(role, 'patient.read') || !can(role, 'team.read'))) {
+    forbidden()
+  }
 
   let tasks = [] as Awaited<ReturnType<typeof taskSource.repository.list>>
   let schemaPending = false

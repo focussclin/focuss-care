@@ -1,5 +1,9 @@
 import type { Metadata } from 'next'
+import { forbidden } from 'next/navigation'
 import { connection } from 'next/server'
+
+import { getActiveClinicRole } from '@/lib/auth/active-clinic'
+import { can } from '@/lib/auth/permissions'
 
 import { toInboxConversationDto } from '@/modules/inbox/application/toInboxDto'
 import { getInboxRepository } from '@/modules/inbox/infrastructure/repository'
@@ -13,7 +17,13 @@ export const metadata: Metadata = {
 export default async function InboxPage() {
   await connection()
 
-  const source = await getInboxRepository()
+  const [source, role] = await Promise.all([
+    getInboxRepository(),
+    getActiveClinicRole(),
+  ])
+
+  if (source.isLive && !can(role, 'encounter.read')) forbidden()
+
   const conversations = await source.repository.listConversations(source.clinicId)
   const messages = await source.repository.listMessages(
     source.clinicId,
