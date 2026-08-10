@@ -395,10 +395,12 @@ describe('nenhuma action revalida rota que não alimenta', () => {
        * não quebrar nada.
        */
       /*
-       * `integrations` grava credencial de canal, e a unica tela que a mostra e
-       * `/configuracoes`. Nada mais le esse dado.
+       * `integrations` grava duas coisas em telas diferentes: credencial de
+       * canal, que so `/configuracoes` mostra, e regra de automacao, que so
+       * `/automacoes` mostra. Nenhuma das duas alimenta painel ou relatorio —
+       * regra que nao executa nao produz numero para lugar nenhum.
        */
-      integrations: ['/configuracoes'],
+      integrations: ['/configuracoes', '/automacoes'],
       tasks: ['/tarefas'],
       team: ['/equipe'],
     }

@@ -181,10 +181,22 @@ alterar nada:
 select tablename, policyname, cmd, roles
   from pg_policies
  where schemaname = 'public'
-   and tablename in ('conversations', 'messages')
+   and tablename in ('conversations', 'messages', 'workflows')
  order by tablename, cmd;
 ```
 
 Se não houver linha com `cmd = 'UPDATE'` para `conversations`, a Inbox mostra a
 mensagem apontando a policy ausente em vez de fingir que a conversa sumiu — mas
 status, responsável e leitura só passam a gravar depois que essa policy existir.
+
+O mesmo vale para `workflows` em `/automacoes`, que precisa de `INSERT`,
+`UPDATE` e `DELETE` para o papel com `clinic.settings`. As duas telas tratam a
+ausência do mesmo jeito: `write-forbidden`, com o texto apontando a policy.
+
+### `workflows` guarda `jsonb` que a aplicação não controla sozinha
+
+`trigger_config`, `conditions` e `actions` aceitam qualquer estrutura no banco.
+A aplicação só grava formas fechadas, validadas por Zod, e **relê pelo mesmo
+schema** — o que não casa é descartado na leitura em vez de exibido cru. Linha
+inserida por fora (console, script, worker futuro) não quebra a tela, mas também
+não aparece nela. Ver `PROJECT_PROGRESS.md` §8.22.

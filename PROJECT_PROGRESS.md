@@ -1818,6 +1818,77 @@ de enviar foi criado. O aviso do topo passou a distinguir o que já grava
 
 ---
 
+## 8.22 Feature — Automações (10/08/2026)
+
+Como a Inbox: `workflows` e `workflow_runs` **já existem no banco aplicado**.
+Não há migration pendente. A tela era só leitura e justificava o vazio com "o
+cadastro entra junto com o serviço que vai executá-las". O cadastro entrou; o
+serviço não — e a tela continua dizendo isso em toda parte.
+
+### 1. Nenhuma regra executa, e a tela repete isso em quatro lugares
+
+Não há worker. O aviso de bloqueio segue no topo, o selo diz **"marcada como
+ativa"** e não "ativa", o modal avisa antes de salvar, e o rodapé explica que
+zero execuções não é coincidência. A regra nasce desligada: cadastrar não é
+ligar, ainda mais quando ligar não liga nada.
+
+Isto é a memória de um defeito antigo — a vitrine que tinha um interruptor que
+mudava de posição e não ligava nada. O CRUD novo não podia recriá-lo.
+
+### 2. O vocabulário é fechado porque as colunas são `jsonb`
+
+`trigger_config`, `conditions` e `actions` aceitam qualquer coisa no banco. Um
+campo de JSON livre no formulário transformaria a tela num canal para gravar
+estrutura arbitrária no tenant — que o worker futuro leria como instrução.
+
+Os três têm união discriminada em Zod, sem `passthrough`. Chave desconhecida é
+descartada; tipo de ação inventado (`send_whatsapp`, `http_request`,
+`run_prompt`) é recusado.
+
+**Só ações internas**: notificar a equipe e abrir tarefa. Nada que saia da
+clínica entra no vocabulário, porque cada saída depende de um adapter que não
+existe — oferecer a opção seria prometer um envio que nunca acontece.
+
+### 3. A leitura reconstrói o JSON pelo mesmo schema da escrita
+
+Linha gravada por fora da aplicação (console do Supabase, script, worker futuro)
+pode ter forma que a tela não conhece. `safeParse` descarta o que não casa em
+vez de exibir cru. Configuração ilegível cai em `event`, a única forma sem
+parâmetro — chutar `{ hoursBefore: 24 }` colocaria no formulário um número que
+ninguém configurou, como se fosse escolha da clínica.
+
+### 4. A rota não checava papel nenhum
+
+Qualquer papel abria `/automacoes`. Automação é configuração da clínica: agora
+exige `clinic.settings` para ler e para escrever, a mesma permissão que muda
+horário de funcionamento.
+
+### 5. `loadRules` engolia erro e devolvia lista vazia
+
+No `overview`, uma recusa de policy ou queda de rede renderizava como "nenhuma
+regra cadastrada" — indistinguível de uma clínica sem automação. A nova leitura
+tem repositório próprio, e a falha vira `loadError` na tela.
+
+### 6. Escrita recusada e exclusão com histórico
+
+Mesmo padrão da Inbox: zero linhas afetadas com a regra ainda legível vira
+`write-forbidden` apontando a policy ausente, não `not-found`. E `23503`
+(`workflow_runs` referencia `workflows`) vira `has-runs`, com mensagem mandando
+**desativar** — apagar uma regra com histórico apagaria a evidência do que
+rodou. Hoje não há execução nenhuma, mas a recusa já está traduzida.
+
+### O que continua bloqueado
+
+Não sei se existe policy de `UPDATE`/`DELETE` em `workflows` — não consultei o
+banco remoto. Se não existir, as escritas devolvem a mensagem apontando a policy
+em vez de fingir que a regra sumiu. A query de verificação está no
+`docs/03-banco-de-dados.md` §7, junto com a de `conversations`.
+
+Executor, worker, WhatsApp, webhook e IA continuam fora — nenhum foi
+implementado, e o vocabulário de ações foi desenhado para não os pressupor.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
