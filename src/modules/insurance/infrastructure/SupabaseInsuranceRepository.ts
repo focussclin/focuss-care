@@ -791,6 +791,40 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     return this.requireAuthorization(clinicId, authorizationId)
   }
 
+  /**
+   * Compare-and-swap, igual ao da resposta.
+   *
+   * `.eq('status', from)` é a trava: se alguém baixou ou cancelou a guia nesse
+   * intervalo, o UPDATE não encontra linha e nada é sobrescrito. `answered_at`
+   * e `denial_reason` não são tocados — baixar uma guia não apaga a resposta da
+   * operadora.
+   */
+  async transitionAuthorization(
+    clinicId: string,
+    authorizationId: string,
+    from: AuthorizationStatus,
+    to: AuthorizationStatus,
+  ): Promise<Authorization> {
+    const { data, error } = await this.client
+      .from('insurance_authorizations')
+      .update({ status: to, updated_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('id', authorizationId)
+      .eq('status', from)
+      .select('id')
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) {
+      throw new InsuranceRepositoryError(
+        'already-answered',
+        `guia ${authorizationId} nao esta mais em ${from} nesta clinica`,
+      )
+    }
+
+    return this.requireAuthorization(clinicId, authorizationId)
+  }
+
   private async requireAuthorization(
     clinicId: string,
     authorizationId: string,

@@ -75,6 +75,10 @@ export class MockInsuranceRepository implements InsuranceRepository {
     return this.refuseWrite('answerAuthorization')
   }
 
+  async transitionAuthorization(): Promise<never> {
+    return this.refuseWrite('transitionAuthorization')
+  }
+
   async listClaimDenials(): Promise<ClaimDenial[]> {
     return []
   }

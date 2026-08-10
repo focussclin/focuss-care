@@ -62,7 +62,7 @@ de estoque).
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa, **contas a pagar com baixa** e **recibo interno por pagamento** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
-| `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
+| `insurance` | **EM ANDAMENTO** | Operadoras, planos, **carteirinhas**, guias com **ciclo completo** (baixa, cancelamento e vencimento derivado) e **glosas com ciclo de recurso** funcionam; elegibilidade externa segue ausente |
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
@@ -2488,6 +2488,68 @@ os dados não carregaram, e a tela continua servindo para cobrar e receber.
 
 `billing` continua **EM ANDAMENTO** — o recibo não destrava P-RPC e não muda o
 que falta. 29 testes novos: 12 de domínio e 17 de UI.
+
+---
+
+## 8.31 Feature — Ciclo da guia de convênio (10/08/2026)
+
+Auditei as sete áreas e escolhi **convênios**: era a maior superfície de escrita
+(4 actions, 6 telas) com **zero teste de UI**, e o ciclo da guia estava pela
+metade.
+
+### O buraco: três das seis situações eram inalcançáveis
+
+`AuthorizationStatus` tem seis valores. O módulo alcançava `requested`,
+`approved` e `denied`. Faltavam:
+
+- **`used`** — guia aprovada e consumida;
+- **`canceled`** — desistência, antes ou depois da resposta;
+- **`expired`** — prazo vencido.
+
+Uma guia aprovada não tinha para onde ir: a lista de autorizadas crescia para
+sempre, sem distinguir a já usada da que ainda vale, e sem forma de desistir de
+um pedido que o paciente não voltou para fazer. `used` e `expired` nem tinham
+rótulo — apareceriam como o valor cru do enum.
+
+### O que foi fechado, e o que deliberadamente não
+
+`AUTHORIZATION_TRANSITIONS` no domínio: `requested → canceled`,
+`approved → used | canceled`. Negada é final (contestar é a glosa; pedir de novo
+é guia nova), e `used`/`canceled` não voltam.
+
+**Responder continua separado.** Aprovar exige número e negar exige motivo —
+isso é a resposta da OPERADORA, e continua em `answerAuthorization`. Baixar e
+cancelar são decisões da CLÍNICA sobre uma guia que já tem, ou já não terá,
+resposta. Misturá-las abriria caminho para marcar guia como autorizada sem
+número nenhum.
+
+**`expired` não é escrito pela aplicação.** Vencimento é `expires_at` passando —
+comparação de data. Gravar o status exigiria um processo diário; sem ele, uma
+guia gravada como vencida conviveria com outra vencida e ainda marcada
+`approved`, e a lista mentiria de duas formas. A tela deriva o selo na leitura e
+o mostra **ao lado** do status gravado, nunca no lugar dele. Só guia aprovada
+vence: negada, cancelada ou utilizada já terminaram.
+
+### Concorrência
+
+`transitionAuthorization` usa compare-and-swap, o mesmo padrão que
+`answerAuthorization` já usava: `from` é o estado que a tela viu e vai para o
+`WHERE`. Duas pessoas mexendo na mesma guia não se sobrescrevem — a segunda não
+encontra linha.
+
+### `AuthorizationDto.status` era `string`
+
+Solto, deixava a tela indexar tabelas de estado com qualquer texto, e um status
+novo no banco passaria despercebido até alguém notar o valor cru na tela.
+Fechado no enum, o typecheck cobra rótulo e transição — foi ele que apontou os
+dois rótulos faltando.
+
+### Estado
+
+`insurance` continua **EM ANDAMENTO**: elegibilidade externa segue ausente, e
+esta fatia não a destrava. O que mudou é que o ciclo local da guia fechou, e o
+módulo deixou de ter zero cobertura de UI — 27 testes novos, 11 de domínio e 16
+de tela.
 
 ---
 

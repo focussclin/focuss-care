@@ -18,6 +18,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
+import type { AuthorizationStatus } from '@/lib/supabase/database.types'
 import { formatShortDate } from '@/lib/utils/date'
 import { formatCents } from '@/lib/utils/money'
 
@@ -42,6 +43,11 @@ import {
   type PlanDto,
   type ProviderDto,
 } from '../schemas/insurance.schema'
+import { transitionAuthorizationAction } from '../actions/authorizations.action'
+import {
+  AUTHORIZATION_TRANSITIONS,
+  isAuthorizationExpired,
+} from '../domain/Insurance'
 import { AnswerAuthorizationModal } from './AnswerAuthorizationModal'
 import { ClaimDenialsPanel } from './ClaimDenialsPanel'
 import { NewAuthorizationModal } from './NewAuthorizationModal'
@@ -102,6 +108,39 @@ export function ConveniosScreen({
   const [creatingPatientInsurance, setCreatingPatientInsurance] = useState(false)
   const [answering, setAnswering] = useState<AuthorizationDto | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busyAuthorization, setBusyAuthorization] = useState<string | null>(null)
+  /*
+   * O "agora" é fixado por render, e não lido a cada linha: duas guias na mesma
+   * lista não podem ser avaliadas contra relógios diferentes.
+   */
+  const now = new Date()
+
+  async function transitionAuthorization(
+    authorization: AuthorizationDto,
+    /*
+     * O destino vem da tabela do dominio, que e tipada com o enum inteiro. O
+     * schema da action fecha em `used | canceled`; aqui o tipo acompanha a
+     * origem, e a action recusa o que nao couber.
+     */
+    to: AuthorizationStatus,
+  ) {
+    setBusyAuthorization(authorization.id)
+    setError(null)
+    try {
+      const result = await transitionAuthorizationAction({
+        authorizationId: authorization.id,
+        // `from` é o estado que ESTA tela viu: vai para o `WHERE` do UPDATE.
+        from: authorization.status,
+        to,
+      })
+      if (!result.ok) setError(result.error.message)
+      else startTransition(() => router.refresh())
+    } catch {
+      setError(insuranceMessages.unexpected)
+    } finally {
+      setBusyAuthorization(null)
+    }
+  }
 
   const editable = canManage && isLive
 
@@ -269,6 +308,21 @@ export function ConveniosScreen({
                     authorization.status}
                 </StatusBadge>
 
+                {/*
+                  Vencimento é derivado da data, e aparece AO LADO do status
+                  gravado — não no lugar dele. A aplicação não escreve
+                  `expired`: sem processo que rode todo dia, guia vencida
+                  gravada conviveria com outra vencida ainda marcada
+                  "Autorizada", e a lista mentiria de duas formas.
+                */}
+                {isAuthorizationExpired(
+                  authorization.status,
+                  authorization.expiresAt ? new Date(authorization.expiresAt) : null,
+                  now,
+                ) ? (
+                  <StatusBadge tone="negative">Prazo vencido</StatusBadge>
+                ) : null}
+
                 {editable && authorization.status === 'requested' ? (
                   <Button
                     variant="secondary"
@@ -277,6 +331,26 @@ export function ConveniosScreen({
                     Registrar resposta
                   </Button>
                 ) : null}
+
+                {/*
+                  O ciclo que faltava: guia aprovada não tinha para onde ir, e a
+                  lista de autorizadas crescia sem distinguir a já usada da que
+                  ainda vale. Os destinos saem da tabela do domínio.
+                */}
+                {editable
+                  ? AUTHORIZATION_TRANSITIONS[authorization.status].map((to) => (
+                      <Button
+                        key={to}
+                        variant="ghost"
+                        disabled={busyAuthorization === authorization.id}
+                        onClick={() =>
+                          void transitionAuthorization(authorization, to)
+                        }
+                      >
+                        {to === 'used' ? 'Marcar como utilizada' : 'Cancelar guia'}
+                      </Button>
+                    ))
+                  : null}
               </li>
             ))}
           </ul>

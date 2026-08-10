@@ -108,6 +108,71 @@ export type AuthorizationAnswer =
       denialReason: string
     }
 
+/**
+ * O ciclo da guia depois da resposta da operadora.
+ *
+ * # O que faltava
+ *
+ * O módulo alcançava três das seis situações do enum: `requested`, `approved` e
+ * `denied`. Uma guia aprovada não tinha para onde ir — a lista de aprovadas
+ * crescia para sempre, sem distinguir a que já foi usada da que ainda vale, e
+ * sem forma de desistir de um pedido que o paciente não voltou para fazer.
+ *
+ * As duas transições abaixo são da CLÍNICA, e não da operadora: responder
+ * (aprovar/negar) continua sendo `AuthorizationAnswer`, que exige número ou
+ * motivo. Baixar e cancelar são decisões de quem administra a guia.
+ *
+ * # `expired` não é escrito por esta aplicação
+ *
+ * Vencimento é `expires_at` passando — comparação de data, não decisão de
+ * ninguém. Gravar o status exigiria um processo que rodasse todo dia e o
+ * virasse; sem esse processo, uma guia gravada como `expired` conviveria com
+ * outra vencida e ainda marcada `approved`, e a lista mentiria de duas formas.
+ * A tela deriva o vencimento na leitura, e o enum guarda o estado para quando
+ * houver quem o escreva.
+ */
+export const AUTHORIZATION_TRANSITIONS: Record<
+  AuthorizationStatus,
+  readonly AuthorizationStatus[]
+> = {
+  /* Desistir antes da resposta: o paciente não voltou, o procedimento mudou. */
+  requested: ['canceled'],
+  /* Guia aprovada foi consumida, ou perdeu o propósito. */
+  approved: ['used', 'canceled'],
+  /* Negada é final: contestar é a glosa, e pedir de novo é guia nova. */
+  denied: [],
+  used: [],
+  canceled: [],
+  /* Não é escrito aqui; se algum dia for, também é final. */
+  expired: [],
+}
+
+export function canTransitionAuthorization(
+  from: AuthorizationStatus,
+  to: AuthorizationStatus,
+): boolean {
+  return AUTHORIZATION_TRANSITIONS[from].includes(to)
+}
+
+/**
+ * A guia venceu?
+ *
+ * Comparação de data, e **não** julgamento sobre usá-la: guia vencida pode ter
+ * sido honrada pela operadora, e é a operadora quem decide isso. A tela mostra o
+ * fato ao lado do status gravado, sem substituí-lo.
+ *
+ * Só faz sentido para guia aprovada: uma negada ou cancelada não vence, ela já
+ * terminou.
+ */
+export function isAuthorizationExpired(
+  status: AuthorizationStatus,
+  expiresAt: Date | null,
+  now: Date,
+): boolean {
+  if (status !== 'approved' || expiresAt === null) return false
+  return expiresAt.getTime() < now.getTime()
+}
+
 /** Carteirinha de um paciente — o que a tela precisa para abrir uma guia. */
 export interface PatientInsuranceOption {
   id: string

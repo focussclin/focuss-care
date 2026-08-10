@@ -1,3 +1,5 @@
+import type { AuthorizationStatus } from '@/lib/supabase/database.types'
+
 import type {
   Authorization,
   AuthorizationAnswer,
@@ -100,6 +102,25 @@ export interface InsuranceRepository {
     clinicId: string,
     authorizationId: string,
     answer: AuthorizationAnswer,
+  ): Promise<Authorization>
+
+  /**
+   * Fecha o ciclo da guia: baixar (`used`) ou desistir (`canceled`).
+   *
+   * `from` não é redundante com o id — vai para o `WHERE`, como em
+   * `answerAuthorization`. Sem ele, duas pessoas mexendo na mesma guia
+   * sobrescreveriam uma à outra, e baixar uma guia que acabou de ser cancelada
+   * passaria despercebido.
+   *
+   * Responder continua sendo `answerAuthorization`: aprovar exige número e
+   * negar exige motivo. Isto aqui é decisão da CLÍNICA sobre uma guia que já
+   * tem (ou não terá) resposta.
+   */
+  transitionAuthorization(
+    clinicId: string,
+    authorizationId: string,
+    from: AuthorizationStatus,
+    to: AuthorizationStatus,
   ): Promise<Authorization>
 
   listClaimDenials(clinicId: string, limit: number): Promise<ClaimDenial[]>

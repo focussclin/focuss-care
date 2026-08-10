@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import type { AuthorizationStatus } from '@/lib/supabase/database.types'
+
 import { parseCents } from '@/lib/utils/money'
 
 export const insuranceMessages = {
@@ -57,6 +59,9 @@ export const authorizationStatusLabels: Record<string, string> = {
   approved: 'Autorizada',
   denied: 'Negada',
   canceled: 'Cancelada',
+  /* Faltavam: sem rótulo, a tela mostrava o valor cru do enum. */
+  used: 'Utilizada',
+  expired: 'Vencida',
 }
 
 /** Texto de dinheiro -> centavos, no servidor. Ver `billing.schema` para o porquê. */
@@ -199,6 +204,25 @@ export type SetPatientInsuranceActiveInput = z.infer<
  * motivo. Um schema com os dois opcionais aceitaria uma aprovação sem número —
  * que o faturamento rejeita depois, quando o atendimento já aconteceu.
  */
+/**
+ * Fechar o ciclo da guia: baixar ou desistir.
+ *
+ * `from` viaja junto porque vai para o `WHERE` do UPDATE — é o estado que a
+ * TELA viu, e sem ele duas pessoas mexendo na mesma guia se sobrescreveriam.
+ *
+ * Os destinos são fechados no schema, e não só na tabela do domínio: `approved`
+ * e `denied` não entram aqui porque responder exige número ou motivo, e é outra
+ * action.
+ */
+export const transitionAuthorizationSchema = z.object({
+  authorizationId: z.uuid(insuranceMessages.notFound),
+  from: z.enum(['requested', 'approved'], insuranceMessages.invalidFields),
+  to: z.enum(['used', 'canceled'], insuranceMessages.invalidFields),
+})
+export type TransitionAuthorizationInput = z.infer<
+  typeof transitionAuthorizationSchema
+>
+
 export const answerAuthorizationSchema = z.discriminatedUnion('outcome', [
   z.object({
     authorizationId: z.uuid(insuranceMessages.unexpected),
@@ -317,7 +341,14 @@ export interface AuthorizationDto {
   planName: string
   providerName: string
   authorizationNumber: string | null
-  status: string
+  /*
+   * O enum do banco, e nao `string`.
+   *
+   * Solto, ele deixava a tela indexar tabelas de estado com qualquer texto — e
+   * um status novo no banco passaria despercebido ate alguem notar o valor cru
+   * na tela. Fechado, o typecheck cobra o rotulo e a transicao.
+   */
+  status: AuthorizationStatus
   procedures: readonly { code: string; description: string; quantity: number }[]
   requestedAt: string
   expiresAt: string | null

@@ -2,13 +2,16 @@
 
 import { rolesWith } from '@/lib/auth/permissions'
 import { createAction } from '@/modules/_shared/application/createAction'
-import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
+import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { toInsuranceFailure } from '../application/insuranceFailure'
 import { toAuthorizationDto } from '../application/toInsuranceDto'
+import { canTransitionAuthorization } from '../domain/Insurance'
 import { insuranceRepositoryFor } from '../infrastructure/repository'
 import {
   answerAuthorizationSchema,
+  transitionAuthorizationSchema,
+  type TransitionAuthorizationInput,
   createAuthorizationSchema,
   insuranceMessages,
   type AnswerAuthorizationInput,
@@ -155,6 +158,71 @@ const runAnswerAuthorization = createAction<
     },
   }),
 })
+
+/**
+ * Fecha o ciclo da guia — baixar (`used`) ou desistir (`canceled`).
+ *
+ * Separada de `answerAuthorization` de propósito: responder é da OPERADORA e
+ * exige número ou motivo; isto é decisão da CLÍNICA sobre uma guia que já tem
+ * (ou já não terá) resposta.
+ *
+ * A regra vive no domínio e é conferida aqui, no servidor: a tela decide o que
+ * OFERECER, e quem chama a action direto não passa por tela nenhuma.
+ */
+const runTransitionAuthorization = createAction<
+  TransitionAuthorizationInput,
+  AuthorizationDto,
+  'authorizationId' | 'from' | 'to'
+>({
+  name: 'insurance.transitionAuthorization',
+  schema: transitionAuthorizationSchema,
+  roles: rolesWith('insurance.manage'),
+  messages,
+  revalidatePaths: ['/convenios'],
+
+  handler: async (input, context) => {
+    if (!canTransitionAuthorization(input.from, input.to)) {
+      return err<'authorizationId' | 'from' | 'to'>(
+        'validation',
+        insuranceMessages.invalidFields,
+      )
+    }
+
+    try {
+      const authorization = await insuranceRepositoryFor(
+        context.supabase,
+      ).transitionAuthorization(
+        context.clinicId,
+        input.authorizationId,
+        input.from,
+        input.to,
+      )
+
+      return ok<AuthorizationDto>(toAuthorizationDto(authorization))
+    } catch (cause) {
+      return toInsuranceFailure<'authorizationId' | 'from' | 'to'>(
+        'insurance.transitionAuthorization',
+        cause,
+      )
+    }
+  },
+
+  audit: (output) => ({
+    action:
+      output.status === 'used'
+        ? 'insurance.authorization_used'
+        : 'insurance.authorization_canceled',
+    entityType: 'insurance_authorization',
+    entityId: output.id,
+    after: { status: output.status },
+  }),
+})
+
+export async function transitionAuthorizationAction(
+  rawInput: unknown,
+): Promise<ActionResult<AuthorizationDto, 'authorizationId' | 'from' | 'to'>> {
+  return runTransitionAuthorization(rawInput)
+}
 
 export async function answerAuthorizationAction(
   rawInput: unknown,
