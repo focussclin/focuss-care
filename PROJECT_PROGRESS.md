@@ -745,7 +745,7 @@ projeto Supabase.
 | **P-OVL** | Constraint de exclusão em `appointments` | **RESOLVIDO** — constraint aplicada e verificada |
 | **P-GLO** | Tabela e ciclo de glosas | **RESOLVIDO nesta fatia** — registro, recurso, recuperação e aceite persistem |
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
-| **P-WD** | Convenção de `availability_rules.weekday` desconhecida (0–6 ou 1–7) | Sem disponibilidade por profissional na agenda | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid = 'public.availability_rules'::regclass` |
+| **P-WD** | Convenção de `weekday` desconhecida (0–6 ou 1–7) em **duas** tabelas: `availability_rules` e `work_schedules` | Sem disponibilidade por profissional na agenda (A-02) **e** sem escalas de trabalho em `/equipe` (S-02) | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid in ('public.availability_rules'::regclass, 'public.work_schedules'::regclass)` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
 | **W-01** | WhatsApp/Evolution + worker: bloqueado por **aprovação de `docs/04-agente-ia.md`** e por infraestrutura externa (worker, Redis, instância Evolution com credencial) | A clínica não centraliza o WhatsApp. `/whatsapp` mostra o estado do canal e diz o que falta, sem simular conexão | Aprovar o desenho e provisionar worker + Redis + instância. Detalhe em `EXTERNAL_SETUP.md` §3.1 |
 | **AI-01..07** | Agente de IA: mesma aprovação pendente, mais provedor de modelo | Nenhuma sugestão e nenhum envio. `/chat-ia` declara a regra P9 antes de existir recurso | Idem W-01, e depois dele |
@@ -1886,6 +1886,59 @@ em vez de fingir que a regra sumiu. A query de verificação está no
 
 Executor, worker, WhatsApp, webhook e IA continuam fora — nenhum foi
 implementado, e o vocabulário de ações foi desenhado para não os pressupor.
+
+---
+
+## 8.23 Auditoria — Escalas de trabalho (10/08/2026)
+
+**Nenhuma escala foi escrita.** A convenção de `work_schedules.weekday` não pôde
+ser provada, e essa era a condição para implementar.
+
+### O que foi procurado, e onde
+
+| Fonte | Resultado |
+|---|---|
+| Migrations em `supabase/migrations/` | `work_schedules` não é criada por nenhuma — a tabela é do schema original, aplicado direto no banco |
+| `supabase/seed.sql` | 36 linhas, não toca a tabela |
+| `database.types.ts` | `weekday: number`. Tipos gerados não carregam `CHECK` |
+| Consultas existentes | **nenhum código lê ou escreve `work_schedules`** |
+| `docs/03-banco-de-dados.md` | cita o nome da tabela, e nada sobre a convenção |
+| Runbook §4.3 / roadmap / EXTERNAL_SETUP | registram a consulta como **ainda não respondida** |
+
+A única convenção provada no produto é a de `lib/clinic/business-hours.ts` —
+ISO-8601, `1 = segunda … 7 = domingo`. Ela **não serve de prova**: descreve um
+`jsonb` que a própria aplicação define e escreve, em outra tabela. Nada garante
+que quem criou `work_schedules` usou o mesmo critério, e `extract(dow)` do
+Postgres — o padrão mais provável para um `integer` de dia da semana — começa em
+domingo = 0. As duas hipóteses diferem em um dia.
+
+### O que foi feito no lugar
+
+**1. A decisão virou teste.** `src/modules/team/workScheduleBlocked.test.ts`
+falha se qualquer código passar a ler ou escrever `work_schedules`, ou se a
+porta do repositório ganhar método de escala. A decisão estava escrita em quatro
+lugares e nenhum deles impedia nada: uma fatia futura encontraria a tabela
+pronta no `database.types.ts` e o caminho de menor resistência seria usá-la.
+Agora quem quiser fazê-lo precisa apagar o arquivo — que é onde está a consulta
+que resolve o bloqueio.
+
+**2. O bloqueio estava mal-escopado.** `P-WD` era descrito como convenção de
+`availability_rules`, com uma consulta que cobria só essa tabela — aqui e no
+`EXTERNAL_SETUP.md`. Mas `work_schedules` tem constraint própria: quem rodasse a
+consulta documentada responderia pela agenda e concluiria, errado, que as
+escalas também estavam liberadas. As duas fontes passaram a nomear as duas
+tabelas. O runbook §4.3 já cobria as duas.
+
+**3. A mensagem da tela passou a dizer como sair.** Ela explicava bem o motivo e
+não apontava saída nenhuma. Quem lê é `owner` ou `admin` — quem tem acesso ao
+painel do Supabase e pode responder a consulta. Agora ela vai junto do texto.
+
+### O que NÃO foi feito, e por quê
+
+Um guard de salário/CPF foi escrito e **descartado**:
+`SupabaseTeamRepository.staff.test.ts` já prova o que importa, e prova melhor —
+que as colunas não entram no `select` e que o `insert` não as carrega. A versão
+por texto acusaria os próprios comentários que documentam a ausência.
 
 ---
 

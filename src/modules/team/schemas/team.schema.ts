@@ -147,9 +147,19 @@ export const employeeMessages = {
    */
   alreadyAnswered:
     'Esta ausência já foi respondida. Registre uma nova solicitação em vez de sobrescrever a decisão anterior.',
-  /** Texto exibido onde estaria a escala de trabalho. */
+  /**
+   * Texto exibido onde estaria a escala de trabalho.
+   *
+   * Diz o que falta **e como resolver**. Quem lê esta tela é `owner` ou `admin`
+   * — quem tem acesso ao painel do Supabase e pode rodar a consulta. Descrever
+   * o bloqueio sem apontar a saída transforma a honestidade em beco sem saída,
+   * e a pendência fica esperando alguém que nunca soube o que fazer.
+   *
+   * A consulta cobre `work_schedules` **e** `availability_rules`: cada tabela
+   * tem a própria constraint, e responder por uma não responde pela outra.
+   */
   schedulesUnavailable:
-    'Escalas de trabalho ainda não são geridas aqui: a tabela guarda o dia da semana como número, e a convenção usada (domingo em zero ou em sete) não pôde ser verificada. Errar entre as duas desloca a semana em um dia e põe alguém para trabalhar na data errada.',
+    'Escalas de trabalho ainda não são geridas aqui: `work_schedules` guarda o dia da semana como número, e a convenção usada (domingo em zero ou em sete) não pôde ser verificada neste ambiente. Errar entre as duas desloca a semana em um dia e põe alguém para trabalhar na data errada. Para destravar, rode no banco: select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid in (\'public.work_schedules\'::regclass, \'public.availability_rules\'::regclass);',
 } as const
 
 /** Tipos de contrato do enum `contract_type`, com o nome que a clínica usa. */

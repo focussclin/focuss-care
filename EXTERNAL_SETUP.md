@@ -308,9 +308,13 @@ E responder a três consultas de diagnóstico, todas em `docs/roadmap.md`:
 select proname, pg_get_function_arguments(oid) from pg_proc
  where proname in ('issue_invoice','close_cash_session','preview_professional_payout');
 
--- Convenção do dia da semana (destrava disponibilidade por profissional)
+-- Convenção do dia da semana
+-- Destrava disponibilidade por profissional (A-02) E escalas de trabalho (S-02).
+-- As DUAS tabelas: cada uma tem a própria constraint, e responder por
+-- `availability_rules` não responde por `work_schedules`.
 select conname, pg_get_constraintdef(oid) from pg_constraint
- where conrelid = 'public.availability_rules'::regclass;
+ where conrelid in ('public.availability_rules'::regclass,
+                    'public.work_schedules'::regclass);
 
 -- Valores válidos de sequência fiscal
 select distinct kind from public.document_sequences;
