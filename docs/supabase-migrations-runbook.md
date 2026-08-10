@@ -227,6 +227,42 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.57 Tarefas: o que a migration destrava, e o que já está pronto sem ela
+
+> Levantado em **10/08/2026**. `20260809_clinic_tasks.sql` continua **não
+> aplicada**.
+
+O módulo `tasks` está fechado: CRUD com Zod, RBAC (`team.read` +
+`patient.read` na rota), tenant explícito em toda consulta, filtros por
+situação/responsável/prazo, e 134 testes cobrindo domínio, schema, aplicação,
+repositório, action e tela.
+
+**Nada disso funciona no banco hoje**, e não há como contornar: `clinic_tasks`
+não existe. O que o produto faz enquanto isso:
+
+| Camada | Comportamento sem a migration |
+|---|---|
+| Adapter | `42P01`/`PGRST205` → `schema-not-ready` |
+| Rota `/tarefas` | absorve **só** essa razão, e passa `schemaPending` |
+| Tela | declara a pendência; gravar nasce desabilitado com o motivo no `title` |
+| Menu | `availability: 'setup'` |
+| Portal do profissional | painel de tarefas declara a pendência **sem derrubar** a agenda ao lado |
+| Tipos | shim `infrastructure/tasksDatabase.ts` |
+
+### Depois de aplicar
+
+1. `npm run db:types`.
+2. **Remover** `src/modules/tasks/infrastructure/tasksDatabase.ts` — mantê-lo
+   criaria uma segunda definição da mesma tabela, e a divergência entre as duas
+   não daria erro, só resultado errado.
+3. Tirar `availability: 'setup'` do item em `navigation.ts` e a entrada de
+   `BUILT_BUT_HIDDEN` em `src/app/reachableRoutes.test.ts` — o teste falha se
+   uma sair sem a outra.
+4. Conferir que `assigned_to` referencia `profiles`, e não `professionals`: é a
+   distinção que faz a recepção poder receber tarefa. `listAssignedTo` filtra
+   por `profiles.id` (o usuário da sessão), e trocar isso devolveria zero para
+   todo mundo em silêncio.
+
 ## 3.56 A agenda já escreve `room_id` — e degrada sozinha sem a migration
 
 > Implementado em **10/08/2026**. `20260809_rooms.sql` continua **não

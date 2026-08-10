@@ -71,7 +71,8 @@ de estoque).
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
-| `rooms` | **BLOQUEADO** | CRUD completo com remoção lógica (`deleted_at`), RBAC `clinic.settings`, tenant explícito e 54 testes. **A ligação com a agenda é outra fatia**: `appointments.room_id` existe na migration e não tem uso no código. Migration não aplicada |
+| `tasks` | **BLOQUEADO** | CRUD completo com transição de estado auditada em três eventos distintos, filtros por situação/responsável/prazo extraídos para função pura, tenant explícito e 134 testes. Alimenta o Portal do profissional por `listAssignedTo`. Migration não aplicada |
+| `rooms` | **BLOQUEADO** | CRUD completo com remoção lógica (`deleted_at`), RBAC `clinic.settings`, tenant explícito e 54 testes. Agenda integrada com reserva opcional por `appointments.room_id`; migration de salas ainda não aplicada |
 | `patient-portal` | **EM ANDAMENTO** | Vínculo do paciente por convite (token com hash + prova de e-mail), leitura por função com lista fechada de colunas. **Prontuário nunca entra.** Migration pendente |
 | `portal` | **EM ANDAMENTO** | O dia de quem atende: agenda pessoal filtrada no banco por `current_professional_id()`, com "acontecendo agora" e "aguardando encerramento" derivados. **Só leitura, e não tem tabela própria** — é uma visão sobre `scheduling` e `tasks`. O painel de tarefas espera `clinic_tasks` |
 
@@ -1120,18 +1121,15 @@ lista recebida não é reordenada no lugar.
 O índice é parcial, então a sala **desativada** continua ocupando o nome. A
 mensagem agora diz "inclusive entre os inativos".
 
-### Integração com a agenda — ainda pendente, e documentada
+### Integração com a agenda — entregue na fatia seguinte
 
-Uma varredura por `room` em `src/modules/scheduling/` devolve **zero
-resultados**. A migration cria `appointments.room_id`, o índice e a constraint
-de sobreposição por sala; nada no código escreve ou lê a coluna.
+A ligação opcional com a Agenda foi implementada na seção 8.13 e detalhada em
+`docs/supabase-migrations-runbook.md` §3.56: seleção de sala ativa na criação,
+`appointments.room_id`, nome na grade/detalhes e tratamento de `23P01`.
 
-O cadastro está fechado; a ligação com a agenda é outra fatia, especificada em
-`docs/supabase-migrations-runbook.md` §3.55. O item que exige atenção lá é
-mapear `23P01` (`exclusion_violation`): a sobreposição de **profissional** é
-checada por consulta na aplicação, e a de **sala** será checada pelo banco no
-insert — dois mecanismos para o mesmo tipo de conflito, e a mensagem precisa
-sair igual para quem lê.
+Enquanto `20260809_rooms.sql` não for aplicada, o cadastro mantém o marcador de
+setup e a Agenda degrada sem pedir a coluna ausente. A constraint de
+sobreposição por sala só passa a proteger as escritas depois da migration.
 
 ### A tela continua `availability: 'setup'`
 
@@ -1211,6 +1209,83 @@ Schema (ausente, `''` e `null` viram null; UUID inválido recusado) e repositór
 (`room_id` fora do payload sem sala, `select` sem a coluna, mapeamento com e sem
 sala, e as três formas de `23P01`). O teste que protege o resto é
 "não cita room_id no insert quando não há sala".
+
+---
+
+## 8.14 Feature — Tarefas, fechada (10/08/2026)
+
+O módulo já tinha domínio, adapter, três actions, schema com testes, DTO com
+testes e tela. A auditoria encontrou **uma lacuna de arquitetura e três buracos
+de cobertura**.
+
+### O recorte da lista vivia dentro do componente
+
+`TasksScreen` tinha um `useMemo` com três funções auxiliares no fim do arquivo
+— `matchesStatus`, `matchesAssignee`, `matchesDue`. Funcionava, e só dava para
+verificar renderizando a tela e lendo o DOM.
+
+O problema não é estético: as **combinações** são o que importa. "Minhas" +
+"concluídas" + "esta semana" é a pergunta que a recepção faz na sexta-feira, e
+ela é diferente de cada filtro isolado. Cobrir isso pelo DOM sai caro o
+bastante para não ser feito — e não estava.
+
+Agora vive em `application/filterTasks.ts`, com 20 testes. Dois deles registram
+decisões que estavam implícitas:
+
+- **"Todas" não inclui cancelada.** Cancelada é a decisão de NÃO fazer: não é
+  trabalho pendente nem trabalho feito, e contá-la no total faria a lista somar
+  coisas que ninguém vai executar.
+- **"Minhas" sem sessão devolve nada, e nunca tudo.** O modo de falhar era o
+  ramo cair em `return true` e "minhas" passar a significar "de todo mundo" — a
+  pessoa agindo sobre tarefa alheia achando que era sua.
+
+`DEFAULT_TASK_FILTERS` passou a ser a única fonte do recorte inicial. Ele
+estava escrito em dois lugares (os `useState` e a comparação de
+`hasActiveFilters`), e divergir faria a tela abrir já dizendo que há filtros
+ativos.
+
+### Cobertura que faltava
+
+| Camada | Antes | Agora |
+|---|---|---|
+| Domínio (`bucketOf`, `isOpen`) | **nenhum teste** | 11 |
+| Repositório | só `listAssignedTo` | +17 (`list`, `create`, `update`, `setStatus`) |
+| Action | **nenhum teste** | 16 (`setTaskStatus`, pelo pipeline real) |
+| Filtros | inline, não testável | 20 |
+| UI | 4 | 9 |
+
+O teste de domínio prende a borda que mais engana: **prazo para hoje não nasce
+vencido**. O schema grava às 23:59:59 do dia escolhido justamente para isso, e
+nada verificava a outra ponta.
+
+O teste de repositório prende que **reabrir LIMPA `completed_at`** — deixá-la
+para trás faria uma tarefa aberta carregar data de conclusão, e qualquer
+contagem de "resolvidas no mês" passaria a mentir.
+
+### Um acerto do código que o teste revelou
+
+Eu esperava um único evento `task.status_changed` na auditoria. A action emite
+**três**: `task.completed`, `task.canceled` e `task.reopened`. É melhor —
+quem lê a trilha não precisa abrir o `after` para saber se a pessoa resolveu ou
+decidiu não fazer, e as duas contam diferente em qualquer leitura de
+produtividade. O teste passou a verificar a distinção.
+
+### Integração com o Portal do profissional
+
+Intacta. `listAssignedTo` nasceu naquela fatia, filtra por `assigned_to` no
+banco e traz só `pending`/`in_progress` — a visão "o que falta eu fazer", que é
+diferente da coordenação em `/tarefas`. Nada nesta fatia tocou nesse caminho, e
+os 11 testes dele continuam passando.
+
+### O que continua pendente
+
+`20260809_clinic_tasks.sql` **não foi aplicada**, e por isso:
+
+- `/tarefas` mantém `availability: 'setup'` no menu;
+- a tela declara a pendência e nasce com a gravação desabilitada;
+- o shim `infrastructure/tasksDatabase.ts` continua sendo a fonte dos tipos.
+
+Nada disso é contornável por código: a tabela não existe.
 
 ---
 

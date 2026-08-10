@@ -31,11 +31,24 @@ import { cn } from '@/lib/utils/cn'
 
 import { taskMessages, type TaskDto, type TaskFormValues } from '../schemas/task.schema'
 import type { TaskBucket } from '../domain/Task'
+/*
+ * O recorte da lista mora em `application/filterTasks`, e não aqui.
+ *
+ * Ele era um `useMemo` com três funções auxiliares no fim deste arquivo:
+ * funcionava, e só dava para verificar renderizando a tela e lendo o DOM. As
+ * combinações são o que importa — "minhas" + "concluídas" + "esta semana" é a
+ * pergunta que a recepção faz na sexta-feira, e é diferente de cada filtro
+ * isolado —, e cobri-las pelo DOM sai caro o bastante para não ser feito.
+ */
+import {
+  DEFAULT_TASK_FILTERS,
+  filterTaskGroups,
+  hasActiveFilters,
+  type AssigneeFilter,
+  type DueFilter,
+  type StatusFilter,
+} from '../application/filterTasks'
 import type { TasksScreenProps } from './TasksScreen.props'
-
-type AssigneeFilter = 'all' | 'mine' | string
-type StatusFilter = 'open' | 'done' | 'all'
-type DueFilter = 'all' | 'overdue' | 'today' | 'week'
 
 interface TaskFormState {
   title: string
@@ -94,12 +107,6 @@ const priorityMeta: Record<number, { label: string; className: string }> = {
   5: { label: 'Baixa', className: 'text-muted' },
 }
 
-const bucketOrder: readonly TaskBucket[] = [
-  'overdue',
-  'today',
-  'week',
-  'undated',
-]
 
 export function TasksScreen({
   groups,
@@ -117,9 +124,23 @@ export function TasksScreen({
   const [editing, setEditing] = useState<TaskDto | null>(null)
   const [confirming, setConfirming] = useState<TaskDto | null>(null)
   const [form, setForm] = useState<TaskFormState>(emptyForm)
-  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
-  const [dueFilter, setDueFilter] = useState<DueFilter>('all')
+  /*
+   * O recorte inicial vem de `DEFAULT_TASK_FILTERS`, e não de literais aqui.
+   *
+   * `hasActiveFilters` compara com essa mesma constante para decidir entre
+   * "nenhuma tarefa ainda" e "nenhuma tarefa com esses filtros" — dois vazios
+   * com ações opostas. Com o padrão escrito em dois lugares, mudar um deles
+   * faria a tela abrir já dizendo que há filtros ativos.
+   */
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>(
+    DEFAULT_TASK_FILTERS.assignee,
+  )
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    DEFAULT_TASK_FILTERS.status,
+  )
+  const [dueFilter, setDueFilter] = useState<DueFilter>(
+    DEFAULT_TASK_FILTERS.due,
+  )
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setSubmitting] = useState(false)
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null)
@@ -131,28 +152,21 @@ export function TasksScreen({
   const allTasks = useMemo(() => groups.flatMap((group) => group.tasks), [groups])
   const canMutate = isLive && !schemaPending
   const hasAnyTasks = allTasks.length > 0
-  const hasFilters =
-    assigneeFilter !== 'all' || statusFilter !== 'open' || dueFilter !== 'all'
+  const hasFilters = hasActiveFilters({
+    status: statusFilter,
+    assignee: assigneeFilter,
+    due: dueFilter,
+  })
 
-  const visibleGroups = useMemo(() => {
-    const visibleByBucket = new Map<TaskBucket, TaskDto[]>(
-      bucketOrder.map((bucket) => [bucket, []]),
-    )
-
-    for (const group of groups) {
-      for (const task of group.tasks) {
-        if (!matchesStatus(task, statusFilter)) continue
-        if (!matchesAssignee(task, assigneeFilter, currentUserId)) continue
-        if (!matchesDue(group.bucket, dueFilter)) continue
-        visibleByBucket.get(group.bucket)?.push(task)
-      }
-    }
-
-    return bucketOrder.flatMap((bucket) => {
-      const tasks = visibleByBucket.get(bucket) ?? []
-      return tasks.length > 0 ? [{ bucket, tasks }] : []
-    })
-  }, [assigneeFilter, currentUserId, dueFilter, groups, statusFilter])
+  const visibleGroups = useMemo(
+    () =>
+      filterTaskGroups(
+        groups,
+        { status: statusFilter, assignee: assigneeFilter, due: dueFilter },
+        currentUserId,
+      ),
+    [assigneeFilter, currentUserId, dueFilter, groups, statusFilter],
+  )
 
   useEffect(() => {
     if (!recentCompletion) return
@@ -763,28 +777,6 @@ function TaskRow({ task, busy, onEdit, onToggle, onCancel }: TaskRowProps) {
       </div>
     </li>
   )
-}
-
-function matchesStatus(task: TaskDto, filter: StatusFilter): boolean {
-  if (filter === 'open') return task.status === 'pending' || task.status === 'in_progress'
-  if (filter === 'done') return task.status === 'done'
-  return task.status !== 'canceled'
-}
-
-function matchesAssignee(
-  task: TaskDto,
-  filter: AssigneeFilter,
-  currentUserId: string | null,
-): boolean {
-  if (filter === 'all') return true
-  if (filter === 'mine') return task.assignee?.id === currentUserId
-  return task.assignee?.id === filter
-}
-
-function matchesDue(bucket: TaskBucket, filter: DueFilter): boolean {
-  if (filter === 'all') return true
-  if (filter === 'week') return bucket === 'today' || bucket === 'week'
-  return bucket === filter
 }
 
 function patientIdFromTarget(task: TaskDto): string {

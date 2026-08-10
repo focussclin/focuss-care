@@ -127,3 +127,74 @@ describe('TasksScreen', () => {
     await waitFor(() => expect(onCancel).toHaveBeenCalledWith('task-1'))
   })
 })
+
+/**
+ * A LIGAÇÃO entre os seletores e o recorte.
+ *
+ * A regra em si vive em `application/filterTasks` e tem 20 testes lá — as
+ * combinações são baratas de cobrir quando não passam pelo DOM. O que só esta
+ * camada pode garantir é que mexer no `<select>` chega até a função, e que os
+ * dois vazios continuam distintos.
+ */
+describe('filtros', () => {
+  it('mudar a situação troca o que aparece', () => {
+    renderScreen()
+
+    // A tela abre em "Abertas": a concluída não está visível.
+    expect(screen.queryByText('Enviar comprovante')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Situação'), {
+      target: { value: 'done' },
+    })
+
+    expect(screen.getByText('Enviar comprovante')).toBeTruthy()
+    expect(screen.queryByText(openTask.title)).toBeNull()
+  })
+
+  it('"Minhas" só existe quando há sessão', () => {
+    /*
+     * Sem `currentUserId`, "minhas" não teria com o que comparar e devolveria
+     * lista vazia sempre — um filtro que só sabe dizer "nada" é pior que um
+     * filtro ausente.
+     */
+    renderScreen({ currentUserId: null })
+
+    const responsavel = screen.getByLabelText('Responsável')
+
+    expect(responsavel.textContent).not.toMatch(/minhas/i)
+  })
+
+  it('vazio POR FILTRO é diferente de vazio por não haver tarefa', () => {
+    /*
+     * Dois vazios com ações opostas: um convida a criar, o outro a afrouxar o
+     * recorte. É o que `hasActiveFilters` decide, e é a razão de o padrão dos
+     * filtros morar numa constante só.
+     */
+    renderScreen()
+
+    fireEvent.change(screen.getByLabelText('Prazo'), {
+      target: { value: 'overdue' },
+    })
+
+    expect(screen.getByText(/nenhuma tarefa com esses filtros/i)).toBeTruthy()
+  })
+
+  it('sem tarefa nenhuma, a tela convida a criar em vez de culpar o filtro', () => {
+    renderScreen({ groups: [] })
+
+    expect(screen.queryByText(/nenhuma tarefa com esses filtros/i)).toBeNull()
+  })
+
+  it('limpar filtros volta ao recorte inicial', () => {
+    renderScreen()
+
+    fireEvent.change(screen.getByLabelText('Situação'), {
+      target: { value: 'done' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: /limpar filtros/i })[0])
+
+    // De volta a "Abertas": a aberta reaparece e a concluída some.
+    expect(screen.getByText(openTask.title)).toBeTruthy()
+    expect(screen.queryByText('Enviar comprovante')).toBeNull()
+  })
+})
