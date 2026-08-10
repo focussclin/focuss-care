@@ -1483,6 +1483,78 @@ a pendência. O item do menu segue `availability: 'setup'`.
 
 ---
 
+## 8.18 Feature — Compras (10/08/2026)
+
+Fornecedores, pedidos, recebimento atômico e a integração com estoque já
+existiam. A auditoria comparou o código com `20260809_purchases.sql` e achou
+**uma divergência entre o que o banco permite e o que a tela oferece**.
+
+### A tela tinha a própria versão da máquina de estados, e ela era linear
+
+O banco define as transições em `transition_purchase_order_status`:
+
+```
+draft      → requested, cancelled
+requested  → draft, approved, cancelled
+approved   → requested, ordered, cancelled
+ordered    → cancelled
+```
+
+A tela escrevia as regras num mapa de rótulos, com **um único destino por
+estado**: `draft → requested → approved → ordered`. Os dois caminhos de volta
+não eram oferecidos:
+
+- **`requested → draft`** — devolver para ajuste o pedido que chegou para
+  aprovação com a quantidade errada;
+- **`approved → requested`** — retirar a aprovação dada por engano.
+
+Sem eles, a única saída de um pedido com problema era **cancelar e refazer**,
+perdendo o histórico de quem pediu o quê. Não era botão falso: era capacidade
+do schema que a interface não expunha.
+
+Agora `PURCHASE_ORDER_TRANSITIONS` vive no domínio e a tela deriva os botões
+dela. O rótulo depende da ORIGEM: o mesmo destino `requested` é "enviar para
+aprovação" vindo de rascunho e "retirar aprovação" vindo de aprovado —
+"enviar para aprovação" sobre um pedido já aprovado seria a tela contradizendo
+o próprio selo de status.
+
+### Duas fontes para a mesma regra, e o que as mantém honestas
+
+Quem **decide** continua sendo o banco; a tabela do domínio decide o que
+**mostrar**. `Purchase.test.ts` lê o SQL da migration e compara as duas listas.
+
+Isso protege nos dois sentidos: transição nova no banco que a tela não oferece,
+e transição removida do banco que a tela continua oferecendo — esta última
+virando um botão que sempre falha.
+
+### `partially_received` e `received` não são escolhidos
+
+São derivados da soma das quantidades pela função de recebimento. Um botão que
+os selecionasse na tela diria que a mercadoria chegou sem ninguém ter
+conferido — e há teste para a ausência dele.
+
+### "Cotações" não existe no schema
+
+O enum tem `draft`, `requested`, `approved`, `ordered`,
+`partially_received`, `received`, `cancelled`. Não há estágio de cotação nem
+tabela de propostas de fornecedor: comparar preços entre fornecedores antes de
+decidir seria uma fatia com schema próprio. `requested` é solicitação interna,
+não pedido de cotação ao mercado.
+
+### Testes desta fatia — 19 novos
+
+12 no domínio (incluindo a comparação com o SQL) e 7 na tela (os dois caminhos
+de volta, o verbo correto por origem, e a ausência de avanço manual em
+`ordered` e nos estados finais).
+
+### O que continua pendente
+
+`20260809_purchases.sql` **não foi aplicada**, e depende de
+`20260809_inventory.sql` vir antes — `purchase_order_items` referencia
+`inventory_items`. `/compras` mantém `availability: 'setup'`.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

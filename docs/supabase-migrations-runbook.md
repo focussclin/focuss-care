@@ -227,6 +227,46 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.61 Compras: a máquina de estados vive em dois lugares, de propósito
+
+> Revisado em **10/08/2026**. `20260809_purchases.sql` continua **não
+> aplicada**, e depende de `20260809_inventory.sql` vir antes.
+
+`transition_purchase_order_status` é quem **decide**:
+
+```
+draft      → requested, cancelled
+requested  → draft, approved, cancelled
+approved   → requested, ordered, cancelled
+ordered    → cancelled
+```
+
+`PURCHASE_ORDER_TRANSITIONS`, no domínio, decide o que a tela **oferece** — ela
+precisa saber antes de desenhar o botão.
+
+Duas fontes para a mesma regra divergem sozinhas. O que impede aqui:
+`src/modules/purchases/domain/Purchase.test.ts` **lê este arquivo `.sql`** e
+compara as listas. Se alguém acrescentar uma transição na função sem
+acrescentá-la na tabela, ou o contrário, o teste falha — no segundo caso antes
+que a tela ofereça um botão que sempre falha.
+
+**Ao editar a função, edite a tabela junto.** O teste dirá se você esqueceu.
+
+### O que a função também exige
+
+- `purchase_order_without_items` (`22023`): não dá para solicitar, aprovar nem
+  enviar um pedido sem linhas.
+- `partially_received` e `received` **não são transições**: a função de
+  recebimento os deriva da soma das quantidades. O estado do pedido é
+  consequência do que chegou na porta.
+
+### Não há cotação
+
+O enum não tem estágio de cotação, e não existe tabela de propostas de
+fornecedor. Comparar preços entre fornecedores antes de decidir é uma fatia com
+schema próprio. `requested` é solicitação **interna**, não pedido de cotação ao
+mercado.
+
 ## 3.60 Documentos: o que já existe no remoto, e o que falta
 
 > Revisado em **10/08/2026**. Este é o único módulo bloqueado que está

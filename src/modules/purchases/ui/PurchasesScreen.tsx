@@ -29,6 +29,10 @@ import { formatCents, parseCents } from '@/lib/utils/money'
 import { cn } from '@/lib/utils/cn'
 
 import {
+  canTransition,
+  PURCHASE_ORDER_TRANSITIONS,
+} from '../domain/Purchase'
+import {
   purchaseMessages,
   type PurchaseOrderDto,
   type PurchaseOrderFormValues,
@@ -77,17 +81,45 @@ const emptyOrder: OrderFormState = {
   items: [],
 }
 
-const statusMeta: Record<
-  PurchaseOrderStatus,
-  { label: string; tone: StatusTone; action?: PurchaseOrderStatus; actionLabel?: string }
-> = {
-  draft: { label: 'Rascunho', tone: 'neutral', action: 'requested', actionLabel: 'Enviar para aprovação' },
-  requested: { label: 'Solicitado', tone: 'pending', action: 'approved', actionLabel: 'Aprovar pedido' },
-  approved: { label: 'Aprovado', tone: 'positive', action: 'ordered', actionLabel: 'Marcar como enviado' },
-  ordered: { label: 'Pedido enviado', tone: 'positive', actionLabel: 'Registrar recebimento' },
-  partially_received: { label: 'Recebimento parcial', tone: 'pending', actionLabel: 'Continuar recebimento' },
+const statusMeta: Record<PurchaseOrderStatus, { label: string; tone: StatusTone }> = {
+  draft: { label: 'Rascunho', tone: 'neutral' },
+  requested: { label: 'Solicitado', tone: 'pending' },
+  approved: { label: 'Aprovado', tone: 'positive' },
+  ordered: { label: 'Pedido enviado', tone: 'positive' },
+  partially_received: { label: 'Recebimento parcial', tone: 'pending' },
   received: { label: 'Recebido', tone: 'positive' },
   cancelled: { label: 'Cancelado', tone: 'negative' },
+}
+
+/**
+ * O rótulo de cada DESTINO — o verbo, e não o estado.
+ *
+ * `statusMeta` acima descreve onde o pedido está; isto descreve o que o botão
+ * faz. Separar os dois é o que permite a mesma transição aparecer com o texto
+ * certo vindo de origens diferentes: `requested → draft` é "devolver para
+ * ajuste", e `approved → requested` é "retirar aprovação" — as duas voltam,
+ * por motivos distintos.
+ */
+const transitionLabel: Record<PurchaseOrderStatus, string> = {
+  draft: 'Devolver para ajuste',
+  requested: 'Enviar para aprovação',
+  approved: 'Aprovar pedido',
+  ordered: 'Marcar como enviado',
+  partially_received: 'Continuar recebimento',
+  received: 'Registrar recebimento',
+  cancelled: 'Cancelar',
+}
+
+/**
+ * "Retirar aprovação" é `approved → requested`, e não "enviar para aprovação".
+ *
+ * O mesmo destino com significado oposto conforme a origem. Sem esta exceção o
+ * botão de um pedido aprovado diria "enviar para aprovação" sobre algo que já
+ * foi aprovado.
+ */
+function labelFor(from: PurchaseOrderStatus, to: PurchaseOrderStatus): string {
+  if (from === 'approved' && to === 'requested') return 'Retirar aprovação'
+  return transitionLabel[to]
 }
 
 export function PurchasesScreen({
@@ -451,8 +483,23 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function OrderCard({ order, canMutate, busy, onTransition, onReceive }: { order: PurchaseOrderDto; canMutate: boolean; busy: boolean; onTransition: (order: PurchaseOrderDto, status: PurchaseOrderStatus) => void; onReceive: (itemId: string) => void }) {
   const meta = statusMeta[order.status]
   const remainingItems = order.items.filter((item) => item.receivedQuantity < item.quantity)
-  const transition = meta.action
-  return <Card className="overflow-hidden"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-border-card px-4 py-4 sm:px-5"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><ShoppingCart aria-hidden className="size-4 text-link" /><h2 className="truncate text-aux font-semibold text-foreground">{order.supplier.name}</h2><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></div><p className="mt-1 text-label text-muted">Pedido {order.id.slice(0, 8)} · criado em {formatDate(order.createdAt)}{order.expectedDeliveryDate ? ` · entrega ${formatDate(order.expectedDeliveryDate)}` : ''}</p></div><p className="text-card-title font-semibold text-foreground">{formatCents(order.totalCents)}</p></div><div className="divide-y divide-border-card">{order.items.length === 0 ? <p className="px-4 py-4 text-label text-muted">As linhas aparecerão após a atualização da página.</p> : order.items.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"><div className="min-w-0 flex-1"><p className="truncate text-aux font-medium text-foreground">{item.inventoryItemName}</p><p className="text-label text-muted">{item.quantity} {item.inventoryItemUnit} · {formatCents(item.unitCostCents)} por unidade</p></div><span className={cn('text-label font-semibold', item.receivedQuantity === item.quantity ? 'text-status-positive' : 'text-muted')}>{item.receivedQuantity}/{item.quantity} recebido</span>{canMutate && ['ordered', 'partially_received'].includes(order.status) && item.receivedQuantity < item.quantity ? <Button variant="secondary" onClick={() => onReceive(item.id)} disabled={busy}><PackageCheck aria-hidden className="size-4" />Receber</Button> : null}</div>)}</div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-card bg-row-hover px-4 py-3 sm:px-5">{order.notes ? <p className="max-w-prose text-label text-muted">{order.notes}</p> : <span className="text-label text-muted">{remainingItems.length ? 'Acompanhe cada recebimento para atualizar o saldo.' : 'Pedido concluído.'}</span>}<div className="flex flex-wrap gap-2">{canMutate && transition && order.status !== 'ordered' && order.status !== 'partially_received' ? <Button variant="secondary" onClick={() => onTransition(order, transition)} disabled={busy}>{meta.actionLabel}</Button> : null}{canMutate && ['draft', 'requested', 'approved', 'ordered'].includes(order.status) ? <Button variant="ghost" onClick={() => onTransition(order, 'cancelled')} disabled={busy}>Cancelar</Button> : null}</div></div></Card>
+
+  /*
+   * Os botões saem da MÁQUINA DE ESTADOS do domínio, e não de um mapa escrito
+   * à mão aqui.
+   *
+   * A versão anterior era linear (`draft → requested → approved → ordered`) e
+   * deixava de fora dois caminhos que o banco sempre permitiu: devolver para
+   * ajuste e retirar a aprovação. Sem eles, a única saída de um pedido com
+   * problema era cancelar e refazer — perdendo o histórico de quem pediu o quê.
+   *
+   * `cancelled` sai desta lista porque já tem botão próprio, com peso visual
+   * diferente: cancelar não é o mesmo tipo de ação que avançar ou voltar.
+   */
+  const transitions = PURCHASE_ORDER_TRANSITIONS[order.status].filter(
+    (status) => status !== 'cancelled',
+  )
+  return <Card className="overflow-hidden"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-border-card px-4 py-4 sm:px-5"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><ShoppingCart aria-hidden className="size-4 text-link" /><h2 className="truncate text-aux font-semibold text-foreground">{order.supplier.name}</h2><StatusBadge tone={meta.tone}>{meta.label}</StatusBadge></div><p className="mt-1 text-label text-muted">Pedido {order.id.slice(0, 8)} · criado em {formatDate(order.createdAt)}{order.expectedDeliveryDate ? ` · entrega ${formatDate(order.expectedDeliveryDate)}` : ''}</p></div><p className="text-card-title font-semibold text-foreground">{formatCents(order.totalCents)}</p></div><div className="divide-y divide-border-card">{order.items.length === 0 ? <p className="px-4 py-4 text-label text-muted">As linhas aparecerão após a atualização da página.</p> : order.items.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5"><div className="min-w-0 flex-1"><p className="truncate text-aux font-medium text-foreground">{item.inventoryItemName}</p><p className="text-label text-muted">{item.quantity} {item.inventoryItemUnit} · {formatCents(item.unitCostCents)} por unidade</p></div><span className={cn('text-label font-semibold', item.receivedQuantity === item.quantity ? 'text-status-positive' : 'text-muted')}>{item.receivedQuantity}/{item.quantity} recebido</span>{canMutate && ['ordered', 'partially_received'].includes(order.status) && item.receivedQuantity < item.quantity ? <Button variant="secondary" onClick={() => onReceive(item.id)} disabled={busy}><PackageCheck aria-hidden className="size-4" />Receber</Button> : null}</div>)}</div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-card bg-row-hover px-4 py-3 sm:px-5">{order.notes ? <p className="max-w-prose text-label text-muted">{order.notes}</p> : <span className="text-label text-muted">{remainingItems.length ? 'Acompanhe cada recebimento para atualizar o saldo.' : 'Pedido concluído.'}</span>}<div className="flex flex-wrap gap-2">{canMutate ? transitions.map((status) => <Button key={status} variant="secondary" onClick={() => onTransition(order, status)} disabled={busy}>{labelFor(order.status, status)}</Button>) : null}{canMutate && canTransition(order.status, 'cancelled') ? <Button variant="ghost" onClick={() => onTransition(order, 'cancelled')} disabled={busy}>Cancelar</Button> : null}</div></div></Card>
 }
 
 function SuppliersPanel({ suppliers, canMutate, busyId, onCreate, onEdit, onToggle }: { suppliers: readonly PurchaseSupplierDto[]; canMutate: boolean; busyId: string | null; onCreate: () => void; onEdit: (supplier: PurchaseSupplierDto) => void; onToggle: (supplier: PurchaseSupplierDto) => void }) {
