@@ -227,6 +227,46 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.60 Documentos: o que já existe no remoto, e o que falta
+
+> Revisado em **10/08/2026**. Este é o único módulo bloqueado que está
+> **parcialmente vivo** — e por isso o desbloqueio é menor do que parece.
+
+| Peça | Estado |
+|---|---|
+| Tabela `patient_documents` | **já existe** no schema remoto |
+| Bucket `patient-documents` | **criado** em 09/08/2026, privado, 10 MB |
+| Policies da tabela | **pendentes** |
+| Policies de `storage.objects` | **pendentes** |
+
+Ou seja: aplicar `20260809_patient_documents.sql` não cria a tabela nem o
+bucket — o `create table if not exists` e o `on conflict (id) do update` já
+contam com eles. O que ela faz é **instalar as policies**, e é isso que hoje
+falta.
+
+Enquanto faltarem, a RLS recusa leitura e upload, e a tela declara a pendência.
+O upload distingue os dois motivos: mensagem de bucket ausente vira
+`storagePending` ("é configuração"), e não `unavailable` ("tente de novo") —
+tentar de novo não resolve nenhum dos dois.
+
+### O caminho do objeto é a fronteira do tenant
+
+```
+<clinic_id>/<patient_id>/<uuid>-<nome-seguro>
+```
+
+A policy compara `(storage.foldername(name))[1]` com `current_clinic_id()`. O
+primeiro segmento **não é organização de pastas**: é o que separa uma clínica
+da outra no bucket. `src/modules/documents/actions/uploadDocument.action.test.ts`
+prende isso, junto com a impossibilidade de um nome com `../` escapar do
+prefixo.
+
+### Reaplicar é seguro
+
+`20260810_repair_patient_documents_storage.sql` existe para o caso de o upload
+ou o download assinado voltarem 403 com tudo criado: ele só derruba e recria as
+duas policies de `storage.objects`, sem tocar em dado.
+
 ## 3.59 Formulários: o schema NÃO suporta resposta pública
 
 > Levantado em **10/08/2026** contra `20260809_clinic_forms.sql` (não

@@ -1429,6 +1429,60 @@ tradução de `42P01`/`42501`.
 
 ---
 
+## 8.17 Feature — Documentos (10/08/2026)
+
+Metadados, upload privado, URL assinada, validação, tenant/RBAC e auditoria já
+existiam e são coerentes. A auditoria **não achou defeito** — achou uma
+ausência de cobertura sobre o código mais sensível do produto.
+
+### Por que a action de upload merecia teste antes das outras
+
+Ela é a única que constrói **um caminho de arquivo a partir de texto escolhido
+pelo usuário**, e mexe em dois sistemas que falham separadamente: o Storage e a
+tabela.
+
+Três garantias existiam no código e nada as verificava:
+
+1. **O caminho começa pela clínica da sessão.** A policy do Storage compara
+   `(storage.foldername(name))[1]` com `current_clinic_id()` — o primeiro
+   segmento não é organização, é a fronteira do tenant.
+2. **Nome de arquivo não escapa da pasta.** `../../../etc/passwd` é a forma
+   clássica de escrever fora do prefixo; `sanitizeFileName` troca `/` e `\` por
+   `-`, e o UUID na frente garante que o nome nunca começa o segmento.
+3. **Objeto órfão é removido.** O arquivo sobe **antes** de a linha existir. Se
+   a linha falhar, sobra um documento de paciente no bucket que nenhuma linha
+   explica e nenhuma tela alcança para apagar.
+
+São 12 testes. Um deles cobre um detalhe que parece cosmético e não é: dois
+envios do mesmo nome não colidem, porque `upsert: false` recusaria o segundo —
+é o que deixa a recepção mandar "rg.pdf" duas vezes, frente e verso.
+
+Outro verifica que a **auditoria não registra o nome do arquivo**: ele é
+escolhido por quem envia e costuma trazer o nome do paciente
+("rg-maria-silva.pdf"), e a trilha é lida por mais gente do que quem enviou.
+
+### Não há remoção, e isso é decisão de schema
+
+`patient_documents` não tem `deleted_at` e o repositório não tem `delete`. Ao
+contrário de `rooms` — onde a coluna existia e nada a escrevia —, aqui a
+ausência é coerente nas duas pontas: documento de paciente é registro, e a
+migration não cria policy de DELETE.
+
+### Estado real do desbloqueio
+
+Diferente dos outros módulos bloqueados, este está **parcialmente vivo**:
+
+| Peça | Estado |
+|---|---|
+| Tabela `patient_documents` | **já existe** no schema remoto |
+| Bucket `patient-documents` | **criado** em 09/08/2026, privado |
+| Policies de `patient_documents` e de `storage.objects` | **pendentes** — `20260809_patient_documents.sql` não aplicada |
+
+Sem as policies, a leitura e o upload são recusados pela RLS, e a tela declara
+a pendência. O item do menu segue `availability: 'setup'`.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
