@@ -160,6 +160,41 @@ export class SupabaseLeadRepository implements LeadRepository {
     return toLead(row as unknown as LeadRow)
   }
 
+  async convert(
+    clinicId: string,
+    leadId: string,
+  ): Promise<{ patientId: string }> {
+    /*
+     * `clinicId` NÃO é enviado.
+     *
+     * A função resolve a clínica por `current_clinic_id()` e recusa lead de
+     * outra — mesmo desenho de `create_patient_portal_invite`. Mandá-lo daqui
+     * daria ao chamador a chance de escolher o tenant, e esta operação cria uma
+     * ficha de paciente: o tenant errado seria uma pessoa cadastrada na clínica
+     * de outra gente.
+     *
+     * O parâmetro continua na assinatura porque a PORTA é a mesma para
+     * qualquer adapter, e um que não tivesse `current_clinic_id()` precisaria
+     * dele.
+     */
+    void clinicId
+
+    const { data, error } = await this.client.rpc('convert_lead_to_patient', {
+      p_lead_id: leadId,
+    })
+
+    if (error) throw toLeadError(error)
+
+    if (!data) {
+      throw new LeadRepositoryError(
+        'unexpected',
+        'a conversão não devolveu o paciente criado',
+      )
+    }
+
+    return { patientId: data }
+  }
+
   private async require(clinicId: string, leadId: string): Promise<Lead> {
     const { data, error } = await this.client
       .from('clinic_leads')
@@ -222,8 +257,36 @@ function toLeadError(error: LeadQueryError): LeadRepositoryError {
   const code = error.code ?? undefined
   const message = error.message ?? ''
 
-  if (code === '42P01' || code === 'PGRST205') {
+  /*
+   * `42883`/`PGRST202` entram junto com `42P01`: função ausente é o mesmo
+   * "migration não aplicada" que tabela ausente, e a conversão é RPC.
+   */
+  if (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    code === '42883' ||
+    code === 'PGRST202'
+  ) {
     return new LeadRepositoryError('schema-not-ready', 'clinic_leads ausente', code)
+  }
+
+  /*
+   * Converter duas vezes tem ação própria: abrir a ficha que já existe.
+   *
+   * Sem este ramo, o segundo clique responderia "falha inesperada" sobre uma
+   * operação que na verdade já deu certo — e alguém tentaria de novo, ou
+   * criaria o paciente à mão, duplicando a pessoa no cadastro.
+   */
+  if (message.includes('ALREADY_CONVERTED') || code === '23505') {
+    return new LeadRepositoryError(
+      'already-converted',
+      'lead já convertido',
+      code,
+    )
+  }
+
+  if (message.includes('LEAD_NOT_FOUND')) {
+    return new LeadRepositoryError('not-found', 'lead ausente', code)
   }
   if (code === '42501') {
     return new LeadRepositoryError('forbidden', 'operação recusada pela policy', code)

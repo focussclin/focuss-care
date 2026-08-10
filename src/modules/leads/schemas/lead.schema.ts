@@ -4,6 +4,13 @@ import { LEAD_STAGES, type LeadStage } from '../domain/Lead'
 
 export const leadMessages = {
   invalidFields: 'Revise os campos destacados e tente novamente.',
+  /** Converter cria ficha clínica: quem não cadastra paciente não converte. */
+  convertForbidden:
+    'Você não tem permissão para cadastrar pacientes nesta clínica.',
+  alreadyConverted:
+    'Este lead já virou paciente. Abra a ficha dele em Pacientes.',
+  convertUnavailable:
+    'A conversão cria uma ficha de paciente e exige o banco configurado.',
   nameRequired: 'Informe o nome do lead.',
   nameTooLong: 'Use no máximo 160 caracteres.',
   phoneTooLong: 'Use no máximo 30 caracteres no telefone.',
@@ -100,6 +107,19 @@ export const setLeadStageSchema = z.object({
   stage: z.enum(LEAD_STAGES, leadMessages.stageInvalid),
 })
 export type SetLeadStageInput = z.infer<typeof setLeadStageSchema>
+
+/**
+ * Conversão em paciente.
+ *
+ * Só o id do lead. **Nada do paciente vem daqui**: nome, telefone e e-mail
+ * saem da linha do lead, dentro da função do banco. Aceitar esses campos na
+ * entrada permitiria criar um paciente com dados que nunca estiveram no funil —
+ * e a conversão deixaria de ser conversão.
+ */
+export const convertLeadSchema = z.object({
+  leadId: z.uuid(leadMessages.unexpected),
+})
+export type ConvertLeadInput = z.infer<typeof convertLeadSchema>
 
 export interface LeadDto {
   id: string

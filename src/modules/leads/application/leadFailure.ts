@@ -18,6 +18,12 @@ export function toLeadFailure<F extends string>(
         return err<F>('not-found', leadMessages.notFound)
       case 'forbidden':
         return err<F>('forbidden', leadMessages.forbidden)
+      /*
+       * `conflict`, e não `unexpected`: a operação não pode acontecer porque já
+       * aconteceu. A mensagem manda abrir a ficha em vez de tentar de novo.
+       */
+      case 'already-converted':
+        return err<F>('conflict', leadMessages.alreadyConverted)
       case 'schema-not-ready':
         return err<F>('unavailable', leadMessages.schemaPending)
       case 'unavailable':

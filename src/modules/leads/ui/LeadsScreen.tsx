@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   UserRound,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, type FormEvent } from 'react'
 
@@ -124,6 +125,7 @@ export function LeadsScreen({
   assignees,
   onSubmit,
   onMove,
+  onConvert,
   isLive,
   schemaPending = false,
 }: LeadsScreenProps) {
@@ -251,6 +253,33 @@ export function LeadsScreen({
         return
       }
       router.refresh()
+    } catch {
+      setError(leadMessages.unavailable)
+    } finally {
+      setBusyLeadId(null)
+    }
+  }
+
+  /**
+   * Conversão — cria uma ficha de PACIENTE, e por isso não é um `onMove`.
+   *
+   * O sucesso leva a pessoa até a ficha nova, em vez de só recarregar o funil:
+   * "convertido" sem mostrar onde o paciente foi parar faria a recepção
+   * procurá-lo na lista para confirmar que existe.
+   */
+  async function handleConvert(lead: LeadDto) {
+    setError(null)
+    setBusyLeadId(lead.id)
+
+    try {
+      const result = await onConvert(lead.id)
+
+      if (!result.ok) {
+        setError(result.message)
+        return
+      }
+
+      router.push(result.patientHref)
     } catch {
       setError(leadMessages.unavailable)
     } finally {
@@ -405,8 +434,15 @@ export function LeadsScreen({
                         key={lead.id}
                         lead={lead}
                         busy={busyLeadId === lead.id}
+                        /*
+                          `lost` fica de fora: a etapa já diz que não há o que
+                          converter, e um botão ali convidaria a criar ficha de
+                          quem desistiu.
+                        */
+                        canConvert={canMutate && lead.stage !== 'lost'}
                         onEdit={openEdit}
                         onMove={handleMove}
+                        onConvert={handleConvert}
                       />
                     )) : (
                       <p className="py-8 text-center text-label text-muted">Nenhum lead nesta etapa.</p>
@@ -473,7 +509,22 @@ export function LeadsScreen({
   )
 }
 
-function LeadCard({ lead, busy, onEdit, onMove }: { lead: LeadDto; busy: boolean; onEdit: (lead: LeadDto) => void; onMove: (lead: LeadDto, stage: LeadStage) => Promise<void> }) {
+function LeadCard({
+  lead,
+  busy,
+  canConvert,
+  onEdit,
+  onMove,
+  onConvert,
+}: {
+  lead: LeadDto
+  busy: boolean
+  /** Falso sem banco, com migration pendente, ou em etapa que não converte. */
+  canConvert: boolean
+  onEdit: (lead: LeadDto) => void
+  onMove: (lead: LeadDto, stage: LeadStage) => Promise<void>
+  onConvert: (lead: LeadDto) => Promise<void>
+}) {
   return (
     <article className="rounded-card border border-border-card bg-surface p-4 shadow-card transition-shadow hover:shadow-raised">
       <div className="flex items-start justify-between gap-3">
@@ -512,6 +563,39 @@ function LeadCard({ lead, busy, onEdit, onMove }: { lead: LeadDto; busy: boolean
         disabled={busy}
         className="mt-3 h-9 text-label"
       />
+
+      {/*
+        A conversão tem três estados, e nenhum deles é um botão sempre visível.
+
+        1. JÁ CONVERTIDO — vira link para a ficha. Um botão "converter" aqui
+           criaria a segunda ficha da mesma pessoa, que é o pior desfecho
+           possível num cadastro clínico.
+        2. CONVERSÍVEL — botão real, que cria paciente de verdade.
+        3. NÃO CONVERSÍVEL (`lost`, ou sem banco) — nada. Botão desabilitado
+           que nunca habilita é promessa vazia; a etapa "perdido" já diz que
+           não há o que converter.
+      */}
+      {lead.convertedPatientId ? (
+        <p className="mt-3 text-label text-muted">
+          <Link
+            href={`/pacientes/${lead.convertedPatientId}`}
+            className="inline-flex items-center gap-1.5 font-semibold text-link hover:underline"
+          >
+            <UserRound aria-hidden className="size-3.5" />
+            Ver ficha do paciente
+          </Link>
+        </p>
+      ) : canConvert ? (
+        <Button
+          variant="secondary"
+          className="mt-3 w-full"
+          disabled={busy}
+          onClick={() => void onConvert(lead)}
+        >
+          <UserRound aria-hidden className="size-4" />
+          Converter em paciente
+        </Button>
+      ) : null}
     </article>
   )
 }

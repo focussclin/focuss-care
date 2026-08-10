@@ -90,6 +90,19 @@ export interface LeadQueryBuilder
 
 export interface LeadsClient {
   from(relation: 'clinic_leads' | 'lead_events'): LeadQueryBuilder
+
+  /**
+   * Conversão do lead em paciente — três escritas numa transação só.
+   *
+   * Devolve o id do paciente criado. Existe como função no banco porque as
+   * escritas precisam valer juntas: em três idas separadas, uma falha no meio
+   * deixaria um paciente órfão no cadastro clínico. Ver
+   * `LeadRepository.convert`.
+   */
+  rpc(
+    fn: 'convert_lead_to_patient',
+    args: { p_lead_id: string },
+  ): PromiseLike<{ data: string | null; error: LeadQueryError | null }>
 }
 
 export function asLeadsClient(client: SupabaseClient<Database>): LeadsClient {

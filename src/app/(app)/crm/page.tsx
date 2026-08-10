@@ -6,6 +6,7 @@ import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 
 import {
+  convertLeadFromScreen,
   moveLeadFromScreen,
   submitLeadFromScreen,
 } from '@/modules/leads/actions/leadScreen.actions'
@@ -57,6 +58,7 @@ export default async function CrmPage() {
         .map((member) => ({ id: member.userId, name: member.name }))}
       onSubmit={submitLeadFromScreen}
       onMove={moveLeadFromScreen}
+      onConvert={convertLeadFromScreen}
       isLive={leadSource.isLive}
       schemaPending={schemaPending}
     />

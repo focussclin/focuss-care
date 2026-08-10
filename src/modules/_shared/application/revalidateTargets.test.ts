@@ -358,7 +358,13 @@ describe('nenhuma action revalida rota que não alimenta', () => {
       ],
       records: ['/prontuarios'],
       rooms: ['/salas-e-recursos', '/agenda'],
-      leads: ['/crm'],
+      /*
+       * `/pacientes/:seg` entra porque a CONVERSÃO cria uma ficha de paciente.
+       * É a única action do CRM que escreve fora do funil — e sem revalidar a
+       * ficha nova, o link "ver ficha" levaria a uma página que o cache ainda
+       * não conhece.
+       */
+      leads: ['/crm', '/pacientes/:seg', '/pacientes/:seg/historico'],
       forms: ['/formularios'],
       inventory: ['/estoque'],
       purchases: ['/compras', '/estoque'],

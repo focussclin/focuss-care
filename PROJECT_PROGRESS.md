@@ -71,6 +71,7 @@ de estoque).
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
+| `leads` | **BLOQUEADO** | Pipeline de 7 etapas com CRUD, busca, filtros, eventos de transição e **conversão atômica em paciente** por função do banco. RBAC separado: funil exige `team.read`, converter exige `patient.write`. 54 testes. Migration não aplicada |
 | `tasks` | **BLOQUEADO** | CRUD completo com transição de estado auditada em três eventos distintos, filtros por situação/responsável/prazo extraídos para função pura, tenant explícito e 134 testes. Alimenta o Portal do profissional por `listAssignedTo`. Migration não aplicada |
 | `rooms` | **BLOQUEADO** | CRUD completo com remoção lógica (`deleted_at`), RBAC `clinic.settings`, tenant explícito e 54 testes. Agenda integrada com reserva opcional por `appointments.room_id`; migration de salas ainda não aplicada |
 | `patient-portal` | **EM ANDAMENTO** | Vínculo do paciente por convite (token com hash + prova de e-mail), leitura por função com lista fechada de colunas. **Prontuário nunca entra.** Migration pendente |
@@ -1286,6 +1287,90 @@ os 11 testes dele continuam passando.
 - o shim `infrastructure/tasksDatabase.ts` continua sendo a fonte dos tipos.
 
 Nada disso é contornável por código: a tabela não existe.
+
+---
+
+## 8.15 Feature — CRM e Leads, fechada (10/08/2026)
+
+O pipeline, o CRUD, a busca e os filtros já existiam. Faltava **a conversão** —
+e ela é a única ação do módulo que cria dado clínico.
+
+### O que estava faltando, e por que não era simples
+
+`clinic_leads.converted_patient_id` existia na migration, a entidade tinha
+`convertedPatientId`, e **nada preenchia**. Mover o lead para a etapa
+"convertido" pela coluna deixaria o funil dizendo que virou paciente sem que
+paciente nenhum existisse.
+
+Converter faz três escritas que precisam valer juntas: cria a linha em
+`patients`, marca o lead apontando para ela, e registra o evento de etapa.
+
+O detalhe que torna a atomicidade obrigatória em vez de teórica: **`patients`
+existe no schema remoto e `clinic_leads` não**. Uma implementação em duas
+etapas conseguiria criar o paciente e falhar no lead — deixando **um paciente
+órfão**, uma pessoa no cadastro clínico que ninguém pediu e nenhum lead explica.
+Isso não é inconsistência técnica: é uma ficha a mais num produto de saúde, que
+alguém encontra depois sem saber de onde veio.
+
+Por isso a conversão é uma função no banco (`convert_lead_to_patient`),
+adicionada à migration **local**. O teste do repositório verifica a ausência de
+`from('patients')` no caminho — o fake lança se a tabela for tocada direto.
+
+### A permissão é `patient.write`, e não `team.read`
+
+As outras três actions pedem `team.read`, porque mexem no funil. Esta cria
+ficha de paciente, que é cadastro clínico: quem não pode cadastrar paciente
+pela tela de pacientes não pode cadastrar pelo CRM. Manter `team.read` seria
+uma porta lateral para o mesmo efeito.
+
+`finance` não converte — e há teste para isso.
+
+### Os três estados do botão
+
+Um botão sempre visível criaria a **segunda ficha da mesma pessoa**, que
+ninguém percebe até a recepção achar duas Marias com o mesmo telefone.
+
+| Estado | O que a tela mostra |
+|---|---|
+| Já convertido | link "Ver ficha do paciente" — nenhum botão |
+| Conversível | botão real, que cria paciente de verdade |
+| `lost`, sem banco, ou migration pendente | **nada** — nem botão desabilitado |
+
+Botão desabilitado que nunca habilita é promessa vazia. E o sucesso **navega
+até a ficha nova**: "convertido" sem mostrar onde o paciente foi parar faria a
+recepção procurá-lo na lista para confirmar que existe.
+
+### `already-converted` é razão própria
+
+O segundo clique responderia "falha inesperada" sobre uma operação que já deu
+certo — e alguém cadastraria o paciente à mão, duplicando a pessoa. A mensagem
+manda abrir a ficha que já existe.
+
+`42883`/`PGRST202` entraram junto com `42P01` no `schema-not-ready`: função
+ausente é o mesmo "migration não aplicada" que tabela ausente, e a conversão é
+RPC.
+
+### Eventos e integração
+
+`lead_events` já era escrito no `setStage`, e continua. A conversão registra o
+evento da transição para `converted` dentro da mesma transação. Nada em
+`patients` ou `scheduling` foi alterado — a ficha criada é uma linha comum de
+`patients`, com `biological_sex = 'not_informed'`, o mesmo valor que o cadastro
+manual usa.
+
+### Testes desta fatia — 54 no módulo
+
+Schema (22, incluindo que a conversão **não aceita dado de paciente** na
+entrada), repositório da conversão (8), action (14, com a matriz de papéis) e
+tela (10, com os três estados do botão).
+
+### O que continua pendente
+
+`20260809_clinic_leads.sql` **não foi aplicada**: `/crm` mantém
+`availability: 'setup'`, a tela declara a pendência, e o shim
+`infrastructure/leadsDatabase.ts` segue sendo a fonte dos tipos. A conversão
+não tem como funcionar sem a tabela — e a demonstração recusa explicitamente,
+em vez de fingir que criou a ficha.
 
 ---
 

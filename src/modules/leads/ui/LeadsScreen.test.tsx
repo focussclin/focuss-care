@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { LeadDto } from '../schemas/lead.schema'
 import { LeadsScreen } from './LeadsScreen'
 
+const push = vi.fn()
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push }),
 }))
 
 const leads: LeadDto[] = [
@@ -32,6 +33,13 @@ const leads: LeadDto[] = [
 
 afterEach(cleanup)
 
+/*
+ * `push` é declarado fora do `vi.mock` e sobrevive entre os testes — sem
+ * limpá-lo, "não navega" veria a navegação de um teste anterior e falharia
+ * acusando o código certo.
+ */
+beforeEach(() => push.mockClear())
+
 function renderScreen(overrides: Partial<React.ComponentProps<typeof LeadsScreen>> = {}) {
   return render(
     <LeadsScreen
@@ -39,6 +47,9 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof LeadsScreen
       assignees={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Ana Costa' }]}
       onSubmit={vi.fn().mockResolvedValue(null)}
       onMove={vi.fn().mockResolvedValue(null)}
+      onConvert={vi
+        .fn()
+        .mockResolvedValue({ ok: true, patientHref: '/pacientes/p-1' })}
       isLive
       {...overrides}
     />,
@@ -100,5 +111,97 @@ describe('LeadsScreen', () => {
     fireEvent.change(screen.getByLabelText('Mover Maria Silva'), { target: { value: 'contacted' } })
 
     await waitFor(() => expect(onMove).toHaveBeenCalledWith(leads[0].id, 'contacted'))
+  })
+})
+
+/**
+ * A conversão em paciente — a única ação desta tela que cria dado clínico.
+ *
+ * Os três estados existem para que a tela nunca ofereça o que não pode
+ * cumprir. O mais importante é o primeiro: um botão "converter" num lead já
+ * convertido criaria a **segunda ficha da mesma pessoa**, que é o pior desfecho
+ * possível num cadastro de saúde — e ninguém percebe até a recepção achar duas
+ * Marias com o mesmo telefone.
+ */
+describe('conversão em paciente', () => {
+  const convertido: LeadDto = {
+    ...leads[0],
+    id: 'lead-convertido',
+    name: 'Joana Convertida',
+    convertedPatientId: 'patient-9',
+  }
+
+  it('cria o paciente e leva até a ficha nova', async () => {
+    /*
+     * `push`, e não `refresh`: "convertido" sem mostrar onde o paciente foi
+     * parar faria a recepção procurá-lo na lista para confirmar que existe.
+     */
+    const onConvert = vi
+      .fn()
+      .mockResolvedValue({ ok: true, patientHref: '/pacientes/p-1' })
+
+    renderScreen({ onConvert })
+
+    fireEvent.click(screen.getByRole('button', { name: /converter em paciente/i }))
+
+    await waitFor(() => expect(onConvert).toHaveBeenCalledWith(leads[0].id))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/pacientes/p-1'))
+  })
+
+  it('lead JÁ convertido não oferece converter, e sim o link da ficha', () => {
+    renderScreen({ leads: [convertido] })
+
+    expect(
+      screen.queryByRole('button', { name: /converter em paciente/i }),
+    ).toBeNull()
+
+    const link = screen.getByRole('link', { name: /ver ficha do paciente/i })
+
+    expect(link.getAttribute('href')).toBe('/pacientes/patient-9')
+  })
+
+  it('lead perdido não oferece conversão', () => {
+    // A etapa já diz que não há o que converter; um botão ali convidaria a
+    // criar ficha de quem desistiu.
+    renderScreen({ leads: [{ ...leads[0], stage: 'lost' }] })
+
+    expect(
+      screen.queryByRole('button', { name: /converter em paciente/i }),
+    ).toBeNull()
+  })
+
+  it('sem banco não há botão — nem desabilitado', () => {
+    /*
+     * Botão desabilitado que nunca habilita é promessa vazia. A conversão cria
+     * ficha clínica e a demonstração não cria: melhor não oferecer.
+     */
+    renderScreen({ isLive: false })
+
+    expect(
+      screen.queryByRole('button', { name: /converter em paciente/i }),
+    ).toBeNull()
+  })
+
+  it('com a migration pendente também não há botão', () => {
+    renderScreen({ schemaPending: true })
+
+    expect(
+      screen.queryByRole('button', { name: /converter em paciente/i }),
+    ).toBeNull()
+  })
+
+  it('a recusa aparece na tela, e não navega', async () => {
+    const onConvert = vi
+      .fn()
+      .mockResolvedValue({ ok: false, message: 'Este lead já virou paciente.' })
+
+    renderScreen({ onConvert })
+
+    fireEvent.click(screen.getByRole('button', { name: /converter em paciente/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Este lead já virou paciente.')).toBeTruthy(),
+    )
+    expect(push).not.toHaveBeenCalled()
   })
 })

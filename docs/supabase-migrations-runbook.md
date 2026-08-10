@@ -227,6 +227,64 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.58 CRM: a conversão é FUNÇÃO, e o motivo é `patients` já existir
+
+> `20260809_clinic_leads.sql` continua **não aplicada**. A função
+> `convert_lead_to_patient` foi acrescentada a ela em **10/08/2026**, antes de
+> qualquer aplicação.
+
+Converter um lead faz três escritas que precisam valer juntas:
+
+1. cria a linha em `patients`;
+2. marca o lead como convertido, apontando para ela;
+3. registra o evento em `lead_events`.
+
+Em três idas ao banco pela aplicação, uma falha no meio deixa **um paciente
+órfão** — uma pessoa no cadastro clínico que ninguém pediu, sem lead que a
+explique.
+
+### Por que isso não é hipotético aqui
+
+`patients` **existe** no schema remoto. `clinic_leads` **não**. Uma
+implementação em duas etapas conseguiria criar o paciente e falhar no lead — e
+o resultado seria uma ficha de paciente real, num produto de saúde, sem origem
+rastreável.
+
+Por isso as três acontecem dentro de `convert_lead_to_patient`, com
+`security definer`, `for update` na linha do lead (dois cliques criariam dois
+pacientes) e checagem de papel por `has_clinic_role`.
+
+### Papel: `patient.write`, não `team.read`
+
+A lista da função é `owner`, `admin`, `professional`, `receptionist` — a mesma
+de `patient.write`. Converter escreve no cadastro clínico, e não só no funil;
+`finance` fica de fora.
+
+A aplicação repete a checagem. As duas existem porque protegem coisas
+diferentes: a da action recusa cedo e com mensagem boa; a da função vale também
+para quem chamar o PostgREST direto.
+
+### O que a conversão NÃO faz
+
+Não apaga o lead (o histórico do funil permanece), não copia observações
+internas, e não marca consentimento LGPD — consentimento é ato do paciente e
+continua sendo registrado na ficha dele.
+
+`biological_sex` entra como `'not_informed'`: é NOT NULL sem default útil, o
+lead não pergunta, e inventar seria pior que declarar que não foi informado. É
+o mesmo valor que o cadastro manual usa.
+
+### Depois de aplicar
+
+1. `npm run db:types`.
+2. **Remover** `src/modules/leads/infrastructure/leadsDatabase.ts`.
+3. Tirar `availability: 'setup'` de `/crm` em `navigation.ts` e a entrada de
+   `BUILT_BUT_HIDDEN` — o teste falha se uma sair sem a outra.
+4. Conferir que a função existe e recusa conversão dupla:
+   ```sql
+   select public.convert_lead_to_patient('<lead-uuid>');  -- 2ª vez: 23505
+   ```
+
 ## 3.57 Tarefas: o que a migration destrava, e o que já está pronto sem ela
 
 > Levantado em **10/08/2026**. `20260809_clinic_tasks.sql` continua **não

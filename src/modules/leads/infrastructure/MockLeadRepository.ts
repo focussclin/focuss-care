@@ -73,6 +73,33 @@ export class MockLeadRepository implements LeadRepository {
     return lead
   }
 
+  async convert(
+    _clinicId: string,
+    _leadId: string,
+  ): Promise<{ patientId: string }> {
+    void _clinicId
+    void _leadId
+
+    /*
+     * A demonstração NÃO converte.
+     *
+     * Os outros métodos deste mock escrevem na memória e a tela responde de
+     * verdade — nada persiste, e isso é honesto porque nada aqui sai da aba.
+     *
+     * Converter é diferente: ela promete criar uma **ficha de paciente**, que é
+     * registro clínico. Fingir isso faria a tela dizer "paciente criado" e o
+     * cadastro seguir vazio — e quem experimentasse o fluxo concluiria que o
+     * produto perde dado.
+     *
+     * `unavailable` é a razão certa: a operação existe e este ambiente não a
+     * sustenta. A tela já traduz isso em "não foi possível agora".
+     */
+    throw new LeadRepositoryError(
+      'unavailable',
+      'a conversão em paciente exige banco: a demonstração não cria ficha clínica',
+    )
+  }
+
   private find(leadId: string): Lead {
     const lead = this.leads.find((item) => item.id === leadId)
     if (!lead) throw new LeadRepositoryError('not-found', 'lead indisponível')
