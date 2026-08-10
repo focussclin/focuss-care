@@ -23,6 +23,7 @@ const EXISTING_ROUTES = new Set([
   '/configuracoes',
   '/relatorios',
   '/financeiro',
+  '/servicos',
   '/convenios',
   '/whatsapp',
   '/chat-ia',

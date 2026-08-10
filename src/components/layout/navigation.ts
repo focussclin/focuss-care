@@ -1,4 +1,5 @@
 import {
+  Tags,
   Archive,
   BarChart3,
   Building2,
@@ -136,6 +137,12 @@ export const navItems: readonly NavItem[] = [
   { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'invoice.read' },
   { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'invoice.read', availability: 'setup' },
   { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance', permission: 'insurance.manage' },
+  /*
+   * Sem `permission`: o catalogo e a lista da propria clinica, e quem agenda
+   * precisa saber o que ela oferece. O que fica atras de `invoice.read` e o
+   * PRECO, omitido no servidor — nao a rota.
+   */
+  { label: 'Catálogo de serviços', href: '/servicos', icon: Tags, section: 'finance' },
   { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', permission: 'invoice.read', availability: 'setup' },
   { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', permission: 'invoice.read', availability: 'setup' },
 

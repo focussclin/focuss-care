@@ -68,6 +68,7 @@ de estoque).
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
 | `integrations` | **EM ANDAMENTO** | Estado de conexão real + cofre cifrado por clínica para Brevo, Evolution, DeepSeek e calendários. **Ainda não envia, não executa, não chama modelo nem sincroniza agenda** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
+| `catalog` | **COMPLETO** | Catálogo de serviços: nome, código interno e TUSS, categoria, duração e preço base, com exclusão lógica. **O preço é omitido no servidor** para quem não tem `invoice.read`. Tabelas por convênio (`price_lists`) seguem sem superfície |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
@@ -2089,6 +2090,95 @@ fechada.
 (19 domínio, 9 integração com o agendamento, 14 UI). Escrita recusada por policy
 ausente vira `write-forbidden` apontando `availability_exceptions`; a
 verificação está no `docs/03-banco-de-dados.md` §7.
+
+---
+
+## 8.26 Feature — Catálogo de serviços (10/08/2026)
+
+Módulo novo, `catalog`, e rota nova, `/servicos`. `services` estava no schema
+aplicado e **nenhuma linha de código a tocava** — assim como `price_lists`,
+`price_list_items`, `vitals`, `prescriptions`, `message_templates` e
+`clinical_attachments`, todas ainda sem superfície.
+
+### Por que esta, entre as sete
+
+É a de maior alcance: `invoice_items.service_id` aponta para cá e hoje é sempre
+nulo, então cada item de fatura é texto digitado na hora — duas pessoas cobrando
+o mesmo procedimento escrevem nomes e valores diferentes. `default_duration_minutes`
+tem o mesmo papel na agenda, onde as opções são hoje uma lista fixa no código.
+
+E, decisivo: **nenhuma coluna exige convenção adivinhada**. `default_price_cents`
+em centavos e `deleted_at` para exclusão lógica são convenções declaradas em
+`docs/03`; `default_duration_minutes` traz a unidade no nome. Não há aqui o
+problema de `severity` nem de `weekday`.
+
+### O preço é omitido no SERVIDOR, não escondido na tela
+
+A matriz é explícita: "`receptionist` não vê valor nenhum — marcar consulta não
+exige saber quanto ela custa". Quem não tem `invoice.read` recebe
+`defaultPriceCents: null` de `toServiceDto`: o número **não atravessa a
+fronteira**. Mandar o valor e ocultá-lo no CSS o deixaria no HTML e na resposta
+da action, ao alcance de quem abrisse o inspetor.
+
+Nome, código, TUSS e duração continuam indo — sem eles a recepção não marca. Por
+isso a rota **não** exige permissão: recusá-la a um `professional` o deixaria sem
+saber o que a clínica oferece. O que é filtrado é o preço, não o acesso.
+
+**As actions de escrita também filtram.** A primeira versão devolvia
+`toServiceDto(service, true)` — preço sempre incluso — com o argumento de que
+quem escreve acabou de digitar o valor. O argumento falha em dois pontos:
+`clinic.settings` e `invoice.read` são permissões distintas (que hoje andam
+juntas por acidente da matriz, não por definição), e as actions são
+**exportadas** — quem chama `service.update` direto recebe o registro inteiro,
+então bastaria alterar o nome de um serviço para receber de volta o preço dele.
+Agora a decisão sai de `can(context.role, 'invoice.read')`, com o papel resolvido
+pelo banco.
+
+A auditoria **não** foi degradada junto: `after.price_cents` passou a sair do
+INPUT — que é o valor persistido — e não do DTO devolvido. `audit_log` tem a
+própria permissão de leitura.
+
+### Desativar e excluir são coisas diferentes
+
+Desativar é operacional e reversível. Excluir grava `deleted_at` — e a linha
+**permanece no banco**, porque `invoice_items.service_id` pode apontar para ela:
+apagar de verdade deixaria faturas antigas sem saber o que foi cobrado. A
+confirmação diz isso em vez de prometer remoção total. O `softDelete` desativa
+junto, para que nenhuma consulta futura que esqueça o filtro encontre um serviço
+"ativo" que ninguém pode escolher.
+
+### Código repetido é ambiguidade na fatura
+
+O código liga o serviço ao que o convênio e o financeiro entendem; dois iguais
+deixam quem fatura sem saber qual valor vale. A checagem normaliza caixa e roda
+no servidor sobre a lista lida do banco, ignorando a própria linha na edição. Se
+o banco tiver índice único, `23505` cai na mesma mensagem — sem a janela de
+corrida da checagem da aplicação. **Nome repetido é permitido**: "Consulta" e
+"Consulta (retorno)" convivem.
+
+### Categorias vêm do que está cadastrado
+
+Uma lista fixa — "Consultas", "Exames", "Procedimentos" — seria uma taxonomia
+que o produto impõe a clínicas que já têm a delas. O filtro é montado a partir
+das categorias em uso.
+
+### O que NÃO entrou
+
+`price_lists` e `price_list_items` (tabelas por convênio, com repasse ao
+profissional) continuam sem superfície. São outra tela e outra regra — o preço
+base do particular, que é o que `services.default_price_cents` guarda, está
+completo. A tela diz isso em vez de sugerir que a tabela de convênio está ali.
+
+A ligação de `invoice_items.service_id` também fica para depois: é mudança na
+tela de faturamento, não no catálogo.
+
+### Estado
+
+`catalog` entra como **COMPLETO** para o que a tabela suporta, com 46 testes
+(15 domínio, 14 repositório, 17 UI) mais 8 de action cobrindo a fronteira do
+preço. Escrita recusada por policy ausente vira
+`write-forbidden` apontando `services`; a verificação está no
+`docs/03-banco-de-dados.md` §7.
 
 ---
 
