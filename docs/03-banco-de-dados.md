@@ -182,7 +182,8 @@ select tablename, policyname, cmd, roles
   from pg_policies
  where schemaname = 'public'
    and tablename in ('conversations', 'messages', 'workflows', 'allergies',
-                     'availability_exceptions', 'services', 'vitals')
+                     'availability_exceptions', 'services', 'vitals',
+                     'message_templates')
  order by tablename, cmd;
 ```
 

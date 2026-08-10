@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -7,6 +8,14 @@ import { IntegrationStatusCard } from './IntegrationStatusCard'
 
 export interface WhatsappScreenProps {
   status: WhatsappStatus
+  /**
+   * A biblioteca de modelos, montada pela ROTA.
+   *
+   * Chega como slot porque ela FUNCIONA — é a única parte desta tela que não
+   * depende de W-01. O estado do canal continua bloqueado logo acima; os
+   * modelos ficam guardados e prontos para o dia em que houver envio.
+   */
+  templatesSlot?: ReactNode
 }
 
 /** '5511999998888' -> '•••• 8888'. O número inteiro não precisa aparecer. */
@@ -26,7 +35,7 @@ function maskPhone(phone: string): string {
  * chegar, o inbox nasce por cima de uma base que já sabe distinguir "sem canal"
  * de "canal cadastrado e desligado".
  */
-export function WhatsappScreen({ status }: WhatsappScreenProps) {
+export function WhatsappScreen({ status, templatesSlot }: WhatsappScreenProps) {
   const channel = status.channel
 
   return (
@@ -80,6 +89,8 @@ export function WhatsappScreen({ status }: WhatsappScreenProps) {
         <Counter label="Mensagens" value={status.messages} />
         <Counter label="Modelos de mensagem" value={status.templates} />
       </section>
+
+      {templatesSlot}
 
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />

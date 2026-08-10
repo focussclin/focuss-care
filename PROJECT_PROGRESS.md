@@ -66,7 +66,7 @@ de estoque).
 | `dashboard` | **COMPLETO** | Cartões, agenda, atividade e **pulso financeiro tenant-scoped**, respeitando `invoice.read` |
 | `audit` | **COMPLETO** | Trilha de ações tenant-scoped, filtro por ação/entidade, paginação e RBAC `audit.read` |
 | `subscription` | **COMPLETO** | Plano da clínica, estado da assinatura e cotas contadas na hora. **Só leitura**: não há gateway de pagamento |
-| `integrations` | **EM ANDAMENTO** | Estado de conexão real + cofre cifrado por clínica para Brevo, Evolution, DeepSeek e calendários. **Ainda não envia, não executa, não chama modelo nem sincroniza agenda** |
+| `integrations` | **EM ANDAMENTO** | Estado de conexão real, cofre cifrado por clínica, construtor de automações e **biblioteca de modelos de mensagem** (CRUD real, aprovação lida do provedor). **Ainda não envia, não executa, não chama modelo nem sincroniza agenda** |
 | `documents` | **BLOQUEADO** | Central de metadados, upload privado, URL assinada e auditoria preparados; migration e bucket ainda não aplicados |
 | `catalog` | **COMPLETO** | Catálogo de serviços: nome, código interno e TUSS, categoria, duração e preço base, com exclusão lógica. **O preço é omitido no servidor** para quem não tem `invoice.read`. Tabelas por convênio (`price_lists`) seguem sem superfície |
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
@@ -2279,6 +2279,70 @@ não).
 tenant do parágrafo acima. Nada de `price_lists`, `clinical_attachments`,
 `prescriptions` ou `message_templates` foi tocado — seguem sem superfície, e os
 motivos estão acima.
+
+---
+
+## 8.28 Feature — Modelos de mensagem (10/08/2026)
+
+`message_templates` estava no schema aplicado, e a tela `/whatsapp` já
+**contava** os modelos sem permitir geri-los. O contador virou biblioteca.
+
+### As tabelas que ficaram de fora, e por quê
+
+- `price_lists` / `price_list_items`: têm `professional_share_percent` **e**
+  `professional_share_cents` sem nada dizer qual vence — mesma classe de
+  `severity` e `weekday`. Convenção ambígua, não implementada.
+- `clinical_attachments`: depende do bucket de storage que os documentos ainda
+  esperam.
+- `prescriptions` / `prescription_items`: prescrição exige cautela clínica que
+  esta fatia não comporta — assinatura, validade, impressão.
+
+### Nada aqui envia, e a tela diz isso três vezes
+
+Aviso fixo no topo da biblioteca, texto no modal antes de salvar, e **nenhum
+botão de enviar em lugar nenhum** — nem uma action de envio no módulo. Não há
+provedor, não há fila. O que a biblioteca resolve hoje é concreto e menor: o
+texto padrão que vive num bloco de notas da recepção passa a viver na clínica,
+igual para todo mundo. O botão que existe é **copiar**.
+
+### Duas colunas pertencem ao provedor
+
+`is_approved` e `provider_template_id` são preenchidos por quem aprova modelo de
+mensagem — a Meta, no caso do WhatsApp Business. A aplicação **lê e nunca
+escreve**: o selo mostra "sem aprovação de provedor" e não há controle para
+marcá-lo. Um interruptor ali afirmaria uma aprovação que ninguém deu, e o erro
+só apareceria no primeiro envio recusado.
+
+`provider_template_id` nem atravessa a fronteira: nada na tela o usa.
+
+### `variables` é derivado do corpo, nunca digitado
+
+A coluna é `jsonb`. Um campo livre faria a tela virar canal para gravar
+estrutura arbitrária no tenant — e, pior, a lista digitada divergiria do texto
+no primeiro ajuste. As variáveis saem de `{{nome}}` por regex, na escrita **e na
+leitura**: linha gravada por fora com lista divergente é ignorada, e a tela
+mostra o que o texto realmente usa.
+
+O marcador aceita só letras, números e sublinhado — é o formato que os
+provedores processam. E chave aberta e não fechada é recusada: o texto parece
+certo no editor e chegaria ao paciente com chaves soltas.
+
+### `language` é fixo em `pt-BR`, e a decisão está no código
+
+A coluna é texto livre e nenhum registro existe para revelar a convenção do
+provedor (`pt_BR`, com sublinhado, no WhatsApp Business). Chutar criaria uma
+coluna cheia de valores que talvez precisem ser reescritos. Enquanto o produto é
+só pt-BR, um seletor seria escolha sem efeito — a constante está no domínio para
+que a conversa aconteça quando o adapter existir.
+
+### Estado
+
+**W-01 continua bloqueada.** Esta fatia não a destrava e não muda o status do
+módulo `integrations`, que segue **EM ANDAMENTO**: o canal não conecta, nada é
+enviado, e o cartão de bloqueio permanece no topo de `/whatsapp`. O que mudou é
+que uma parte da tela deixou de ser só contador.
+
+42 testes novos: 13 de domínio, 12 de repositório, 17 de UI.
 
 ---
 
