@@ -250,6 +250,36 @@ sempre "se existir uma conta, o link está a caminho" — a mesma frase para con
 existente, inexistente e falha de envio, porque distinguir uma da outra
 transformaria o formulário num verificador de quem tem conta na clínica.
 
+### 1.5 Portal do paciente — o que depende do painel
+
+O portal (`/portal-paciente`) usa **magic link**, e não senha: o paciente
+recebe um link, clica, e está dentro. Isso reaproveita exatamente a
+infraestrutura de e-mail da §1.4 — se a recuperação de senha funciona, o portal
+funciona.
+
+| Item | Onde | Se estiver errado |
+|---|---|---|
+| `<origem>/auth/callback` nas **Redirect URLs** | Authentication → URL Configuration | O link do convite volta para a `Site URL` e o paciente cai no login da clínica, sem entender por quê |
+| **Magic Link** habilitado | Authentication → Providers → Email | `signInWithOtp` falha, e a tela responde "não foi possível pedir o link" |
+| SMTP próprio | Authentication → Emails → SMTP Settings | Mesmo limite da §1.4 — e aqui é pior, porque quem não recebe é o paciente, que não tem a quem reclamar além da recepção |
+
+**Sobre `shouldCreateUser: true`.** O convite cria a conta do paciente no
+primeiro acesso, e isso é deliberado: quem é convidado normalmente ainda não tem
+conta. O que impede o abuso não é bloquear o cadastro — é o **aceite exigir que
+o e-mail autenticado seja o do convite**. Alguém que peça um link para o próprio
+endereço recebe o e-mail e não consegue aceitar nada.
+
+**O que NÃO depende de painel, e é o coração da fatia:** o vínculo exige duas
+provas simultâneas — posse do token (a clínica entregou) e controle do e-mail
+(provado pelo magic link). Nenhuma sozinha abre a porta, e nenhuma delas é
+configuração. Ver `supabase/migrations/20260810_patient_portal.sql`.
+
+**Envio do convite continua manual.** Não há provedor de e-mail transacional
+configurado (bloqueio do módulo `integrations`), então a ficha do paciente
+**gera e copia** o link, e a clínica o manda pelo canal que já usa. Um botão
+"enviar por e-mail" que não envia seria pior que a ausência dele: a recepção
+acharia que o paciente recebeu.
+
 ---
 
 ## 2. Banco — migrations críticas aplicadas; validações funcionais restantes

@@ -97,11 +97,19 @@ describe('a lista de comandos', () => {
   })
 
   it('não inclui item de menu desabilitado', () => {
-    // Os portais ainda não possuem rota; teleatendimento não faz parte do produto.
+    /*
+     * `/teleatendimento` saiu do produto e `/portal-paciente` passou a existir
+     * em 10/08/2026 — por isso o segundo trocou de lado nesta asserção.
+     *
+     * O que o teste guarda continua sendo o mesmo: a paleta é DERIVADA do menu,
+     * então item desabilitado não pode virar atalho. Um comando para uma rota
+     * que não existe é um 404 a duas teclas de distância, e a paleta é
+     * justamente onde a pessoa não confere antes de apertar Enter.
+     */
     const hrefs = ALL_COMMANDS.map((command) => command.href)
 
     expect(hrefs).not.toContain('/teleatendimento')
-    expect(hrefs).not.toContain('/portal-paciente')
+    expect(hrefs).toContain('/portal-paciente')
     expect(hrefs).toContain('/crm')
     expect(hrefs).toContain('/estoque')
   })

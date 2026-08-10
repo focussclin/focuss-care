@@ -73,6 +73,8 @@ const NOT_MENU_ROUTES = new Set([
   '/pacientes/[patientId]',
   '/pacientes/[patientId]/historico',
   '/formularios/[formId]/responder',
+  // Alcançada pelo link do convite, nunca pelo menu — e a URL traz o token.
+  '/portal-paciente/convite/[token]',
 ])
 
 function collectFiles(dir: string, name: string): string[] {

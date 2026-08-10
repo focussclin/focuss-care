@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (10/08/2026):** 1177 testes em 109 arquivos · `typecheck`,
+**Validação atual (10/08/2026):** 1245 testes em 114 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -71,6 +71,7 @@ de estoque).
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
+| `patient-portal` | **EM ANDAMENTO** | Vínculo do paciente por convite (token com hash + prova de e-mail), leitura por função com lista fechada de colunas. **Prontuário nunca entra.** Migration pendente |
 | `portal` | **EM ANDAMENTO** | O dia de quem atende: agenda pessoal filtrada no banco por `current_professional_id()`, com "acontecendo agora" e "aguardando encerramento" derivados. **Só leitura, e não tem tabela própria** — é uma visão sobre `scheduling` e `tasks`. O painel de tarefas espera `clinic_tasks` |
 
 ---
@@ -115,6 +116,8 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
 | `/portal-profissional` | **EM ANDAMENTO** | Banco (scheduling) — agenda do dia filtrada por `current_professional_id()`, real e funcionando. O painel de tarefas depende de `clinic_tasks` e declara a pendência sem derrubar o resto | `appointment.read`; sem cadastro em `professionals` a tela explica em vez de mostrar zero |
+| `/portal-paciente` | **EM ANDAMENTO** | Banco (funções `portal_my_*`), aguardando `20260810_patient_portal.sql`. Fora de `(app)`: o paciente não é membro, e o layout de lá o mandaria ao onboarding | **Sem papel** — o recorte é `portal_patient_ids()` a partir de `auth.uid()`. Quem não tem vínculo recebe explicação, não 403 |
+| `/portal-paciente/convite/[token]` | **EM ANDAMENTO** | Pré-visualização por RPC aberta a `anon`; aceite exige sessão **e** e-mail igual ao do convite | Token na URL, `noindex`. Nem token nem e-mail sozinhos liberam o acesso |
 
 ---
 
@@ -969,6 +972,96 @@ Corrigido de quebra: o fake de `SupabaseAppointmentRepository.test.ts`
 detectava a sonda de sobreposição só por `.lt()`, e as consultas de intervalo
 usam `gte` + `lt` — cairiam no ramo errado. Nenhum teste cobria intervalo até
 agora, então a ambiguidade nunca tinha aparecido.
+
+---
+
+## 8.11 Feature — Portal do paciente (10/08/2026)
+
+`/portal-paciente` sai de `disabled: true`. O acesso do paciente nasce de um
+**convite da clínica**, e não de cadastro público.
+
+### O problema que a arquitetura teve de resolver primeiro
+
+O paciente **não é membro da clínica**: ele tem conta no Supabase Auth e zero
+linhas em `memberships`. Isso significa que `getSessionState()` o classifica
+como `needs-onboarding`, e a primeira linha do layout de `(app)` faz:
+
+```ts
+if (session.status === 'needs-onboarding') redirect('/onboarding')
+```
+
+Sob `(app)`, todo paciente seria mandado para a tela de **criar uma clínica**.
+Relaxar aquela guarda não era opção — ela é o que impede alguém autenticado sem
+vínculo de circular pelo produto. Por isso existe o grupo `(portal)`, com casca
+própria: as duas audiências têm regras de acesso **opostas**, uma exige vínculo
+de equipe e a outra exige a ausência dele.
+
+### Por que a leitura é por função, e não por policy
+
+RLS filtra linha, não coluna. Uma policy de SELECT em `patients` deixaria o
+paciente pedir `select=*` ao PostgREST — com a chave publicável e o próprio JWT
+— e ler `admin_notes`, a anotação interna da recepção sobre ele. Em
+`appointments` seria `internal_notes`; em `invoices`, `notes` e `cancel_reason`.
+
+A migration **não cria policy em nenhuma tabela existente**. Três funções
+`security definer` com lista fechada de colunas entregam o que o portal mostra,
+e não há função que alcance `medical_records`.
+
+### As duas provas do vínculo
+
+| Prova | Como | O que impede |
+|---|---|---|
+| Posse do token | 32 bytes aleatórios; o banco guarda só o sha256 | Quem controla o e-mail mas não recebeu o convite |
+| Controle do e-mail | `auth.jwt() ->> 'email'` = e-mail do convite | Quem interceptou o link |
+
+Ligar `auth.users.email` a `patients.email` seria mais simples e estaria errado:
+esse campo é digitado pela recepção sem verificação, o mesmo endereço aparece em
+vários pacientes, e ninguém prova que o controla.
+
+O token **nunca é gravado em claro** e aparece uma única vez, no retorno da
+função que o cria. Quem não copiar precisa de outro — e gerar outro invalida o
+anterior (índice parcial único por paciente pendente).
+
+### Decisões de tela que não são cosméticas
+
+- **O paciente DIGITA o e-mail.** Mandá-lo junto do convite transformaria o
+  token num revelador de dado pessoal: ele viaja por WhatsApp e papel, e quem o
+  interceptasse saberia o endereço mesmo sem conseguir aceitar nada. A máscara
+  (`a****@exemplo.com`) confirma para o dono sem dizer qual é.
+- **Sucesso e falha do envio dão a mesma frase.** Distinguir faria da página um
+  oráculo de quem é paciente daquela clínica.
+- **O aceite é botão, não efeito de carregamento.** Criar vínculo permanente
+  entre uma conta e o prontuário de alguém dentro de um GET é o que um
+  pré-carregador de link dispara sem ninguém pedir.
+- **Não há botão de pagar.** Não há gateway, e um PIX inventado seria pior que a
+  ausência.
+- **A tela diz que o prontuário não está ali.** Quem abre um portal de saúde
+  procura o prontuário; não achar e não saber por quê parece tela quebrada.
+
+### Camadas
+
+| Camada | Arquivo |
+|---|---|
+| Migration | `supabase/migrations/20260810_patient_portal.sql` — 2 tabelas, 8 funções, RLS |
+| Shim de tipos | `patient-portal/infrastructure/portalDatabase.ts` — remover após `db:types` |
+| Domínio | `PatientPortal.ts` (espelho da lista de colunas), `PatientPortalRepositoryError.ts` (11 razões, cada uma com uma ação diferente) |
+| Actions | `createPortalInvite` (via `createAction`, `patient.write`) e `acceptPortalInvite` (**fora** do `createAction`: o paciente não tem clínica ativa) |
+| UI | `PortalPacienteScreen` (RSC), `PortalInviteForm` (client, magic link), `PatientPortalPanel` (ficha 360) |
+| Rotas | `(portal)/portal-paciente/` + `convite/[token]/`, com loading e error próprios |
+
+### Testes desta fatia — 68 novos
+
+O mais incomum é `portalBoundary.test.ts`, que verifica **ausências** no texto do
+SQL: nenhuma policy nas tabelas com coluna interna, nenhuma menção a
+`medical_records`, `admin_notes` fora de qualquer select, o e-mail mascarado, e
+`preview_patient_portal_invite` como a única função aberta a `anon`. Ausência não
+quebra nada quando desaparece — por isso ela precisa de asserção.
+
+### Ainda pendente
+
+Aplicar a migration, e o **envio do convite por e-mail** — hoje a ficha gera e
+copia o link, e a clínica manda pelo canal que já usa. Um botão "enviar" que não
+envia faria a recepção acreditar que o paciente recebeu.
 
 ---
 

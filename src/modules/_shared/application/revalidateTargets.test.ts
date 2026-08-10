@@ -364,6 +364,8 @@ describe('nenhuma action revalida rota que não alimenta', () => {
       purchases: ['/compras', '/estoque'],
       reconciliation: ['/conciliacao'],
       documents: ['/documentos'],
+      // O painel de convite vive na FICHA; a listagem nao mostra convite nenhum.
+      'patient-portal': ['/pacientes/:seg', '/pacientes/:seg/historico'],
       scheduling: [
         '/agenda',
         '/dashboard',

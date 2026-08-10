@@ -110,7 +110,15 @@ export const navItems: readonly NavItem[] = [
   { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', permission: 'team.read', availability: 'setup' },
   { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', permission: 'encounter.read', availability: 'setup' },
   { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle, section: 'relationship' },
-  { label: 'Portal do paciente', href: '/portal-paciente', icon: ContactRound, section: 'relationship', disabled: true },
+  /*
+   * O item leva a equipe para a tela que o PACIENTE vê.
+   *
+   * Sem `permission`: não há papel que autorize o portal — o recorte é
+   * `portal_patient_ids()`, derivado de `auth.uid()` no banco. Quem trabalha na
+   * clínica não tem vínculo de portal e cai numa explicação com o caminho para
+   * gerar um convite, que é exatamente o que quem administra precisa ver.
+   */
+  { label: 'Portal do paciente', href: '/portal-paciente', icon: ContactRound, section: 'relationship' },
   { label: 'Portal do profissional', href: '/portal-profissional', icon: UserRoundCog, section: 'relationship', permission: 'appointment.read' },
 
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },

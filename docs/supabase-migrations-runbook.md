@@ -22,6 +22,7 @@
 | 4 | `20260807_create_invitation_rpc.sql` | **Aplicada e verificada** | Emissão de convite disponível pela aplicação |
 | 5 | Índices de `patients` (P-02b) | **Não escrita** | Filtro "Última visita" fica desabilitado |
 | 6 | `20260810_appointments_professional_idx.sql` | **Não aplicada** | `/portal-profissional` funciona, mas a consulta do dia varre a agenda da clínica inteira |
+| 7 | `20260810_patient_portal.sql` | **Não aplicada** | `/portal-paciente` declara a pendência e não gera convite. Sem ela, o portal do paciente não existe |
 
 A #5 não existe como arquivo de propósito: escrevê-la exige saber quais índices
 e extensões o banco já tem, e criar índice duplicado é custo sem ganho. As
@@ -225,6 +226,69 @@ dos repositórios, das actions e dos mocks.
 
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
+
+## 3.6 Portal do paciente: por que a leitura é por FUNÇÃO
+
+> `20260810_patient_portal.sql`, **não aplicada**.
+
+A tentação, ao dar acesso ao paciente, é acrescentar uma policy:
+
+```sql
+create policy "patients_portal_select" on public.patients
+  for select to authenticated
+  using (id in (select public.portal_patient_ids()));
+```
+
+Isso está errado, e o motivo é sutil: **RLS filtra LINHA, não COLUNA**.
+
+Com essa policy, o paciente alcança o PostgREST direto — ele tem a chave
+publicável e o próprio JWT — e pede `select=*`:
+
+| Tabela | Coluna que vazaria |
+|---|---|
+| `patients` | `admin_notes` — a anotação interna da recepção sobre ele |
+| `appointments` | `internal_notes` |
+| `invoices` | `notes`, `cancel_reason` |
+
+Nenhuma delas é para o paciente. Por isso a migration **não cria policy de
+SELECT em nenhuma tabela existente**. A leitura sai de três funções
+`security definer` com lista fechada de colunas:
+
+- `portal_my_profile()`
+- `portal_my_appointments(from, to)`
+- `portal_my_invoices()`
+
+O que não está no `select` da função não existe para quem chama. E não há função
+que alcance `medical_records` — o prontuário não entra no portal, nem por
+função.
+
+`src/modules/patient-portal/portalBoundary.test.ts` verifica essas **ausências**
+no texto do SQL, porque ausência não quebra nada quando desaparece: no dia em
+que alguém acrescentar a policy "para resolver um campo que faltou", nenhuma
+tela muda e o teste é o único que reclama.
+
+### As duas provas do vínculo
+
+O convite exige, na mesma transação:
+
+1. **posse do token** — 32 bytes aleatórios, guardados só como sha256;
+2. **controle do e-mail** — `auth.jwt() ->> 'email'` igual ao do convite.
+
+Ligar `auth.users.email` a `patients.email` seria mais simples e estaria errado:
+`patients.email` é digitado pela recepção sem verificação nenhuma, o mesmo
+endereço aparece em vários pacientes (mãe que cadastra o próprio nos filhos), e
+ninguém prova que o controla.
+
+### O shim de tipos
+
+`src/modules/patient-portal/infrastructure/portalDatabase.ts` descreve as
+relações e funções novas enquanto a migration não é aplicada.
+
+**Não edite `src/lib/supabase/database.types.ts`** — o cabeçalho dele diz
+"GERADO AUTOMATICAMENTE, NÃO EDITE À MÃO", e a próxima execução de
+`npm run db:types` sobrescreveria a edição em silêncio. Depois de aplicar,
+regenere e **remova o shim**: mantê-lo criaria uma segunda definição da mesma
+tabela, e a divergência entre as duas não daria erro — só resultado errado.
 
 ### O arquivo combinado é gerado
 

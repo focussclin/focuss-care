@@ -30,6 +30,11 @@ import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel
 import { PatientContactsPanel } from '@/modules/patients/ui/PatientContactsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
 import { PatientTagsPanel } from '@/modules/patients/ui/PatientTagsPanel'
+import { createInviteFromScreen } from '@/modules/patient-portal/actions/portalInviteScreen.actions'
+import { toPortalInviteSummaryDto } from '@/modules/patient-portal/application/toPatientPortalDto'
+import { isPatientPortalRepositoryError } from '@/modules/patient-portal/domain/PatientPortalRepositoryError'
+import { getPatientPortalRepository } from '@/modules/patient-portal/infrastructure/repository'
+import { PatientPortalPanel } from '@/modules/patient-portal/ui/PatientPortalPanel'
 import { getAppointmentRepository } from '@/modules/scheduling/infrastructure/repository'
 import {
   formatDayHeading,
@@ -144,7 +149,10 @@ export default async function PatientProfilePage({
     getPatientContactSource(),
   ])
 
-  const tagSource = await getPatientTagSource()
+  const [tagSource, portalRepository] = await Promise.all([
+    getPatientTagSource(),
+    getPatientPortalRepository(),
+  ])
 
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
@@ -159,6 +167,36 @@ export default async function PatientProfilePage({
         patient.id,
       )
     : []
+
+  /*
+   * Convites do portal — histórico, nunca o token.
+   *
+   * `listInvites` seleciona colunas nomeadas e `token_hash` fica de fora. O
+   * token em claro só existe no retorno da action que o cria, e só naquele
+   * instante: depois desta tela recarregar, ele não existe em lugar nenhum.
+   */
+  let portalInvites: Awaited<
+    ReturnType<NonNullable<typeof portalRepository>['listInvites']>
+  > = []
+  let portalSchemaPending = false
+
+  if (portalRepository && patientSource.isLive) {
+    try {
+      portalInvites = await portalRepository.listInvites(
+        patientSource.clinicId,
+        patient.id,
+      )
+    } catch (cause) {
+      if (
+        isPatientPortalRepositoryError(cause) &&
+        cause.reason === 'schema-not-ready'
+      ) {
+        portalSchemaPending = true
+      } else {
+        throw cause
+      }
+    }
+  }
 
   let tags = [] as Awaited<ReturnType<typeof tagSource.repository.listByPatient>>
   let tagsSchemaPending = false
@@ -272,6 +310,23 @@ export default async function PatientProfilePage({
             rows={consentRows}
             isLive={consentSource.isLive}
             canManage={canManageConsents}
+          />
+
+          {/*
+            `canManageConsents` é `patient.write` — a mesma permissão que a
+            action e a função do banco exigem para emitir o convite. As três
+            checagens existem e protegem coisas diferentes: esta esconde o que
+            não funcionaria, a action recusa cedo com mensagem boa, e a do banco
+            vale também para quem chamar o PostgREST direto.
+          */}
+          <PatientPortalPanel
+            patientId={patient.id}
+            defaultEmail={patient.email ?? null}
+            invites={portalInvites.map(toPortalInviteSummaryDto)}
+            canManage={canManageConsents}
+            isLive={patientSource.isLive}
+            schemaPending={portalSchemaPending}
+            onCreate={createInviteFromScreen}
           />
 
           {canReadAgenda ? (

@@ -43,6 +43,7 @@ const EXISTING_ROUTES = new Set([
   '/salas-e-recursos',
   '/tarefas',
   '/portal-profissional',
+  '/portal-paciente',
 ])
 
 describe('navItems', () => {
