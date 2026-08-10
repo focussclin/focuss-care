@@ -56,7 +56,7 @@ de estoque).
 | `identity` | **COMPLETO** | Cadastro, login, **recuperação de senha por e-mail**, onboarding (`create_clinic`), troca de clínica, aceite de convite, matriz papel × ação, perfil pessoal |
 | `patients` | **COMPLETO** | Cadastro, edição, arquivamento, busca server-side com cursor, seletor de paciente com busca no servidor, contatos vinculados com CRUD, consentimento LGPD |
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento e **reserva opcional de sala** — o campo só aparece quando a clínica tem salas, e `room_id` fica fora do payload quando não há |
-| `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar |
+| `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar e **sinais vitais** na ficha do paciente — append-only, sem classificação de valores |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura |
 | `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
@@ -2179,6 +2179,106 @@ tela de faturamento, não no catálogo.
 preço. Escrita recusada por policy ausente vira
 `write-forbidden` apontando `services`; a verificação está no
 `docs/03-banco-de-dados.md` §7.
+
+---
+
+## 8.27 Feature — Sinais vitais (10/08/2026)
+
+`vitals` estava no schema aplicado e **nada a tocava**. Painel na ficha do
+paciente, módulo `encounters`.
+
+### Por que esta, entre as que sobraram
+
+Reauditei as tabelas ainda sem superfície. `vitals` ganhou por dois motivos, e o
+segundo foi decisivo:
+
+- **Valor clínico direto**: a aferição é o que se lê antes de decidir conduta, e
+  o histórico é o que mostra tendência.
+- **Toda coluna traz a unidade no nome**: `weight_kg`, `height_cm`,
+  `temperature_c`, `glucose_mgdl`; pressão em mmHg, frequências por minuto,
+  saturação em porcentagem — universais. **Não há convenção a adivinhar**, ao
+  contrário de `price_lists` (que tem `professional_share_percent` E
+  `professional_share_cents`, sem dizer qual vence) e de `clinical_attachments`
+  (que depende do mesmo bucket ainda não provisionado dos documentos).
+
+### A permissão não foi escolhida por analogia
+
+A matriz em `src/lib/auth/permissions.ts` nomeia **"sinais vitais"** ao lado de
+check-in e fila, no comentário que abre `encounter.read`/`encounter.write`.
+Seguir a declaração explícita do produto é diferente do caso das alergias
+(§8.24), onde não havia nada escrito e a escolha por `record.*` ficou registrada
+como julgamento meu. As duas decisões são consistentes justamente por isso.
+
+### Nenhum valor é classificado
+
+Faixa de referência depende de idade, condição e diretriz: a pressão "alta" de
+um adulto é outra na criança, e a saturação aceitável de um paciente com DPOC
+não é a da população geral. **Nada é pintado de normal ou alterado** — seria um
+julgamento clínico que este código não tem como fazer e que pareceria oficial. A
+tela mostra o valor com a unidade e diz que a leitura é de quem atende.
+
+As faixas do schema **não são referência**, são plausibilidade: existem para
+pegar 700 kg e 400 °C. São generosas de propósito — febre de 41 °C, FC de 180 e
+saturação de 82 passam, porque recusar medida real é pior que aceitar dígito
+trocado.
+
+O **IMC** é calculado e exibido como número: a conta é exata (`kg/m²`). A faixa
+não aparece — "sobrepeso" não vale para criança, atleta nem gestante.
+
+### A tabela é append-only, e a aplicação respeita
+
+`vitals` não tem `updated_at` nem `deleted_at`. **Não existe editar nem
+excluir** em lugar nenhum do módulo: a medida é de um instante, e corrigir é
+registrar de novo. A porta do repositório não expõe os métodos, e há teste que
+verifica a ausência — um método ali seria convite para alguém sobrescrever a
+aferição original, que é a única prova do que se mediu naquela hora.
+
+Isso também dispensa a distinção `write-forbidden`/`not-found` dos outros
+módulos: sem UPDATE não existe o caso de zero linhas em silêncio.
+
+### Regras que o formulário aplica
+
+- **Ao menos uma medida.** Registro só com observação apareceria no histórico
+  como "aferição realizada" sem nada aferido.
+- **Pressão inteira ou nenhuma.** "120 por nada" não permite calcular média nem
+  diferencial, e parece completa na listagem.
+- **Diastólica menor que a sistólica.** Invertidas é erro que passa
+  despercebido: os dois números são plausíveis isolados.
+- **Campo em branco vira `null`, nunca zero** — e não aparece na linha do
+  histórico, em vez de virar travessão.
+- **Aferição no futuro é recusada** — na action, não no schema: `new Date()` num
+  schema o tornaria dependente do relógio no momento da importação.
+
+### O alvo é conferido no servidor, contra a clínica da sessão
+
+`patientId` e `encounterId` chegam do cliente, e as FKs de `vitals` são de
+**coluna única**: `patient_id → patients.id`, `encounter_id → encounters.id`.
+Elas provam que a linha existe em algum lugar do banco, **não que existe nesta
+clínica** — ao contrário das FKs compostas `(id, clinic_id)` usadas nas
+migrations locais, que prendem o tenant.
+
+Inserir com `clinic_id` do contexto não bastava: a aferição ficaria com o tenant
+certo apontando para o paciente errado — ausente da ficha que deveria mostrá-la
+e presente numa que não deveria. A action agora confirma o paciente antes de
+gravar, e o atendimento (quando informado) contra **clínica e paciente juntos**:
+dentro da mesma clínica, um `encounterId` de outro paciente também passaria pela
+FK, e a aferição ficaria pendurada no atendimento de outra pessoa.
+
+As duas consultas de verificação pedem só o `id` — conferir um vínculo não
+justifica trazer a ficha para a memória.
+
+A auditoria registra **o que** foi medido (paciente, atendimento, instante), e
+não os valores: repeti-los criaria uma segunda cópia de dado clínico numa tabela
+com outra permissão de leitura (`audit.read`, que `admin` tem e `record.read`
+não).
+
+### Estado
+
+`encounters` ganha esta superfície, com 69 testes: 15 de domínio, 12 de schema,
+16 de repositório, 15 de UI e 13 de action — estes últimos cobrindo a guarda de
+tenant do parágrafo acima. Nada de `price_lists`, `clinical_attachments`,
+`prescriptions` ou `message_templates` foi tocado — seguem sem superfície, e os
+motivos estão acima.
 
 ---
 

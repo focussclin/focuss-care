@@ -37,6 +37,13 @@ import {
 import { toAllergyDto } from '@/modules/patients/application/toAllergyDto'
 import { isAllergyRepositoryError } from '@/modules/patients/domain/AllergyRepository'
 import { allergyMessages } from '@/modules/patients/schemas/allergy.schema'
+import { recordVitalsFromPanel } from '@/modules/encounters/actions/recordVitals.action'
+import { toVitalsDto } from '@/modules/encounters/application/toVitalsDto'
+import type { VitalsEntry } from '@/modules/encounters/domain/Vitals'
+import { isVitalsRepositoryError } from '@/modules/encounters/domain/VitalsRepository'
+import { getVitalsSource } from '@/modules/encounters/infrastructure/vitals-repository'
+import { vitalsMessages } from '@/modules/encounters/schemas/vitals.schema'
+import { PatientVitalsPanel } from '@/modules/encounters/ui/PatientVitalsPanel'
 import { PatientAllergiesPanel } from '@/modules/patients/ui/PatientAllergiesPanel'
 import { PatientTagsPanel } from '@/modules/patients/ui/PatientTagsPanel'
 import { createInviteFromScreen } from '@/modules/patient-portal/actions/portalInviteScreen.actions'
@@ -198,6 +205,36 @@ export default async function PatientProfilePage({
     }
   }
 
+  /*
+   * Sinais vitais — `encounter.read` para ver, `encounter.write` para registrar.
+   *
+   * A permissão NÃO foi escolhida por analogia: a matriz de
+   * `src/lib/auth/permissions.ts` nomeia "sinais vitais" ao lado de check-in e
+   * fila, no comentário que abre `encounter.read`. Seguir a declaração
+   * explícita do produto é diferente do caso das alergias logo acima, onde não
+   * havia nada escrito e a escolha por `record.*` ficou registrada como
+   * julgamento.
+   */
+  const canReadVitals = isMember && can(session.role, 'encounter.read')
+  const canWriteVitals = isMember && can(session.role, 'encounter.write')
+  const vitalsSource = canReadVitals ? await getVitalsSource() : null
+
+  let vitals: VitalsEntry[] = []
+  let vitalsError: string | null = null
+
+  if (vitalsSource) {
+    try {
+      vitals = await vitalsSource.repository.listByPatient(
+        vitalsSource.clinicId,
+        patient.id,
+      )
+    } catch (cause) {
+      if (!isVitalsRepositoryError(cause)) throw cause
+      vitalsError =
+        cause.reason === 'forbidden' ? vitalsMessages.forbidden : vitalsMessages.unavailable
+    }
+  }
+
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
         consentSource.clinicId,
@@ -333,6 +370,17 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          {vitalsSource ? (
+            <PatientVitalsPanel
+              patientId={patient.id}
+              entries={vitals.map(toVitalsDto)}
+              onRecord={recordVitalsFromPanel}
+              canRecord={canWriteVitals}
+              isLive={vitalsSource.isLive}
+              loadError={vitalsError}
+            />
+          ) : null}
 
           {allergySource ? (
             <PatientAllergiesPanel
