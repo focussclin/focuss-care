@@ -227,6 +227,51 @@ dos repositórios, das actions e dos mocks.
 Continuam recebendo o autor as escritas que gravam `created_by` por `.insert()`
 direto — ali é a aplicação que preenche a coluna, não uma função do banco.
 
+## 3.55 `room_id` espera uma fatia — e o cadastro de salas não
+
+> Levantado em **10/08/2026**, contra `20260809_rooms.sql` (não aplicada).
+
+O módulo `rooms` está fechado: CRUD com Zod, RBAC `clinic.settings`, tenant
+explícito em toda consulta, remoção lógica por `deleted_at`, e testes de
+domínio, aplicação, repositório e tela.
+
+**A ligação com a agenda, não.** A migration faz três coisas que o código ainda
+não usa:
+
+```sql
+alter table public.appointments add column if not exists room_id uuid ...;
+create index appointments_room_idx on public.appointments (room_id, starts_at) ...;
+alter table public.appointments add constraint appointments_room_no_overlap
+  exclude using gist (clinic_id with =, room_id with =, tstzrange(...) with &&) ...;
+```
+
+Uma varredura por `room` em `src/modules/scheduling/` devolve **zero
+resultados**. Não há como escolher a sala ao marcar, nem ver qual sala foi
+usada. `room_id` nasce nulo em todo atendimento — e a constraint de
+sobreposição, que é `where room_id is not null`, nunca chega a ser avaliada.
+
+Isso não é defeito do cadastro: sem a migration aplicada, ligar a agenda a uma
+coluna que não existe seria pior. Mas é uma promessa parcial, e ela precisa
+estar escrita em algum lugar que não seja um comentário no SQL.
+
+### O que a fatia posterior precisa fazer
+
+1. `NewAppointmentData.roomId` (opcional) e o campo no `create`/`reschedule` de
+   `AppointmentRepository`.
+2. `SELECT_WITH_NAMES` passa a trazer `room_id` e o join com `rooms(name)`.
+3. Seletor de sala em `NewAppointmentModal`, **só com salas ativas** — e a lista
+   vem de `rooms`, que é outro módulo: a composição é na rota, pela regra 4.
+4. **Mapear `23P01`** (`exclusion_violation`) para uma recusa de domínio do tipo
+   "esta sala já está ocupada nesse horário". Hoje o adapter de agenda não o
+   conhece, e ele viraria "falha inesperada" — sobre o único conflito que a
+   pessoa consegue resolver sozinha, mudando a sala.
+5. Mostrar a sala no cartão da agenda e nos detalhes do atendimento.
+
+O item 4 é o que exige atenção: a sobreposição de PROFISSIONAL é verificada por
+uma consulta na aplicação antes de gravar (`listOverlapping`), e a de SALA será
+verificada pelo BANCO, na hora do insert. São dois mecanismos diferentes para o
+mesmo tipo de conflito, e a mensagem precisa sair igual para quem lê.
+
 ## 3.6 Portal do paciente: por que a leitura é por FUNÇÃO
 
 > `20260810_patient_portal.sql`, **não aplicada**.

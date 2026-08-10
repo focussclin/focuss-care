@@ -1,5 +1,6 @@
 'use server'
 
+import { archiveRoomAction } from './archiveRoom.action'
 import { createRoomAction } from './createRoom.action'
 import { toggleRoomActiveAction } from './toggleRoomActive.action'
 import { updateRoomAction } from './updateRoom.action'
@@ -22,5 +23,12 @@ export async function toggleRoomFromScreen(
   isActive: boolean,
 ): Promise<string | null> {
   const result = await toggleRoomActiveAction({ roomId, isActive })
+  return result.ok ? null : result.error.message
+}
+
+export async function archiveRoomFromScreen(
+  roomId: string,
+): Promise<string | null> {
+  const result = await archiveRoomAction({ roomId })
   return result.ok ? null : result.error.message
 }

@@ -41,6 +41,15 @@ export interface RoomUpdate {
   notes?: string | null
   is_active?: boolean
   updated_at?: string
+  /**
+   * Remoção lógica. Só `archive` a escreve, e sempre junto de `is_active`.
+   *
+   * A coluna existia na migration desde 09/08 e **nenhum caminho do produto a
+   * preenchia** — a leitura a respeitava (`.is('deleted_at', null)`) e nada a
+   * definia. Uma sala criada por engano ficava para sempre, e o nome dela
+   * também, porque o índice único é parcial nesta coluna.
+   */
+  deleted_at?: string | null
 }
 
 export interface RoomQueryError {

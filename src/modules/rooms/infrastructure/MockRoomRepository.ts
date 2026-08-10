@@ -45,6 +45,24 @@ export class MockRoomRepository implements RoomRepository {
     current.updatedAt = new Date()
     return current
   }
+
+  async archive(_clinicId: string, roomId: string): Promise<void> {
+    void _clinicId
+    const index = this.rooms.findIndex((item) => item.id === roomId)
+    if (index === -1) {
+      throw new RoomRepositoryError('not-found', 'recurso não encontrado')
+    }
+
+    /*
+     * Some da lista, como `deleted_at` faz no banco.
+     *
+     * A demonstração guarda em memória e não tem coluna: remover do array é o
+     * equivalente honesto de "toda leitura passa a ignorar". Guardar a linha
+     * com um sinalizador exigiria filtrá-la em `list`, e o filtro que importa é
+     * o do Postgres, não o daqui.
+     */
+    this.rooms.splice(index, 1)
+  }
 }
 
 function room(

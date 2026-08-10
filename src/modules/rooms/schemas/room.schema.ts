@@ -9,7 +9,14 @@ export const roomMessages = {
   kindRequired: 'Escolha o tipo do recurso.',
   capacityInvalid: 'A capacidade deve ser um número inteiro entre 1 e 999.',
   notesTooLong: 'Use no máximo 500 caracteres nas observações.',
-  duplicate: 'Já existe uma sala ou recurso com esse nome.',
+  /*
+   * A frase diz onde procurar, porque o índice único é PARCIAL
+   * (`where deleted_at is null`): uma sala DESATIVADA continua ocupando o nome,
+   * e ela aparece na lista com o rótulo "Inativa". Sem essa pista, quem acabou
+   * de desativar "Sala 1" e tenta criar outra conclui que o sistema está errado.
+   */
+  duplicate:
+    'Já existe uma sala ou recurso com esse nome — inclusive entre os inativos. Remova o antigo ou escolha outro nome.',
   forbidden: 'Você não tem permissão para gerenciar salas e recursos.',
   notFound: 'Este recurso não está mais disponível nesta clínica.',
   schemaPending:
@@ -64,6 +71,11 @@ export const toggleRoomActiveSchema = z.object({
 })
 export type ToggleRoomActiveInput = z.infer<typeof toggleRoomActiveSchema>
 
+export const archiveRoomSchema = z.object({
+  roomId: z.uuid(roomMessages.unexpected),
+})
+export type ArchiveRoomInput = z.infer<typeof archiveRoomSchema>
+
 export interface RoomDto {
   id: string
   name: string
@@ -71,6 +83,12 @@ export interface RoomDto {
   capacity: number | null
   notes: string | null
   isActive: boolean
+}
+
+/** Um tipo de recurso e o que a clínica tem dele. Grupo vazio não é montado. */
+export interface RoomGroupDto {
+  kind: RoomKind
+  rooms: readonly RoomDto[]
 }
 
 export interface RoomFormValues {

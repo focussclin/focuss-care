@@ -71,6 +71,7 @@ de estoque).
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
+| `rooms` | **BLOQUEADO** | CRUD completo com remoção lógica (`deleted_at`), RBAC `clinic.settings`, tenant explícito e 54 testes. **A ligação com a agenda é outra fatia**: `appointments.room_id` existe na migration e não tem uso no código. Migration não aplicada |
 | `patient-portal` | **EM ANDAMENTO** | Vínculo do paciente por convite (token com hash + prova de e-mail), leitura por função com lista fechada de colunas. **Prontuário nunca entra.** Migration pendente |
 | `portal` | **EM ANDAMENTO** | O dia de quem atende: agenda pessoal filtrada no banco por `current_professional_id()`, com "acontecendo agora" e "aguardando encerramento" derivados. **Só leitura, e não tem tabela própria** — é uma visão sobre `scheduling` e `tasks`. O painel de tarefas espera `clinic_tasks` |
 
@@ -1062,6 +1063,89 @@ quebra nada quando desaparece — por isso ela precisa de asserção.
 Aplicar a migration, e o **envio do convite por e-mail** — hoje a ficha gera e
 copia o link, e a clínica manda pelo canal que já usa. Um botão "enviar" que não
 envia faria a recepção acreditar que o paciente recebeu.
+
+---
+
+## 8.12 Feature — Salas e recursos, fechada (10/08/2026)
+
+O módulo já tinha domínio, adapter, actions, schema e tela. A auditoria achou
+**quatro defeitos**, e três deles eram silenciosos.
+
+### 1. Nada no produto escrevia `deleted_at`
+
+A coluna existia na migration desde 09/08, o adapter a respeitava na leitura
+(`.is('deleted_at', null)`), e **nenhum caminho a preenchia**.
+
+Consequência: uma sala criada por engano ficava para sempre. E o nome dela
+também — o índice único é `(clinic_id, lower(name)) where deleted_at is null`,
+então quem desativava "Sala 1" e tentava criar outra recebia "já existe uma
+sala com esse nome" apontando para uma que ele acabara de tirar do ar.
+
+`archive()` fecha isso. **Não é `delete`**: `appointments.room_id` referencia a
+linha, e apagar quebraria o histórico de onde cada pessoa foi atendida — que é
+por que a migration não cria policy de DELETE.
+
+Na tela, "Remover" só aparece para a sala **já inativa**. Desativar é
+reversível e remover não é; pôr as duas lado a lado com o mesmo peso convida ao
+clique errado justamente na que não se desfaz.
+
+### 2. A escrita perdia a razão da recusa
+
+`toWriteError` só reconhecia `23505`; todo o resto virava `unexpected`. Isso
+tornava **dois ramos de `roomFailure` inalcançáveis por qualquer escrita**:
+
+- com a migration pendente, criar uma sala respondia "não foi possível concluir
+  a ação agora" em vez de dizer que a tabela não existe — e a pessoa tentava de
+  novo, para sempre, sobre um problema que nenhuma tentativa resolve;
+- a recusa da policy virava "erro inesperado" em vez de "você não tem
+  permissão", que é a única das duas que diz o que fazer.
+
+A leitura já classificava certo. Era a escrita que jogava a informação fora.
+
+### 3. O contrato da tela afirmava algo falso
+
+`RoomsScreen.props.ts` dizia "já agrupadas e ordenadas **pela rota**". A rota
+só fazia `map(toRoomDto)`; o agrupamento era um `reduce` dentro do componente
+cliente, com a ordem saindo de um campo `order` no mapa de rótulos.
+
+A frase errada não custava render nenhum. Custava a próxima pessoa, que leria o
+contrato e passaria uma lista já ordenada esperando que fosse respeitada.
+
+Agora `toRoomGroups` agrupa no servidor, `ROOM_KIND_ORDER` mora no domínio, e a
+ordem tem teste — inclusive o de que **nenhuma sala se perde** e o de que a
+lista recebida não é reordenada no lugar.
+
+### 4. A mensagem de nome duplicado não dizia onde procurar
+
+O índice é parcial, então a sala **desativada** continua ocupando o nome. A
+mensagem agora diz "inclusive entre os inativos".
+
+### Integração com a agenda — ainda pendente, e documentada
+
+Uma varredura por `room` em `src/modules/scheduling/` devolve **zero
+resultados**. A migration cria `appointments.room_id`, o índice e a constraint
+de sobreposição por sala; nada no código escreve ou lê a coluna.
+
+O cadastro está fechado; a ligação com a agenda é outra fatia, especificada em
+`docs/supabase-migrations-runbook.md` §3.55. O item que exige atenção lá é
+mapear `23P01` (`exclusion_violation`): a sobreposição de **profissional** é
+checada por consulta na aplicação, e a de **sala** será checada pelo banco no
+insert — dois mecanismos para o mesmo tipo de conflito, e a mensagem precisa
+sair igual para quem lê.
+
+### A tela continua `availability: 'setup'`
+
+`20260809_rooms.sql` **não foi aplicada**. Remover o marcador agora prometeria
+persistência que o banco não sustenta — a tela declara a pendência, e o botão
+de gravar nasce desabilitado com o motivo no `title`.
+
+### Testes desta fatia — 54 no módulo
+
+Domínio (a ordem cobre todos os tipos, sem repetição), aplicação (agrupamento,
+ordem, grupo vazio, nada se perde, não muta a entrada), schema Zod (trim,
+limites de capacidade, enum, e **nenhum schema aceita `clinicId`**), repositório
+Supabase (tenant em toda consulta, `deleted_at` só em `archive`, remoção é
+update e nunca delete, e a classificação de erro na escrita) e tela.
 
 ---
 

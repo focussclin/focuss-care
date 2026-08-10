@@ -8,6 +8,7 @@ import {
   Plus,
   RotateCcw,
   ShieldAlert,
+  Trash2,
   UsersRound,
 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
@@ -16,6 +17,7 @@ import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Modal } from '@/components/ui/modal'
 import { SelectField } from '@/components/ui/select-field'
@@ -83,9 +85,10 @@ const emptyForm: FormState = {
 }
 
 export function RoomsScreen({
-  rooms,
+  groups,
   onSubmit,
   onToggleActive,
+  onArchive,
   isLive,
   schemaPending = false,
 }: RoomsScreenProps) {
@@ -93,26 +96,25 @@ export function RoomsScreen({
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<RoomDto | null>(null)
   const [confirming, setConfirming] = useState<RoomDto | null>(null)
+  const [archiving, setArchiving] = useState<RoomDto | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setSubmitting] = useState(false)
   const [isToggling, setToggling] = useState(false)
 
   const canMutate = isLive && !schemaPending
-  const groupedRooms = Object.entries(
-    rooms.reduce<Record<RoomKind, RoomDto[]>>(
-      (groups, room) => {
-        groups[room.kind].push(room)
-        return groups
-      },
-      {
-        consultorio: [],
-        sala_exame: [],
-        sala_procedimento: [],
-        equipamento: [],
-      },
-    ),
-  ).sort(([first], [second]) => kindMeta[first as RoomKind].order - kindMeta[second as RoomKind].order)
+
+  /*
+   * O agrupamento saiu daqui, para `application/toRoomGroups`.
+   *
+   * Ele era um `reduce` sobre a lista crua, com a ordem vindo de um `order`
+   * dentro de `kindMeta` — enquanto o JSDoc de `RoomsScreen.props.ts` afirmava
+   * "já agrupadas e ordenadas pela rota". A rota só fazia `map(toRoomDto)`.
+   *
+   * Agora o contrato é verdadeiro: a tela recebe grupos prontos, e a ordem tem
+   * teste.
+   */
+  const totalRooms = groups.reduce((total, group) => total + group.rooms.length, 0)
 
   function openCreate() {
     setEditing(null)
@@ -195,6 +197,24 @@ export function RoomsScreen({
     }
   }
 
+  /**
+   * Remoção — devolve a mensagem de erro, ou `null`.
+   *
+   * É o contrato do `ConfirmDialog`: só o `null` fecha. Uma recusa mantém o
+   * diálogo aberto com o motivo, em vez de fechar limpo sobre uma sala que
+   * continua no cadastro.
+   */
+  async function handleArchive(): Promise<string | null> {
+    if (!archiving) return null
+
+    const failure = await onArchive(archiving.id)
+    if (failure) return failure
+
+    setArchiving(null)
+    router.refresh()
+    return null
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -250,7 +270,7 @@ export function RoomsScreen({
         </p>
       ) : null}
 
-      {rooms.length === 0 ? (
+      {totalRooms === 0 ? (
         <Card>
           <EmptyState
             icon={Building2}
@@ -266,10 +286,8 @@ export function RoomsScreen({
         </Card>
       ) : (
         <div className="flex flex-col gap-5">
-          {groupedRooms
-            .filter(([, items]) => items.length > 0)
-            .map(([kind, items]) => {
-            const meta = kindMeta[kind as RoomKind]
+          {groups.map(({ kind, rooms: items }) => {
+            const meta = kindMeta[kind]
             return (
               <section key={kind} aria-labelledby={`rooms-${kind}`}>
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -342,6 +360,31 @@ export function RoomsScreen({
                             )}
                             {room.isActive ? 'Desativar' : 'Reativar'}
                           </Button>
+
+                          {/*
+                            Remover só aparece para a sala já INATIVA.
+
+                            Não é enfeite de fluxo: desativar é reversível e
+                            remover não é. Pôr as duas lado a lado com o mesmo
+                            peso convida ao clique errado justamente na que não
+                            se desfaz. Quem quer remover desativa antes — e nesse
+                            passo já viu o aviso de que o histórico permanece.
+                          */}
+                          {!room.isActive ? (
+                            <Button
+                              variant="ghost"
+                              className="flex-1 sm:flex-none"
+                              onClick={() => {
+                                setError(null)
+                                setArchiving(room)
+                              }}
+                              disabled={!canMutate}
+                              aria-label={`Remover ${room.name} do cadastro`}
+                            >
+                              <Trash2 aria-hidden className="size-4" />
+                              Remover
+                            </Button>
+                          ) : null}
                         </div>
                       </li>
                     ))}
@@ -357,6 +400,38 @@ export function RoomsScreen({
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
         <p>Esta tela configura recursos. A ocupação e os conflitos aparecem na Agenda quando uma sala é vinculada ao atendimento.</p>
       </div>
+
+      <ConfirmDialog
+        open={archiving !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null)
+        }}
+        title="Remover do cadastro"
+        description="A sala sai da lista e o nome fica livre de novo."
+        confirmLabel="Remover"
+        pendingLabel="Removendo…"
+        cancelLabel="Manter"
+        onConfirm={handleArchive}
+      >
+        <p className="text-aux leading-6 text-foreground">
+          <strong className="font-semibold">{archiving?.name}</strong> sai do
+          cadastro e deixa de aparecer aqui.
+        </p>
+
+        {/*
+          O que a remoção NÃO faz é a metade que evita ligação para o suporte.
+
+          `appointments.room_id` referencia esta linha: apagar de verdade
+          quebraria o histórico de onde cada pessoa foi atendida. Por isso a
+          linha permanece no banco com `deleted_at`, e quem espera que remover
+          limpe rastro precisa saber que não é isso.
+        */}
+        <p className="rounded-field border border-border-card bg-background px-3.5 py-2.5 text-label leading-5 text-muted">
+          Os atendimentos que já aconteceram nesta sala continuam no histórico,
+          com o registro de onde foram. O que muda é que ela não pode mais ser
+          escolhida — e o nome volta a ficar disponível para uma sala nova.
+        </p>
+      </ConfirmDialog>
 
       <Modal
         open={modalOpen}

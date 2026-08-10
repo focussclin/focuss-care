@@ -95,6 +95,32 @@ export class SupabaseRoomRepository implements RoomRepository {
     if (!row) throw notFound(roomId)
     return toRoom(row as unknown as RoomRow)
   }
+
+  async archive(clinicId: string, roomId: string): Promise<void> {
+    /*
+     * `deleted_at` E `is_active` juntos.
+     *
+     * O primeiro tira a linha de toda leitura e libera o nome no índice único
+     * parcial; o segundo evita que uma consulta que só filtre por `is_active`
+     * — hoje não existe, amanhã pode — devolva uma sala removida.
+     *
+     * `.is('deleted_at', null)` no filtro faz a segunda chamada não encontrar
+     * nada, e o `not-found` que sai daí é a resposta certa: já foi removida.
+     */
+    const now = new Date().toISOString()
+
+    const { data: row, error } = await this.client
+      .from('rooms')
+      .update({ deleted_at: now, is_active: false, updated_at: now })
+      .eq('clinic_id', clinicId)
+      .eq('id', roomId)
+      .is('deleted_at', null)
+      .select(ROOM_SELECT)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) throw notFound(roomId)
+  }
 }
 
 function toRoom(row: RoomRow): Room {
@@ -134,6 +160,22 @@ function toReadError(
   )
 }
 
+/**
+ * Recusa de ESCRITA, classificada com o mesmo critério da leitura.
+ *
+ * Antes, esta função só reconhecia `23505` e mandava todo o resto para
+ * `unexpected` — o que tornava dois ramos de `roomFailure` inalcançáveis a
+ * partir de qualquer escrita:
+ *
+ *  - com a migration pendente, criar uma sala respondia "não foi possível
+ *    concluir a ação agora" em vez de dizer que a tabela não existe. A pessoa
+ *    tentava de novo, para sempre, sobre um problema que nenhuma tentativa
+ *    resolve;
+ *  - a recusa da policy virava "erro inesperado" em vez de "você não tem
+ *    permissão", que é a única das duas que diz o que fazer.
+ *
+ * A leitura já classificava certo. Era a escrita que perdia a informação.
+ */
 function toWriteError(error: {
   code?: string | null
   message?: string | null
@@ -141,11 +183,13 @@ function toWriteError(error: {
   const code = error.code ?? undefined
   const message = error.message ?? 'sem mensagem'
 
+  // Nome repetido é o único conflito possível aqui, e o índice é parcial:
+  // `(clinic_id, lower(name)) where deleted_at is null`.
   if (code === '23505') {
     return new RoomRepositoryError('conflict', message, code)
   }
 
-  return new RoomRepositoryError('unexpected', message, code)
+  return new RoomRepositoryError(classify(error), message, code)
 }
 
 function classify(error: {
