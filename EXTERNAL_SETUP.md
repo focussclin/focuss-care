@@ -8,11 +8,13 @@
 
 ---
 
-## Estado atualizado — 08/08/2026
+## Estado atualizado — 09/08/2026
 
-As quatro migrations pendentes do projeto foram aplicadas no Supabase e
-verificadas estruturalmente. O arquivo `src/lib/supabase/database.types.ts`
-foi regenerado a partir do schema remoto e commitado em `851688e`.
+`npm run db:types` foi executado com segurança contra o projeto configurado e
+confirmou que as migrations dos módulos preparados ainda não estão refletidas
+integralmente no schema remoto. Não foi executado DDL remoto neste ambiente.
+As rotas existentes continuam declarando `schema-not-ready` e mantendo as
+escritas desabilitadas até a aplicação confirmada das migrations.
 
 **Nova exceção desta etapa (09/08/2026):** a migration
 `supabase/migrations/20260809_rooms.sql` ainda não foi aplicada. A implementação

@@ -1,6 +1,6 @@
 # Focuss Care — estado real do produto
 
-> Levantado contra o código em **08/08/2026**, branch `feat/telas-e-camada-supabase`.
+> Levantado contra o código em **09/08/2026**, branch `feat/telas-e-camada-supabase`.
 > Este documento descreve o que **existe e funciona**, não o que
 > está planejado — o plano é o [`docs/roadmap.md`](./docs/roadmap.md).
 >
@@ -8,13 +8,20 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual:** 1064 testes em 100 arquivos · `lint` limpo · `typecheck` limpo ·
-`build` compila com 42 rotas · OpenNext Cloudflare limpo.
+**Validação atual:** 1101 testes em 101 arquivos · `typecheck` limpo ·
+`build` compila com 42 rotas. ESLint dos arquivos alterados limpo; a execução
+global excedeu o limite local de 120s e deve ser repetida em CI.
 
-**Atualização do banco (08/08/2026):** as quatro migrations propostas foram
-aplicadas no Supabase: auditoria, glosas, proteção contra sobreposição de
-agendamentos e RPC de convites. As cinco verificações estruturais retornaram
-`true`, e os tipos locais foram regenerados no commit `851688e`.
+**Atualização do banco (09/08/2026):** o schema local foi consultado com
+`npm run db:types` e continua expondo 56 tabelas; as migrations de módulos
+preparados (CRM, formulários, estoque, compras, conciliação, salas, tarefas,
+documentos e cofre de integrações) não aparecem integralmente no schema remoto.
+Por isso o menu mantém essas rotas bloqueadas até a aplicação confirmada das
+migrations. A última consulta não alterou secrets nem executou DDL remoto.
+
+**Commits desta etapa:** `6c536e6` (reparo de policies privadas do Storage),
+`7027fcd` e `2c63eee` (gates de autorização), `2f53a01` (testes do repositório
+de estoque).
 
 ---
 
