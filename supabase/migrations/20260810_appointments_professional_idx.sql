@@ -1,0 +1,90 @@
+-- =============================================================================
+-- Índice da agenda POR PROFISSIONAL — Portal do profissional
+-- =============================================================================
+--
+-- NAO APLICADA. Revisar no Supabase antes de executar.
+--
+-- # O que ela sustenta
+--
+-- `/portal-profissional` responde "qual é o meu dia", e a consulta que faz isso
+-- e exatamente:
+--
+--   select ... from appointments
+--    where clinic_id = $1 and professional_id = $2
+--      and starts_at >= $3 and starts_at < $4
+--    order by starts_at;
+--
+-- Os indices que existem hoje em `appointments` atendem outros recortes — a
+-- agenda da clinica por intervalo, o historico de um paciente, a sala. Nenhum
+-- comeca por `(clinic_id, professional_id)`, entao esta consulta cai em
+-- varredura filtrada pela clinica inteira e descarta quase tudo.
+--
+-- Numa clinica com cinco profissionais e agenda de um ano, isso e ler cinco
+-- vezes mais linha do que se usa, a cada abertura do portal — que e a primeira
+-- tela que o profissional abre no dia.
+--
+-- # Por que a ordem das colunas e essa
+--
+-- `(clinic_id, professional_id, starts_at)`:
+--
+--  * `clinic_id` primeiro porque TODA consulta do produto o carrega, e porque
+--    e o que a RLS avalia — o indice serve os dois.
+--  * `professional_id` em seguida, que e a igualdade seguinte.
+--  * `starts_at` por ultimo, e nao no meio: com as duas primeiras fixadas por
+--    igualdade, o Postgres percorre o intervalo JA ORDENADO por ele, e o
+--    `order by starts_at` sai de graca.
+--
+-- Inverter `professional_id` e `starts_at` faria o intervalo ser varrido antes
+-- do filtro por pessoa, que e o desperdicio que esta migration existe para
+-- eliminar.
+--
+-- # Sem WHERE parcial
+--
+-- Seria tentador restringir a `status <> 'canceled'`. Nao: o portal mostra o
+-- cancelado do dia de proposito — o profissional precisa saber que o horario
+-- das 14h vagou, e nao apenas que ele sumiu da lista.
+--
+-- -----------------------------------------------------------------------------
+-- NAO DESTRUTIVA
+-- -----------------------------------------------------------------------------
+--
+-- So cria indice. Nao altera coluna, policy, dado ou funcao. `if not exists`
+-- torna a reaplicacao inofensiva.
+--
+-- `concurrently` NAO e usado porque ele nao roda dentro de transacao, e o
+-- padrao das migrations deste projeto e `begin`/`commit`. Em tabela do tamanho
+-- de `appointments` numa clinica, o lock de escrita e curto. Se a tabela ja
+-- estiver grande no momento de aplicar, rode a versao concorrente FORA deste
+-- arquivo:
+--
+--   create index concurrently if not exists appointments_professional_day_idx
+--     on public.appointments (clinic_id, professional_id, starts_at);
+-- =============================================================================
+
+begin;
+
+create index if not exists appointments_professional_day_idx
+  on public.appointments (clinic_id, professional_id, starts_at);
+
+commit;
+
+-- -----------------------------------------------------------------------------
+-- Verificar DEPOIS de aplicar
+-- -----------------------------------------------------------------------------
+--
+-- 1. O indice existe:
+--      select indexname, indexdef from pg_indexes
+--       where tablename = 'appointments'
+--         and indexname = 'appointments_professional_day_idx';
+--
+-- 2. O planejador o usa. Com uma clinica e um profissional reais:
+--      explain analyze
+--      select id from public.appointments
+--       where clinic_id = '<uuid>' and professional_id = '<uuid>'
+--         and starts_at >= now() and starts_at < now() + interval '7 days'
+--       order by starts_at;
+--
+--    Espera-se `Index Scan using appointments_professional_day_idx`, e
+--    NENHUM `Sort` acima dele — se o `Sort` aparecer, a ordem das colunas do
+--    indice nao esta servindo ao `order by`, e o cabecalho acima esta errado.
+-- =============================================================================

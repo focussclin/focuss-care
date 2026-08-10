@@ -54,10 +54,16 @@ export interface NavItem {
    * Rotas que não existem ficam visíveis, mas nunca parecem clicáveis.
    *
    * O texto delas diz "não faz parte desta versão", e não "em breve". Nenhum
-   * destes itens — `/portal-paciente` e `/portal-profissional` — aparece
-   * em fatia nenhuma do roadmap: "em breve" afirmava um cronograma que não
-   * existe, e é o mesmo defeito que fez `/pagamentos` e `/caixa` prometerem
-   * recursos que já estavam entregues.
+   * destes itens — hoje só `/portal-paciente` — aparece em fatia nenhuma do
+   * roadmap: "em breve" afirmava um cronograma que não existe, e é o mesmo
+   * defeito que fez `/pagamentos` e `/caixa` prometerem recursos que já
+   * estavam entregues.
+   *
+   * `/portal-profissional` SAIU desta lista em 10/08/2026: a tela existe, lê
+   * `appointments` — tabela que o banco tem — e filtra pelo
+   * `current_professional_id()` da sessão. O painel de tarefas depende de
+   * `clinic_tasks` e declara a própria pendência sem derrubar o resto, então
+   * o item não é `availability: 'setup'`: a função principal funciona.
    */
   disabled?: boolean
   /** A tela pode ser revisada, mas ainda depende de migration ou setup externo. */
@@ -105,7 +111,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', permission: 'encounter.read', availability: 'setup' },
   { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle, section: 'relationship' },
   { label: 'Portal do paciente', href: '/portal-paciente', icon: ContactRound, section: 'relationship', disabled: true },
-  { label: 'Portal do profissional', href: '/portal-profissional', icon: UserRoundCog, section: 'relationship', disabled: true },
+  { label: 'Portal do profissional', href: '/portal-profissional', icon: UserRoundCog, section: 'relationship', permission: 'appointment.read' },
 
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },

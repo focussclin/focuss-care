@@ -25,6 +25,19 @@ export class MockTaskRepository implements TaskRepository {
     )
   }
 
+  async listAssignedTo(
+    _clinicId: string,
+    assigneeId: string,
+  ): Promise<Task[]> {
+    const open = await this.list()
+
+    return open.filter(
+      (task) =>
+        task.assignee?.id === assigneeId &&
+        (task.status === 'pending' || task.status === 'in_progress'),
+    )
+  }
+
   async create(
     _clinicId: string,
     _createdBy: string,

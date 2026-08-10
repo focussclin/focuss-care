@@ -146,6 +146,38 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     return (data as unknown as AppointmentJoinRow[]).map(toAppointment)
   }
 
+  async listByProfessionalRange(
+    clinicId: string,
+    professionalId: string,
+    from: Date,
+    to: Date,
+  ): Promise<Appointment[]> {
+    /*
+     * Os DOIS filtros são de segurança, e não só de recorte.
+     *
+     * `clinic_id` é a fronteira de tenant, e a RLS o repete — defesa em
+     * profundidade, como no resto do produto. `professional_id` é o que impede
+     * o portal de um profissional de trazer a agenda dos colegas: a RLS de
+     * `appointments` isola a clínica, não a pessoa, então sem esta linha a
+     * consulta voltaria com tudo e a tela é que esconderia. Esconder no
+     * navegador não esconde — o payload do RSC continua legível.
+     */
+    const { data, error } = await this.client
+      .from('appointments')
+      .select(SELECT_WITH_NAMES)
+      .eq('clinic_id', clinicId)
+      .eq('professional_id', professionalId)
+      .gte('starts_at', from.toISOString())
+      .lt('starts_at', to.toISOString())
+      .order('starts_at', { ascending: true })
+
+    if (error) {
+      throw new Error(`Falha ao carregar a agenda do profissional: ${error.message}`)
+    }
+
+    return (data as unknown as AppointmentJoinRow[]).map(toAppointment)
+  }
+
   async listByPatient(
     clinicId: string,
     patientId: string,

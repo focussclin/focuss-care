@@ -42,6 +42,7 @@ const EXISTING_ROUTES = new Set([
   '/conciliacao',
   '/salas-e-recursos',
   '/tarefas',
+  '/portal-profissional',
 ])
 
 describe('navItems', () => {

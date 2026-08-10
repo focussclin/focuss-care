@@ -59,6 +59,8 @@ function createFakeClient(results: {
   businessHours?: unknown
   searchPatients?: unknown[]
   searchRows?: unknown[]
+  /** Linhas devolvidas pelas consultas de INTERVALO (`gte` + `lt`). */
+  rangeRows?: unknown[]
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
@@ -83,6 +85,7 @@ function createFakeClient(results: {
       'not',
       'lt',
       'gt',
+      'gte',
       'limit',
       'ilike',
       'in',
@@ -153,13 +156,24 @@ function createFakeClient(results: {
       onFulfilled: (value: unknown) => unknown,
       onRejected?: (reason: unknown) => unknown,
     ) => {
-      // A consulta de sobreposicao e a unica que usa `lt` + `gt` (A-02).
-      const isOverlapProbe = calls.some(
-        (call) => call.query === index && call.method === 'lt',
-      )
+      /*
+       * A sonda de sobreposicao usa `lt('starts_at')` + `gt('ends_at')`.
+       *
+       * Detectar so por `lt` era ambiguo: as consultas de INTERVALO
+       * (`listByRange`, `listByProfessionalRange`) usam `gte` + `lt`, e cairiam
+       * aqui devolvendo `overlapping`. Nenhum teste cobria intervalo ate agora,
+       * entao a ambiguidade nunca apareceu — exigir os DOIS metodos e o que
+       * separa as duas familias.
+       */
+      const inThisQuery = (method: string) =>
+        calls.some((call) => call.query === index && call.method === method)
+
+      const isOverlapProbe = inThisQuery('lt') && inThisQuery('gt')
 
       const payload = isOverlapProbe
         ? { data: results.overlapping ?? [], error: null }
+        : inThisQuery('gte')
+        ? { data: results.rangeRows ?? [], error: null }
         : table === 'patients' && calls.some((call) => call.method === 'ilike')
           ? { data: results.searchPatients ?? [], error: null }
           : table === 'appointments' && calls.some((call) => call.method === 'in')
@@ -637,5 +651,118 @@ describe('SupabaseAppointmentRepository.cancel', () => {
     expect(fake.ofTable('appointments')).toContainEqual(
       expect.objectContaining({ method: 'neq', args: ['status', 'canceled'] }),
     )
+  })
+})
+
+/**
+ * A agenda de UMA pessoa — o que o Portal do profissional lê.
+ *
+ * O que estes testes prendem não é o mapeamento (isso o resto do arquivo já
+ * cobre): é **onde o filtro acontece**. `listByProfessionalRange` existe
+ * separado de `listByRange` porque `professional_id` precisa ir ao banco, e não
+ * a um `.filter()` depois. A RLS de `appointments` isola a clínica, não a
+ * pessoa: sem esta cláusula, a consulta volta com a agenda dos colegas e só a
+ * tela esconde — e esconder no navegador não esconde, porque o payload do RSC
+ * continua legível para quem abrir a aba de rede.
+ */
+describe('listByProfessionalRange', () => {
+  const FROM = new Date('2026-08-10T00:00:00.000Z')
+  const TO = new Date('2026-08-11T00:00:00.000Z')
+
+  it('filtra por clínica E por profissional, no banco', async () => {
+    const fake = createFakeClient({ rangeRows: [] })
+
+    await new SupabaseAppointmentRepository(fake.client).listByProfessionalRange(
+      CLINIC,
+      PROFESSIONAL,
+      FROM,
+      TO,
+    )
+
+    const chamadas = fake.ofTable('appointments')
+
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({
+        method: 'eq',
+        args: ['professional_id', PROFESSIONAL],
+      }),
+    )
+  })
+
+  it('recorta o intervalo com [início, fim)', async () => {
+    /*
+     * `gte` no começo e `lt` no fim, e não `lte`: o fim do intervalo é a
+     * meia-noite do dia seguinte, e `lte` traria o atendimento marcado
+     * exatamente às 00:00 de amanhã para o dia de hoje.
+     */
+    const fake = createFakeClient({ rangeRows: [] })
+
+    await new SupabaseAppointmentRepository(fake.client).listByProfessionalRange(
+      CLINIC,
+      PROFESSIONAL,
+      FROM,
+      TO,
+    )
+
+    const chamadas = fake.ofTable('appointments')
+
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({
+        method: 'gte',
+        args: ['starts_at', FROM.toISOString()],
+      }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({
+        method: 'lt',
+        args: ['starts_at', TO.toISOString()],
+      }),
+    )
+    expect(chamadas).not.toContainEqual(
+      expect.objectContaining({ method: 'lte' }),
+    )
+  })
+
+  it('pede ao banco a ordem cronológica', async () => {
+    const fake = createFakeClient({ rangeRows: [] })
+
+    await new SupabaseAppointmentRepository(fake.client).listByProfessionalRange(
+      CLINIC,
+      PROFESSIONAL,
+      FROM,
+      TO,
+    )
+
+    expect(fake.ofTable('appointments')).toContainEqual(
+      expect.objectContaining({
+        method: 'order',
+        args: ['starts_at', { ascending: true }],
+      }),
+    )
+  })
+
+  it('mapeia a linha com nome do paciente e do profissional', async () => {
+    const fake = createFakeClient({ rangeRows: [joinRow()] })
+
+    const [appointment] = await new SupabaseAppointmentRepository(
+      fake.client,
+    ).listByProfessionalRange(CLINIC, PROFESSIONAL, FROM, TO)
+
+    expect(appointment.patientName).toBe('Marina Costa')
+    expect(appointment.professionalName).toBe('Dra. Helena')
+    expect(appointment.durationMinutes).toBe(30)
+  })
+
+  it('dia sem nada devolve lista vazia, não erro', async () => {
+    const fake = createFakeClient({ rangeRows: [] })
+
+    const rows = await new SupabaseAppointmentRepository(
+      fake.client,
+    ).listByProfessionalRange(CLINIC, PROFESSIONAL, FROM, TO)
+
+    expect(rows).toEqual([])
   })
 })

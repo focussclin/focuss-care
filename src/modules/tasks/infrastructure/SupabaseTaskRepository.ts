@@ -106,6 +106,27 @@ export class SupabaseTaskRepository implements TaskRepository {
     return (data ?? []).map((row) => toTask(row as unknown as TaskRow))
   }
 
+  async listAssignedTo(clinicId: string, assigneeId: string): Promise<Task[]> {
+    const { data, error } = await this.client
+      .from('clinic_tasks')
+      .select(TASK_SELECT)
+      .eq('clinic_id', clinicId)
+      .eq('assigned_to', assigneeId)
+      /*
+       * Só o que ainda pede alguma coisa. `done` e `canceled` ficam de fora: o
+       * portal responde "o que falta eu fazer", e as duas já não faltam — a
+       * primeira porque foi feita, a segunda porque alguém decidiu não fazer.
+       */
+      .in('status', ['pending', 'in_progress'])
+      .order('priority', { ascending: true })
+      .order('due_at', { ascending: true })
+      .limit(TASK_ROW_CAP)
+
+    if (error) throw toTaskError(error)
+
+    return (data ?? []).map((row) => toTask(row as unknown as TaskRow))
+  }
+
   async create(
     clinicId: string,
     createdBy: string,

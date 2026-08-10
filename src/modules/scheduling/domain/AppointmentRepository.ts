@@ -54,6 +54,27 @@ export interface AppointmentRepository {
   /** Atendimentos de um intervalo [from, to). */
   listByRange(clinicId: string, from: Date, to: Date): Promise<Appointment[]>
 
+  /**
+   * Atendimentos de UM profissional no intervalo [from, to).
+   *
+   * Existe separado de `listByRange` em vez de virar um parâmetro opcional
+   * porque o filtro precisa acontecer **no banco**. Carregar a agenda inteira
+   * da clínica e filtrar em memória entregaria ao portal de um profissional a
+   * lista de pacientes de todos os outros — pelo payload, mesmo que a tela
+   * mostrasse só os dele.
+   *
+   * `professionalId` é `professionals.id`, e não o id de usuário: sai de
+   * `current_professional_id()`, a mesma função que as policies consultam.
+   * Recepção e financeiro não têm linha em `professionals`, então para eles a
+   * resposta é uma lista vazia — que é o correto, e não um erro.
+   */
+  listByProfessionalRange(
+    clinicId: string,
+    professionalId: string,
+    from: Date,
+    to: Date,
+  ): Promise<Appointment[]>
+
   listByPatient(clinicId: string, patientId: string): Promise<Appointment[]>
 
   listProfessionals(clinicId: string): Promise<Professional[]>

@@ -21,10 +21,21 @@
 | 3 | `20260808_appointments_no_overlap.sql` | **Aplicada e verificada** | Corrida de sobreposição protegida pelo banco |
 | 4 | `20260807_create_invitation_rpc.sql` | **Aplicada e verificada** | Emissão de convite disponível pela aplicação |
 | 5 | Índices de `patients` (P-02b) | **Não escrita** | Filtro "Última visita" fica desabilitado |
+| 6 | `20260810_appointments_professional_idx.sql` | **Não aplicada** | `/portal-profissional` funciona, mas a consulta do dia varre a agenda da clínica inteira |
 
 A #5 não existe como arquivo de propósito: escrevê-la exige saber quais índices
 e extensões o banco já tem, e criar índice duplicado é custo sem ganho. As
 consultas de diagnóstico estão em [`07-cadastro-de-pacientes.md`](./07-cadastro-de-pacientes.md) §8.11.
+
+**A #6 NÃO está em `APLICAR_TUDO_20260809.sql`**, e isso é deliberado: aquele
+arquivo é o lote de 09/08, e misturar uma migration de outro dia nele
+desmentiria o próprio nome. Ela é de 10/08, cria **apenas um índice** e é
+independente das dez — pode ser colada antes ou depois, e reaplicá-la é
+inofensivo (`if not exists`).
+
+O custo de esquecê-la é silencioso, que é o motivo desta linha existir: o portal
+funciona sem ela. Só fica mais lento a cada profissional a mais na clínica, e
+lentidão não dá erro em lugar nenhum.
 
 ---
 

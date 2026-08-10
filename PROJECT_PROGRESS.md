@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (10/08/2026):** 1135 testes em 106 arquivos · `typecheck`,
+**Validação atual (10/08/2026):** 1177 testes em 109 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -71,6 +71,7 @@ de estoque).
 | `insights` | **COMPLETO** | Alertas operacionais derivados de métricas reais, com fonte, critérios explícitos e links para a ação relacionada |
 | `notifications` | **COMPLETO** | Centro por usuário, marcação individual/em lote, avisos operacionais persistidos e preferência de silenciamento por clínica |
 | `patient-tags` | **BLOQUEADO** | Tags administrativas tenant-scoped preparadas na ficha 360; migration ainda não aplicada |
+| `portal` | **EM ANDAMENTO** | O dia de quem atende: agenda pessoal filtrada no banco por `current_professional_id()`, com "acontecendo agora" e "aguardando encerramento" derivados. **Só leitura, e não tem tabela própria** — é uma visão sobre `scheduling` e `tasks`. O painel de tarefas espera `clinic_tasks` |
 
 ---
 
@@ -113,6 +114,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/whatsapp` | **EM ANDAMENTO** | Banco (integrations) — estado de conexão | Membro |
 | `/chat-ia` | **EM ANDAMENTO** | Banco (integrations) — estado e regra P9 | Membro |
 | `/automacoes` | **EM ANDAMENTO** | Banco (integrations) — regras reais, sem executor | Membro |
+| `/portal-profissional` | **EM ANDAMENTO** | Banco (scheduling) — agenda do dia filtrada por `current_professional_id()`, real e funcionando. O painel de tarefas depende de `clinic_tasks` e declara a pendência sem derrubar o resto | `appointment.read`; sem cadastro em `professionals` a tela explica em vez de mostrar zero |
 
 ---
 
@@ -872,6 +874,101 @@ correção.
 
 **`CommandPalette`**: `role="listbox"` com `<li>` envolvendo
 `<button role="option">` é estrutura ARIA inválida. Funciona na prática.
+
+---
+
+## 8.10 Feature — Portal do profissional (10/08/2026)
+
+`/portal-profissional` sai de `disabled: true` e entra no menu com
+`permission: 'appointment.read'`. **Não é `availability: 'setup'`**: a função
+principal lê `appointments`, tabela que o banco tem, e funciona hoje.
+
+### O que ela responde, e por que não é `/agenda` com filtro
+
+`/agenda` é a mesa da recepção — mostra a clínica inteira porque quem marca
+precisa comparar profissionais para encaixar. Quem atende não usa nada disso e
+paga por ele: abre uma grade de cinco colunas, procura o próprio nome, e faz
+isso de pé, entre um paciente e outro.
+
+O portal responde uma pergunta só: **o que eu tenho pela frente agora**.
+
+### As três identidades, e o erro fácil entre elas
+
+| Identidade | Origem | Para quê |
+|---|---|---|
+| Papel | `current_clinic_role()` | Autoriza. `finance` não entra |
+| `professionals.id` | `current_professional_id()` | Filtra a **agenda** |
+| `profiles.id` | sessão | Filtra as **tarefas** |
+
+Confundir as duas últimas é o erro que não dá erro: `clinic_tasks.assigned_to`
+referencia `profiles`, então filtrar tarefa por `professionals.id` devolveria
+zero para todo mundo, em silêncio.
+
+### Segurança multi-tenant
+
+Os dois filtros vão ao **banco**, não a um `.filter()` depois:
+
+- `listByProfessionalRange` → `.eq('clinic_id')` **e** `.eq('professional_id')`
+- `listAssignedTo` → `.eq('clinic_id')` **e** `.eq('assigned_to')`
+
+A RLS de `appointments` isola a clínica, não a pessoa. Sem a segunda cláusula a
+consulta voltaria com a agenda dos colegas e só a tela esconderia — e esconder
+no navegador não esconde, porque o payload do RSC continua legível.
+
+### Os três "vazios" que a tela não confunde
+
+1. **Dia livre** — lista vazia legítima. Se já houve atendimentos, o texto muda
+   para "nada mais marcado", em vez de dizer que o dia foi vazio.
+2. **Sem cadastro de profissional** — um `admin` tem `appointment.read` e entra
+   legitimamente. Ele não tem linha em `professionals` porque não atende. A tela
+   explica e aponta para `/equipe`; a consulta nem acontece.
+3. **`clinic_tasks` ausente** — declarado **só no painel lateral**. A agenda ao
+   lado é real, e derrubar o portal por causa dela trocaria uma ausência parcial
+   por uma total.
+
+### Um quarto grupo que a primeira versão perdia
+
+`splitDay` começou com `current`/`upcoming`/`finished`, e um atendimento que
+começou às 8h e ninguém encerrou não era nenhum dos três — **sumia**. Sumir é o
+pior desfecho, porque a ausência se parece com "não havia nada marcado".
+
+O grupo `unclosed` existe para incomodar: nesse estado o atendimento não entra
+no faturamento e não libera a sala, e só quem atendeu pode encerrar. Um teste
+verifica que a soma dos quatro grupos é o total, com os sete estados do enum.
+
+### Camadas
+
+| Camada | Arquivo |
+|---|---|
+| Domínio | `portal/domain/ProfessionalDay.ts` — derivação pura, `now` por parâmetro |
+| Aplicação | `portal/application/toPortalDto.ts` — DTO serializável, rótulos no servidor |
+| Contrato | `portal/schemas/portal.schema.ts` — **sem Zod**: o portal não escreve nada |
+| UI | `portal/ui/PortalProfissionalScreen.tsx` — Server Component, sem estado |
+| Rota | `app/(app)/portal-profissional/` — composição dos módulos, `+ loading.tsx` |
+
+`portal` não importa o interior de `scheduling` nem de `tasks` (regra 4): a
+composição acontece na rota, e o domínio tem um `PortalTask` próprio com os
+cinco campos que a tela usa.
+
+### Migration
+
+`20260810_appointments_professional_idx.sql` — **não aplicada**, aditiva, só
+cria `(clinic_id, professional_id, starts_at)`. O portal funciona sem ela; só
+varre a agenda da clínica inteira a cada abertura. Fica **fora** do
+`APLICAR_TUDO_20260809`, que é o lote de outro dia — registrada na tabela §0 do
+runbook.
+
+### Testes desta fatia — 42 novos
+
+14 no domínio (partição completa, bordas do relógio, atendimento não encerrado),
+6 no `listByProfessionalRange` (os dois filtros no banco, intervalo `[início,
+fim)`), 11 no `SupabaseTaskRepository` — que **não tinha teste nenhum** —, e 13
+na tela (os três vazios, pendência isolada, cancelado visível).
+
+Corrigido de quebra: o fake de `SupabaseAppointmentRepository.test.ts`
+detectava a sonda de sobreposição só por `.lt()`, e as consultas de intervalo
+usam `gte` + `lt` — cairiam no ramo errado. Nenhum teste cobria intervalo até
+agora, então a ambiguidade nunca tinha aparecido.
 
 ---
 

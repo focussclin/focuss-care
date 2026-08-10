@@ -36,6 +36,22 @@ export class MockAppointmentRepository implements AppointmentRepository {
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
   }
 
+  async listByProfessionalRange(
+    _clinicId: string,
+    professionalId: string,
+    from: Date,
+    to: Date,
+  ): Promise<Appointment[]> {
+    return getAppointments(this.today)
+      .filter(
+        (appointment) =>
+          appointment.professionalId === professionalId &&
+          appointment.startsAt >= from &&
+          appointment.startsAt < to,
+      )
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+  }
+
   async listByPatient(
     _clinicId: string,
     patientId: string,
