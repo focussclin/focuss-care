@@ -107,6 +107,8 @@ export function AgendaScreen({
   const [createTime, setCreateTime] = useState('09:00')
   /** Recusa do cancelamento — exibida no modal de detalhes, não engolida. */
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [isCanceling, setCanceling] = useState(false)
   /**
    * Atendimento sendo REMARCADO, ou null quando o formulário está criando.
    *
@@ -298,28 +300,66 @@ export function AgendaScreen({
             : item,
         ),
       )
-      setSelected(null)
+      closeDetails()
       return
     }
 
     setCancelError(null)
+    setCanceling(true)
 
-    const result = await cancelAppointmentAction({
-      appointmentId: appointment.id,
-    })
+    try {
+      const result = await cancelAppointmentAction({
+        appointmentId: appointment.id,
+      })
 
-    if (!result.ok) {
-      setCancelError(result.error.message)
-      return
+      /*
+       * A recusa mantém o modal ABERTO — é a correção que dá sentido ao
+       * `cancelError`.
+       *
+       * Até 10/08/2026 ele era prop de um modal que já tinha sido fechado
+       * quando a resposta chegava, então nenhuma recusa aparecia em tela
+       * nenhuma. O atendimento continuava marcado, a agenda continuava igual, e
+       * a pessoa saía convencida de que havia cancelado — que é o pior desfecho
+       * possível para uma clínica: o paciente aparece no horário que ninguém
+       * esperava mais, ou o horário fica preso sem ninguém saber.
+       */
+      if (!result.ok) {
+        setCancelError(result.error.message)
+        return
+      }
+
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointment.id ? fromDto(result.data) : item,
+        ),
+      )
+      closeDetails()
+      router.refresh()
+    } finally {
+      setCanceling(false)
     }
+  }
 
-    setAppointments((current) =>
-      current.map((item) =>
-        item.id === appointment.id ? fromDto(result.data) : item,
-      ),
-    )
+  /** Fecha os detalhes e zera o passo de confirmação junto. */
+  function closeDetails() {
     setSelected(null)
-    router.refresh()
+    setConfirmingCancel(false)
+    setCancelError(null)
+  }
+
+  /*
+   * "Cancelar" no menu da lista abre a MESMA confirmação do modal.
+   *
+   * Antes ele chamava `handleCancel` direto, no `onSelect` do dropdown: um
+   * clique apagava o atendimento da agenda sem nenhuma pergunta, enquanto o
+   * caminho pelo modal — a três cliques de distância — exigia confirmação e
+   * dizia "esta ação não pode ser desfeita". A mesma ação destrutiva tinha duas
+   * portas com exigências diferentes, e a mais fácil era a desprotegida.
+   */
+  function handleRequestCancel(appointment: Appointment) {
+    setCancelError(null)
+    setSelected(appointment)
+    setConfirmingCancel(true)
   }
 
   /**
@@ -492,7 +532,7 @@ export function AgendaScreen({
           today={today}
           onSelectAppointment={setSelected}
           onReschedule={handleReschedule}
-          onCancel={handleCancel}
+          onCancel={handleRequestCancel}
         />
       ) : null}
 
@@ -521,14 +561,14 @@ export function AgendaScreen({
       <AppointmentDetailsModal
         appointment={selected}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelected(null)
-            setCancelError(null)
-          }
+          if (!open) closeDetails()
         }}
         onReschedule={handleReschedule}
         onCancel={handleCancel}
         cancelError={cancelError}
+        confirmingCancel={confirmingCancel}
+        onConfirmingCancelChange={setConfirmingCancel}
+        isCanceling={isCanceling}
       />
     </div>
   )

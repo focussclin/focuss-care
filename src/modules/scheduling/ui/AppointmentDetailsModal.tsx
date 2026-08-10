@@ -1,7 +1,6 @@
 'use client'
 
 import { CalendarClock, Stethoscope, User } from 'lucide-react'
-import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -16,6 +15,13 @@ export interface AppointmentDetailsModalProps {
   appointment: Appointment | null
   onOpenChange: (open: boolean) => void
   onReschedule: (appointment: Appointment) => void
+  /**
+   * Cancela, e NÃO fecha o modal.
+   *
+   * Quem fecha é a tela, e só depois de o servidor confirmar. Enquanto esta
+   * promessa não resolve, o modal continua aberto com o botão travado — é o que
+   * dá lugar para a recusa aparecer.
+   */
   onCancel: (appointment: Appointment) => void | Promise<void>
   /**
    * Recusa do cancelamento pelo servidor.
@@ -25,6 +31,18 @@ export interface AppointmentDetailsModalProps {
    * continuaria marcado sem ninguém saber por quê.
    */
   cancelError?: string | null
+  /**
+   * Passo de confirmação, CONTROLADO pela tela.
+   *
+   * Era `useState` daqui dentro, e por isso o menu da lista não tinha como
+   * chegar nele: "Cancelar" no dropdown chamava a action direto, sem passar por
+   * confirmação nenhuma. Com o estado na tela, os dois caminhos entram no mesmo
+   * lugar — o da lista já abre confirmando.
+   */
+  confirmingCancel: boolean
+  onConfirmingCancelChange: (confirming: boolean) => void
+  /** Cancelamento em voo: trava os botões e evita disparo duplicado. */
+  isCanceling?: boolean
 }
 
 /**
@@ -38,9 +56,10 @@ export function AppointmentDetailsModal({
   onReschedule,
   onCancel,
   cancelError = null,
+  confirmingCancel,
+  onConfirmingCancelChange,
+  isCanceling = false,
 }: AppointmentDetailsModalProps) {
-  const [confirmingCancel, setConfirmingCancel] = useState(false)
-
   if (!appointment) return null
 
   const status = appointmentStatusMeta[appointment.status]
@@ -49,7 +68,9 @@ export function AppointmentDetailsModal({
   )
 
   function handleOpenChange(open: boolean) {
-    if (!open) setConfirmingCancel(false)
+    // Fechar no meio do cancelamento deixaria a recusa sem lugar para aparecer.
+    if (isCanceling) return
+    if (!open) onConfirmingCancelChange(false)
     onOpenChange(open)
   }
 
@@ -63,26 +84,35 @@ export function AppointmentDetailsModal({
           <>
             <Button
               variant="secondary"
-              onClick={() => setConfirmingCancel(false)}
+              disabled={isCanceling}
+              onClick={() => onConfirmingCancelChange(false)}
             >
               Manter atendimento
             </Button>
+            {/*
+              NÃO fecha o modal aqui.
+
+              Antes, este botão chamava `onCancel(appointment)` — uma promessa —
+              e em seguida `onOpenChange(false)`, sem esperar. O modal
+              desmontava antes de a action responder, então `cancelError`
+              **nunca** chegava a renderizar: uma recusa do servidor deixava o
+              atendimento marcado e a tela dizendo que tudo deu certo.
+
+              Quem fecha agora é a tela, e só depois de o servidor confirmar.
+            */}
             <Button
               variant="danger"
-              onClick={() => {
-                onCancel(appointment)
-                setConfirmingCancel(false)
-                onOpenChange(false)
-              }}
+              disabled={isCanceling}
+              onClick={() => onCancel(appointment)}
             >
-              Cancelar atendimento
+              {isCanceling ? 'Cancelando…' : 'Cancelar atendimento'}
             </Button>
           </>
         ) : (
           <>
             <Button
               variant="secondary"
-              onClick={() => setConfirmingCancel(true)}
+              onClick={() => onConfirmingCancelChange(true)}
             >
               Cancelar atendimento
             </Button>
@@ -129,9 +159,16 @@ export function AppointmentDetailsModal({
           </div>
         ) : null}
 
+        {/*
+          `status`, e não `alert`: isto EXPLICA o passo em que a pessoa acabou
+          de entrar, e o `alert` logo abaixo é a recusa do servidor. Dois
+          `role="alert"` no mesmo diálogo fazem o leitor de tela interromper
+          duas vezes seguidas, e a segunda — a que importa — chega como se
+          fosse repetição da primeira.
+        */}
         {confirmingCancel ? (
           <p
-            role="alert"
+            role="status"
             className="rounded-field border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
           >
             Ao cancelar, o horário volta a ficar livre e o paciente precisará ser
