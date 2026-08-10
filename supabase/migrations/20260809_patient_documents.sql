@@ -91,7 +91,10 @@ create policy "patient_documents_insert"
   on public.patient_documents
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 insert into storage.buckets (
   id, name, public, file_size_limit, allowed_mime_types
@@ -135,6 +138,9 @@ create policy "patient_documents_storage_insert"
   with check (
     bucket_id = 'patient-documents'
     and (storage.foldername(name))[1] = public.current_clinic_id()::text
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    )
   );
 
 commit;

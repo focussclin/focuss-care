@@ -58,41 +58,83 @@ create index if not exists inventory_movements_item_idx
 alter table public.inventory_items enable row level security;
 alter table public.inventory_movements enable row level security;
 
+-- O PAPEL entra na policy, e nao so o tenant.
+--
+-- `clinic_id = current_clinic_id()` sozinho isola a clinica e mais nada. O
+-- navegador tem a chave publicavel e o proprio JWT do membro, entao ele alcanca
+-- o PostgREST direto — e ali nao existe `roles:` de action nenhuma. Sem o
+-- predicado abaixo, a separacao por papel viveria SO na aplicacao, que e
+-- exatamente o contrario do que `src/lib/auth/permissions.ts` declara ("se esta
+-- matriz e a RLS discordarem, a RLS esta certa").
+--
+-- As listas espelham as actions, uma a uma:
+--   leitura  -> `invoice.read`    (a rota `/estoque`)
+--   cadastro -> `clinic.settings` (create/update/toggle Item)
+--   movimento-> `invoice.write`   (`record_inventory_movement`)
+--
+-- Mesmo padrao ja usado em `20260809_rooms.sql`.
+
 drop policy if exists "inventory_items_select" on public.inventory_items;
 create policy "inventory_items_select"
   on public.inventory_items
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
 drop policy if exists "inventory_items_insert" on public.inventory_items;
 create policy "inventory_items_insert"
   on public.inventory_items
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  );
 
 drop policy if exists "inventory_items_update" on public.inventory_items;
 create policy "inventory_items_update"
   on public.inventory_items
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  )
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  );
 
 drop policy if exists "inventory_movements_select" on public.inventory_movements;
 create policy "inventory_movements_select"
   on public.inventory_movements
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
+-- A escrita direta existe so como rede: o caminho da aplicacao e a RPC
+-- `record_inventory_movement`, que grava saldo e movimento na mesma transacao.
 drop policy if exists "inventory_movements_insert" on public.inventory_movements;
 create policy "inventory_movements_insert"
   on public.inventory_movements
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
 create or replace function public.record_inventory_movement(
   p_clinic_id uuid,

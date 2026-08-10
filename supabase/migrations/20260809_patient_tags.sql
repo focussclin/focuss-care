@@ -64,7 +64,10 @@ create policy "patient_tags_insert"
   on public.patient_tags
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "patient_tag_links_select" on public.patient_tag_links;
 create policy "patient_tag_links_select"
@@ -78,14 +81,20 @@ create policy "patient_tag_links_insert"
   on public.patient_tag_links
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "patient_tag_links_delete" on public.patient_tag_links;
 create policy "patient_tag_links_delete"
   on public.patient_tag_links
   for delete
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 create or replace function public.add_patient_tag(
   p_clinic_id uuid,

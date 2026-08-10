@@ -119,66 +119,96 @@ create policy "purchase_suppliers_select"
   on public.purchase_suppliers
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_suppliers_insert" on public.purchase_suppliers;
 create policy "purchase_suppliers_insert"
   on public.purchase_suppliers
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_update" on public.purchase_suppliers;
 create policy "purchase_suppliers_update"
   on public.purchase_suppliers
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_orders_select" on public.purchase_orders;
 create policy "purchase_orders_select"
   on public.purchase_orders
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_orders_insert" on public.purchase_orders;
 create policy "purchase_orders_insert"
   on public.purchase_orders
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_orders_update" on public.purchase_orders;
 create policy "purchase_orders_update"
   on public.purchase_orders
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_select" on public.purchase_order_items;
 create policy "purchase_order_items_select"
   on public.purchase_order_items
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_insert" on public.purchase_order_items;
 create policy "purchase_order_items_insert"
   on public.purchase_order_items
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_update" on public.purchase_order_items;
 create policy "purchase_order_items_update"
   on public.purchase_order_items
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 -- -----------------------------------------------------------------------------
 -- RPCs atômicas

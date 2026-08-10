@@ -108,6 +108,77 @@ Use o dry-run como leitura, não como etapa.
 
 ---
 
+## 3.5 Papel dentro da policy
+
+> Corrigido em **10/08/2026**, antes de qualquer uma destas migrations ser
+> aplicada. Se você já aplicou alguma versão anterior, releia esta seção: as
+> policies antigas continuam no banco até serem substituídas.
+
+Até 10/08/2026 as policies das oito tabelas novas tinham esta forma:
+
+```sql
+using (clinic_id = public.current_clinic_id())
+```
+
+Isso isola a clínica — e mais nada. **Não separa papéis.**
+
+### Por que isso importava
+
+A separação por papel vivia inteira na aplicação, no `roles:` de cada action. E
+a aplicação não é o único caminho até a tabela:
+
+- o navegador carrega `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` por desenho;
+- `src/lib/supabase/client.ts` cria um cliente com a sessão do próprio membro;
+- o PostgREST aceita esse JWT direto, sem passar por Server Action nenhuma.
+
+Ou seja: `POST /rest/v1/bank_transactions` com o token de um recepcionista teria
+funcionado, porque a policy só perguntava a clínica. O mesmo valia para
+`clinic_form_responses` — anamnese, dado de saúde — que a aplicação nega a
+`finance` e a policy liberava.
+
+O comentário de `src/lib/supabase/client.ts` diz "o acesso continua limitado
+pelas policies de RLS", e `src/lib/auth/permissions.ts` diz "se esta matriz e a
+RLS discordarem, **a RLS está certa**". Para estas tabelas, as duas frases eram
+falsas.
+
+### A forma correta
+
+O predicado de papel entra junto, no padrão que `20260809_rooms.sql` já usava:
+
+```sql
+using (
+  clinic_id = public.current_clinic_id()
+  and public.has_clinic_role(array['owner', 'admin', 'finance']::membership_role[])
+)
+```
+
+As listas espelham `src/lib/auth/permissions.ts`, action por action:
+
+| Permissão na action | Papéis |
+|---|---|
+| `invoice.read` / `invoice.write` | `owner`, `admin`, `finance` |
+| `clinic.settings` | `owner`, `admin` |
+| `patient.write` / `team.read` | `owner`, `admin`, `professional`, `receptionist` |
+| `patient.read` | os cinco — nestas a policy fica **só** com `clinic_id` |
+
+A última linha não é descuido. Quando os cinco papéis satisfazem a permissão,
+`clinic_id = current_clinic_id()` já **é** a condição certa: escrever os cinco
+nomes seria a mesma condição duas vezes, e envelheceria sozinha no dia em que
+um papel novo entrasse no enum `membership_role`.
+
+`src/app/migrationBundle.test.ts` recusa policy nova que não estreite além do
+tenant — por papel ou por `auth.uid()` —, com as leituras abertas registradas
+uma a uma.
+
+### O arquivo combinado é gerado
+
+`APLICAR_TUDO_20260809.sql` sai de `node scripts/build-migration-bundle.mjs`.
+Antes de 10/08/2026 ele era montado à mão, apesar de o cabeçalho mandar
+regenerar — então toda correção precisava ser feita duas vezes. **Edite a
+migration individual e rode o gerador**; o teste falha se os dois divergirem.
+
+---
+
 ## 4. Revisão obrigatória antes de cada arquivo
 
 Nenhum dos quatro deve ser colado sem antes responder às perguntas abaixo. Duas

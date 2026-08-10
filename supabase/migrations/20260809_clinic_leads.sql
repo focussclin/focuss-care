@@ -84,36 +84,54 @@ create policy "clinic_leads_select"
   on public.clinic_leads
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_leads_insert" on public.clinic_leads;
 create policy "clinic_leads_insert"
   on public.clinic_leads
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_leads_update" on public.clinic_leads;
 create policy "clinic_leads_update"
   on public.clinic_leads
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "lead_events_select" on public.lead_events;
 create policy "lead_events_select"
   on public.lead_events
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "lead_events_insert" on public.lead_events;
 create policy "lead_events_insert"
   on public.lead_events
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 -- Nao ha DELETE: perder um lead e uma decisao de negocio, nao limpeza tecnica.
 

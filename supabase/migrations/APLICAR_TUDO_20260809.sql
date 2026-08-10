@@ -2,9 +2,9 @@
 -- APLICAR TUDO — as dez migrations pendentes de 09/08/2026, na ordem segura
 -- =============================================================================
 --
--- GERADO a partir dos arquivos individuais. Nao edite este arquivo: edite o
--- original e gere de novo. Ele existe para transformar dez colagens no editor
--- SQL do Supabase em UMA.
+-- GERADO por `node scripts/build-migration-bundle.mjs`. NAO EDITE ESTE ARQUIVO:
+-- edite a migration original e rode o gerador de novo. `migrationBundle.test.ts`
+-- falha se os dois divergirem.
 --
 -- Cada bloco abaixo tem `begin`/`commit` proprio, entao uma falha reverte APENAS
 -- a migration que falhou — as anteriores permanecem aplicadas. Isso e proposital:
@@ -25,6 +25,12 @@
 -- faz `on conflict (id) do update`, entao ele NORMALIZA as configuracoes do
 -- bucket para as declaradas ali (10 MB e a lista de MIME de la).
 --
+-- AS POLICIES EXIGEM PAPEL, e nao so clinica (10/08/2026). Ate essa data elas
+-- eram `clinic_id = current_clinic_id()` e mais nada, o que deixava a separacao
+-- por papel viver SO na aplicacao — contornavel pelo PostgREST direto, que todo
+-- membro alcanca com a chave publicavel e o proprio JWT. Ver
+-- `docs/supabase-migrations-runbook.md`, secao "Papel dentro da policy".
+--
 -- INDICES REPETIDOS sao esperados: varios blocos criam
 -- `patients_id_clinic_id_key` e afins, todos com `if not exists`, porque cada
 -- um precisa do alvo para as proprias chaves compostas.
@@ -33,7 +39,6 @@
 -- `*/infrastructure/*Database.ts`, habilitar os itens em `navigation.ts` e
 -- limpar as entradas de `BUILT_BUT_HIDDEN` em `src/app/reachableRoutes.test.ts`.
 -- =============================================================================
-
 
 -- ===========================================================================
 -- 20260809_rooms.sql — Salas e recursos + conflito de sala na agenda
@@ -414,22 +419,34 @@ create policy "clinic_tasks_select"
   on public.clinic_tasks
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_tasks_insert" on public.clinic_tasks;
 create policy "clinic_tasks_insert"
   on public.clinic_tasks
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_tasks_update" on public.clinic_tasks;
 create policy "clinic_tasks_update"
   on public.clinic_tasks
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 -- Sem policy de DELETE: tarefa sai por `status = 'canceled'`, que preserva o
 -- registro de que alguem decidiu nao fazer.
@@ -564,36 +581,54 @@ create policy "clinic_leads_select"
   on public.clinic_leads
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_leads_insert" on public.clinic_leads;
 create policy "clinic_leads_insert"
   on public.clinic_leads
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_leads_update" on public.clinic_leads;
 create policy "clinic_leads_update"
   on public.clinic_leads
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "lead_events_select" on public.lead_events;
 create policy "lead_events_select"
   on public.lead_events
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "lead_events_insert" on public.lead_events;
 create policy "lead_events_insert"
   on public.lead_events
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 -- Nao ha DELETE: perder um lead e uma decisao de negocio, nao limpeza tecnica.
 
@@ -696,44 +731,62 @@ create policy "clinic_forms_select"
   on public.clinic_forms
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_forms_insert" on public.clinic_forms;
 create policy "clinic_forms_insert"
   on public.clinic_forms
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_forms_update" on public.clinic_forms;
 create policy "clinic_forms_update"
   on public.clinic_forms
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_form_responses_select" on public.clinic_form_responses;
 create policy "clinic_form_responses_select"
   on public.clinic_form_responses
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_form_responses_insert" on public.clinic_form_responses;
 create policy "clinic_form_responses_insert"
   on public.clinic_form_responses
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_form_responses_update" on public.clinic_form_responses;
 create policy "clinic_form_responses_update"
   on public.clinic_form_responses
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 commit;
 
@@ -816,7 +869,10 @@ create policy "patient_tags_insert"
   on public.patient_tags
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "patient_tag_links_select" on public.patient_tag_links;
 create policy "patient_tag_links_select"
@@ -830,14 +886,20 @@ create policy "patient_tag_links_insert"
   on public.patient_tag_links
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "patient_tag_links_delete" on public.patient_tag_links;
 create policy "patient_tag_links_delete"
   on public.patient_tag_links
   for delete
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 create or replace function public.add_patient_tag(
   p_clinic_id uuid,
@@ -1003,7 +1065,10 @@ create policy "patient_documents_insert"
   on public.patient_documents
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 insert into storage.buckets (
   id, name, public, file_size_limit, allowed_mime_types
@@ -1047,6 +1112,9 @@ create policy "patient_documents_storage_insert"
   with check (
     bucket_id = 'patient-documents'
     and (storage.foldername(name))[1] = public.current_clinic_id()::text
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    )
   );
 
 commit;
@@ -1229,51 +1297,75 @@ drop policy if exists "bank_accounts_select" on public.bank_accounts;
 create policy "bank_accounts_select"
   on public.bank_accounts
   for select to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "bank_accounts_insert" on public.bank_accounts;
 create policy "bank_accounts_insert"
   on public.bank_accounts
   for insert to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_accounts_update" on public.bank_accounts;
 create policy "bank_accounts_update"
   on public.bank_accounts
   for update to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_transactions_select" on public.bank_transactions;
 create policy "bank_transactions_select"
   on public.bank_transactions
   for select to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "bank_transactions_insert" on public.bank_transactions;
 create policy "bank_transactions_insert"
   on public.bank_transactions
   for insert to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "bank_transactions_update" on public.bank_transactions;
 create policy "bank_transactions_update"
   on public.bank_transactions
   for update to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "bank_reconciliations_select" on public.bank_reconciliations;
 create policy "bank_reconciliations_select"
   on public.bank_reconciliations
   for select to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "bank_reconciliations_insert" on public.bank_reconciliations;
 create policy "bank_reconciliations_insert"
   on public.bank_reconciliations
   for insert to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 -- Não há UPDATE nem DELETE: uma conciliação é uma evidência; correções devem
 -- nascer como novo lançamento de ajuste, não apagar o histórico.
@@ -1436,41 +1528,83 @@ create index if not exists inventory_movements_item_idx
 alter table public.inventory_items enable row level security;
 alter table public.inventory_movements enable row level security;
 
+-- O PAPEL entra na policy, e nao so o tenant.
+--
+-- `clinic_id = current_clinic_id()` sozinho isola a clinica e mais nada. O
+-- navegador tem a chave publicavel e o proprio JWT do membro, entao ele alcanca
+-- o PostgREST direto — e ali nao existe `roles:` de action nenhuma. Sem o
+-- predicado abaixo, a separacao por papel viveria SO na aplicacao, que e
+-- exatamente o contrario do que `src/lib/auth/permissions.ts` declara ("se esta
+-- matriz e a RLS discordarem, a RLS esta certa").
+--
+-- As listas espelham as actions, uma a uma:
+--   leitura  -> `invoice.read`    (a rota `/estoque`)
+--   cadastro -> `clinic.settings` (create/update/toggle Item)
+--   movimento-> `invoice.write`   (`record_inventory_movement`)
+--
+-- Mesmo padrao ja usado em `20260809_rooms.sql`.
+
 drop policy if exists "inventory_items_select" on public.inventory_items;
 create policy "inventory_items_select"
   on public.inventory_items
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
 drop policy if exists "inventory_items_insert" on public.inventory_items;
 create policy "inventory_items_insert"
   on public.inventory_items
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  );
 
 drop policy if exists "inventory_items_update" on public.inventory_items;
 create policy "inventory_items_update"
   on public.inventory_items
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  )
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+  );
 
 drop policy if exists "inventory_movements_select" on public.inventory_movements;
 create policy "inventory_movements_select"
   on public.inventory_movements
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
+-- A escrita direta existe so como rede: o caminho da aplicacao e a RPC
+-- `record_inventory_movement`, que grava saldo e movimento na mesma transacao.
 drop policy if exists "inventory_movements_insert" on public.inventory_movements;
 create policy "inventory_movements_insert"
   on public.inventory_movements
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (
+    clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    )
+  );
 
 create or replace function public.record_inventory_movement(
   p_clinic_id uuid,
@@ -1672,66 +1806,96 @@ create policy "purchase_suppliers_select"
   on public.purchase_suppliers
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_suppliers_insert" on public.purchase_suppliers;
 create policy "purchase_suppliers_insert"
   on public.purchase_suppliers
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_update" on public.purchase_suppliers;
 create policy "purchase_suppliers_update"
   on public.purchase_suppliers
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_orders_select" on public.purchase_orders;
 create policy "purchase_orders_select"
   on public.purchase_orders
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_orders_insert" on public.purchase_orders;
 create policy "purchase_orders_insert"
   on public.purchase_orders
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_orders_update" on public.purchase_orders;
 create policy "purchase_orders_update"
   on public.purchase_orders
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_select" on public.purchase_order_items;
 create policy "purchase_order_items_select"
   on public.purchase_order_items
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_insert" on public.purchase_order_items;
 create policy "purchase_order_items_insert"
   on public.purchase_order_items
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 drop policy if exists "purchase_order_items_update" on public.purchase_order_items;
 create policy "purchase_order_items_update"
   on public.purchase_order_items
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'finance']::membership_role[]
+    ));
 
 -- -----------------------------------------------------------------------------
 -- RPCs atômicas
@@ -2025,3 +2189,4 @@ commit;
 -- conferir que inventory_items.current_quantity e inventory_movements mudaram
 -- na mesma transação e que a ordem terminou como received.
 -- Depois: npm run db:types
+

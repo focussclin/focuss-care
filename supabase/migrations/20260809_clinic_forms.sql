@@ -83,44 +83,62 @@ create policy "clinic_forms_select"
   on public.clinic_forms
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_forms_insert" on public.clinic_forms;
 create policy "clinic_forms_insert"
   on public.clinic_forms
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_forms_update" on public.clinic_forms;
 create policy "clinic_forms_update"
   on public.clinic_forms
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_form_responses_select" on public.clinic_form_responses;
 create policy "clinic_form_responses_select"
   on public.clinic_form_responses
   for select
   to authenticated
-  using (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_form_responses_insert" on public.clinic_form_responses;
 create policy "clinic_form_responses_insert"
   on public.clinic_form_responses
   for insert
   to authenticated
-  with check (clinic_id = public.current_clinic_id());
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 drop policy if exists "clinic_form_responses_update" on public.clinic_form_responses;
 create policy "clinic_form_responses_update"
   on public.clinic_form_responses
   for update
   to authenticated
-  using (clinic_id = public.current_clinic_id())
-  with check (clinic_id = public.current_clinic_id());
+  using (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ))
+  with check (clinic_id = public.current_clinic_id()
+    and public.has_clinic_role(
+      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
+    ));
 
 commit;
 
