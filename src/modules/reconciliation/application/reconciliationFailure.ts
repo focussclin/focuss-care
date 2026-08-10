@@ -1,3 +1,4 @@
+import { describeCause } from '@/lib/observability/describe-cause'
 import { err, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { ReconciliationRepositoryError } from '../domain/ReconciliationRepositoryError'
@@ -16,6 +17,10 @@ export function toReconciliationFailure<F extends string>(action: string, cause:
     }
   }
 
-  console.error(`[${action}] operação de conciliação recusada`, cause)
+  // Lista fechada de campos, como no resto do produto. Ver `purchaseFailure`.
+  console.error(
+    `[${action}] operação de conciliação recusada`,
+    describeCause(cause),
+  )
   return err<F>('unexpected', reconciliationMessages.unexpected)
 }
