@@ -366,6 +366,12 @@ describe('nenhuma action revalida rota que não alimenta', () => {
        */
       leads: ['/crm', '/pacientes/:seg', '/pacientes/:seg/historico'],
       forms: ['/formularios'],
+      /*
+       * Só `/inbox`. Status e responsável não alimentam nenhum painel: a Inbox
+       * não entra nos KPIs do dashboard nem nos relatórios, e revalidar rota
+       * que não lê a conversa seria pagar recomputo por nada.
+       */
+      inbox: ['/inbox'],
       inventory: ['/estoque'],
       purchases: ['/compras', '/estoque'],
       reconciliation: ['/conciliacao'],

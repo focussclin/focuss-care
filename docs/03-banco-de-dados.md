@@ -158,3 +158,33 @@ A UI consome hoje `clinics`, `memberships`, `profiles`, `patients`, `professiona
 e `appointments`. As outras 49 tabelas existem no banco, estão tipadas e protegidas
 por RLS, mas ainda não têm repositório nem tela — entram conforme os módulos forem
 implementados (Financeiro, Prontuários, Convênios, IA, WhatsApp, Automações).
+
+> **Desatualizado desde 10/08/2026.** Vários desses módulos já têm repositório e
+> tela — entre eles `conversations`/`messages` (Inbox), `invoices`/`payables`
+> (Financeiro) e `medical_records` (Prontuários). O estado corrente por módulo
+> está em `PROJECT_PROGRESS.md`; esta seção só volta a valer depois de uma
+> conferência tabela a tabela, que ninguém fez ainda.
+
+### A verificação de isolamento não cobriu ESCRITA
+
+O teste de 56/56 acima é de **leitura anônima**: prova que ninguém sem sessão lê
+nada. Ele não diz quais comandos cada papel autenticado pode executar, e a
+diferença apareceu ao ligar a Inbox: se não existir policy de `UPDATE` em
+`conversations`, o Postgres **não devolve erro** — a linha não é alcançada e zero
+linhas mudam, em silêncio.
+
+A aplicação passou a tratar isso explicitamente (`write-forbidden`, distinto de
+`not-found`), mas a pergunta continua aberta no banco. Para responder, sem
+alterar nada:
+
+```sql
+select tablename, policyname, cmd, roles
+  from pg_policies
+ where schemaname = 'public'
+   and tablename in ('conversations', 'messages')
+ order by tablename, cmd;
+```
+
+Se não houver linha com `cmd = 'UPDATE'` para `conversations`, a Inbox mostra a
+mensagem apontando a policy ausente em vez de fingir que a conversa sumiu — mas
+status, responsável e leitura só passam a gravar depois que essa policy existir.

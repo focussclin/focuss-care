@@ -1708,6 +1708,116 @@ incluindo o `drop function` para quem já aplicou uma versão anterior.
 
 ---
 
+## 8.21 Feature — Inbox de atendimento (10/08/2026)
+
+Diferente das fatias anteriores: `conversations` e `messages` **já existem no
+banco aplicado** — não há migration pendente. A auditoria foi contra o schema
+real, em `database.types.ts`.
+
+### 1. A Inbox era somente leitura
+
+Não havia nenhuma action no módulo. Status, responsável e contador de não lidas
+apareciam na tela e não havia como mexer em nenhum deles: a fila só crescia.
+Agora há três actions com `encounter.write`, auditoria e revalidação de `/inbox`.
+
+`markConversationRead` **não audita** de propósito. Quem leu o quê é telemetria
+de uso; auditar cada clique afogaria a trilha em ruído. Status e responsável
+mudam de quem é a responsabilidade pelo atendimento, e esses são auditados.
+
+A regra `canChangeStatus` vale **na action**, e não só no clique. Ela nasceu só
+na tela: quem chamasse a action direto — ou tivesse uma aba aberta com a lista
+defasada — passava por fora, e o UPDATE gravava o mesmo status, mexia
+`updated_at` e a conversa pulava para o topo sem que nada tivesse acontecido.
+Repetido, é uma inbox que se reordena sozinha.
+
+A origem da comparação vem de `findStatus`, no banco, e nunca do cliente. Status
+igual devolve `validation` com `statusUnchanged`; conversa inexistente devolve
+`not-found` — dizer "já está neste status" mandaria corrigir algo que não
+existe.
+
+Essa leitura **não fecha a janela de concorrência**, e não é para isso que
+serve: entre ela e a gravação cabe outra pessoa resolvendo a mesma conversa.
+Quem fecha é o compare-and-swap — o status lido desce como `from` e vira
+condição no `WHERE` do UPDATE (`.eq('status', from)`). Sem ela, duas pessoas
+resolvendo a mesma conversa em telas diferentes gravariam as duas, o banco
+guardaria só a última, e as duas telas mostrariam sucesso.
+
+Zero linhas afetadas tem três causas, e a releitura traz o `status` para
+separá-las — é o que impede um CAS ingênuo de culpar a concorrência por tudo:
+
+| Releitura | Motivo | O que a tela diz |
+|---|---|---|
+| linha ausente | `not-found` | a conversa saiu desta clínica |
+| status diferente de `from` | `stale` → `conflict` | recarregue a lista |
+| status **igual** a `from` | `write-forbidden` | falta policy de UPDATE |
+
+O terceiro caso é o que sobrevive do achado 4: a condição batia, então quem
+recusou foi o banco e não a corrida.
+
+### 2. O teto de mensagens escondia as conversas mais recentes
+
+`listMessages` buscava as mensagens de até 100 conversas com um teto único de
+500 linhas, ordenadas por `created_at` **ascendente**. O teto guardava então as
+mensagens mais antigas da clínica inteira: bastavam algumas conversas longas
+para consumir as 500 linhas, e as conversas recentes — as do topo da lista, as
+com não lidas — chegavam à tela com zero mensagens.
+
+O painel exibia "3 não lidas" ao lado de *"A conversa existe, mas ainda não há
+mensagens persistidas para exibir"* — um texto que descrevia o defeito como se
+fosse comportamento normal.
+
+Ordem invertida para descendente (o teto passa a descartar o passado distante,
+que é o que se pode perder numa conversa) e a ordem de leitura é restaurada em
+`groupMessagesByConversation`, função pura que a rota antes fazia à mão e sem
+teste.
+
+### 3. A rota não tinha `try`
+
+Qualquer falha do repositório derrubava a página inteira no boundary de erro,
+sem dizer o que houve. Agora a falha de leitura vira `loadError` na tela — e
+também bloqueia as escritas, porque escrever sobre uma lista que não carregou
+não faz sentido.
+
+### 4. Escrita recusada pela policy não podia virar "não encontrado"
+
+`conversations` tem RLS ativa, mas a verificação registrada em
+`docs/03-banco-de-dados.md` cobriu **leitura anônima**, não escrita autenticada.
+Se não houver policy de UPDATE para o papel, o Postgres não devolve erro: zero
+linhas mudam, em silêncio.
+
+O adapter releria a linha depois de um UPDATE sem efeito. Se ela ainda estiver
+visível, quem recusou foi a escrita → `write-forbidden`, com mensagem que aponta
+para a policy. Se sumiu → `not-found`. Sem isso, a tela mandaria procurar uma
+conversa que está bem ali na lista.
+
+### 5. Dois controles com o mesmo nome acessível
+
+O filtro da lista e o seletor do detalhe se chamavam ambos "Responsável" — um
+filtra, o outro grava. O filtro virou "Atribuída a".
+
+### 6. Prioridade e notas NÃO foram implementadas
+
+`conversations` tem `status`, `assigned_to` e `unread_count`, e nada mais que a
+equipe controle. **Não existe coluna de prioridade nem de notas internas.** Um
+seletor de prioridade não teria onde gravar; uma caixa de notas perderia o texto
+no primeiro recarregamento. A ausência está registrada no domínio e num teste de
+schema, para não voltar como "esquecimento".
+
+### 7. O módulo não tinha teste de repositório nem de schema
+
+Só havia teste de UI. Agora são 44 testes: 15 de repositório (escopo de tenant,
+ordem das mensagens, a distinção `write-forbidden`/`not-found`), 4 de
+agrupamento, 10 de schema/domínio e 15 de UI.
+
+### Sem WhatsApp
+
+Envio de mensagem continua fora: depende do provedor externo e da ingestão de
+eventos, que não existem. O rodapé do detalhe segue dizendo isso, e nenhum botão
+de enviar foi criado. O aviso do topo passou a distinguir o que já grava
+(status, responsável, leitura) do que ainda depende do provedor.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
