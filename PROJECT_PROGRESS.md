@@ -185,7 +185,7 @@ existe neste ambiente, e a coluna diz o quê.
 | Documentos | `patient_documents` existe, mas **não há bucket de Storage**: `listBuckets()` devolveu vazio em 08/08/2026. Sem bucket, o arquivo não tem para onde ir |
 | Inbox de atendimento | Leitura tenant-scoped de `conversations` e `messages` entregue; ingestão e envio dependem de W-01 |
 | Portal do paciente, Portal do profissional | Aplicação separada, com autenticação própria |
-| Teleatendimento | Provedor de vídeo — dependência externa |
+| Teleatendimento | Removido do escopo do produto por decisão de produto |
 | Insights proativos | Provedor de IA e aprovação de `docs/04-agente-ia.md` |
 
 **Seis dos treze dependem só de migration**, que é o bloqueio **B1** (sem acesso

@@ -25,7 +25,6 @@ import {
   UserRoundCog,
   UserSearch,
   Users,
-  Video,
   WalletCards,
   Workflow,
   type LucideIcon,
@@ -55,7 +54,7 @@ export interface NavItem {
    * Rotas que não existem ficam visíveis, mas nunca parecem clicáveis.
    *
    * O texto delas diz "não faz parte desta versão", e não "em breve". Nenhum
-   * destes itens — `/teleatendimento`, `/crm`, `/estoque` e os outros — aparece
+   * destes itens — `/portal-paciente` e `/portal-profissional` — aparece
    * em fatia nenhuma do roadmap: "em breve" afirmava um cronograma que não
    * existe, e é o mesmo defeito que fez `/pagamentos` e `/caixa` prometerem
    * recursos que já estavam entregues.
@@ -101,7 +100,6 @@ export const navItems: readonly NavItem[] = [
    */
 
   { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', permission: 'clinic.settings', availability: 'setup' },
-  { label: 'Teleatendimento', href: '/teleatendimento', icon: Video, section: 'care', disabled: true },
 
   { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', permission: 'team.read', availability: 'setup' },
   { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', permission: 'encounter.read', availability: 'setup' },

@@ -97,7 +97,7 @@ describe('a lista de comandos', () => {
   })
 
   it('não inclui item de menu desabilitado', () => {
-    // Item desabilitado nao tem rota — `/teleatendimento`, `/crm` e os outros.
+    // Os portais ainda não possuem rota; teleatendimento não faz parte do produto.
     const hrefs = ALL_COMMANDS.map((command) => command.href)
 
     expect(hrefs).not.toContain('/teleatendimento')
