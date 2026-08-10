@@ -24,11 +24,20 @@ import {
   getPatientConsentSource,
   getPatientContactSource,
   getPatientRepository,
+  getAllergySource,
   getPatientTagSource,
 } from '@/modules/patients/infrastructure/repository'
 import { PatientConsentsPanel } from '@/modules/patients/ui/PatientConsentsPanel'
 import { PatientContactsPanel } from '@/modules/patients/ui/PatientContactsPanel'
 import { PatientProfileActions } from '@/modules/patients/ui/PatientProfileActions'
+import {
+  setAllergyActiveFromPanel,
+  submitAllergyFromPanel,
+} from '@/modules/patients/actions/allergyPanel.actions'
+import { toAllergyDto } from '@/modules/patients/application/toAllergyDto'
+import { isAllergyRepositoryError } from '@/modules/patients/domain/AllergyRepository'
+import { allergyMessages } from '@/modules/patients/schemas/allergy.schema'
+import { PatientAllergiesPanel } from '@/modules/patients/ui/PatientAllergiesPanel'
 import { PatientTagsPanel } from '@/modules/patients/ui/PatientTagsPanel'
 import { createInviteFromScreen } from '@/modules/patient-portal/actions/portalInviteScreen.actions'
 import { toPortalInviteSummaryDto } from '@/modules/patient-portal/application/toPatientPortalDto'
@@ -153,6 +162,41 @@ export default async function PatientProfilePage({
     getPatientTagSource(),
     getPatientPortalRepository(),
   ])
+
+  /*
+   * Alergias — dado clínico, e por isso atrás de `record.read`.
+   *
+   * A ficha é visível a quem tem `patient.read`, o que inclui `finance` e
+   * `admin`. A matriz de permissões é explícita: o que esses dois não alcançam
+   * é "agenda, atendimento e prontuário". Alergia é informação de saúde, então
+   * entra na mesma trava — mostrar aqui abriria uma porta lateral para o dado
+   * clínico que `/prontuarios` protege.
+   *
+   * (Que a recepção precise saber de alergia a látex antes de preparar a sala é
+   * um argumento real, mas mudaria a matriz de permissões do produto. Isso é
+   * decisão de produto, não efeito colateral de um painel novo.)
+   */
+  const canReadAllergies = isMember && can(session.role, 'record.read')
+  const canWriteAllergies = isMember && can(session.role, 'record.write')
+  const allergySource = canReadAllergies ? await getAllergySource() : null
+
+  let allergies: Awaited<
+    ReturnType<NonNullable<typeof allergySource>['repository']['listByPatient']>
+  > = []
+  let allergiesError: string | null = null
+
+  if (allergySource) {
+    try {
+      allergies = await allergySource.repository.listByPatient(
+        allergySource.clinicId,
+        patient.id,
+      )
+    } catch (cause) {
+      if (!isAllergyRepositoryError(cause)) throw cause
+      allergiesError =
+        cause.reason === 'forbidden' ? allergyMessages.forbidden : allergyMessages.unavailable
+    }
+  }
 
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
@@ -289,6 +333,18 @@ export default async function PatientProfilePage({
               />
             </dl>
           </Card>
+
+          {allergySource ? (
+            <PatientAllergiesPanel
+              patientId={patient.id}
+              allergies={allergies.map(toAllergyDto)}
+              onSubmit={submitAllergyFromPanel}
+              onSetActive={setAllergyActiveFromPanel}
+              canManage={canWriteAllergies}
+              isLive={allergySource.isLive}
+              loadError={allergiesError}
+            />
+          ) : null}
 
           <PatientTagsPanel
             patientId={patient.id}

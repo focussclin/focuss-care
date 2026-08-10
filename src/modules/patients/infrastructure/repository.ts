@@ -7,10 +7,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveDataSource } from '@/lib/data-source'
 import type { Database } from '@/lib/supabase/database.types'
 
+import type { Allergy } from '../domain/Allergy'
+import {
+  AllergyRepositoryError,
+  type AllergyRepository,
+} from '../domain/AllergyRepository'
 import type { PatientConsentRepository } from '../domain/PatientConsentRepository'
 import type { PatientContactRepository } from '../domain/PatientContactRepository'
 import type { PatientRepository } from '../domain/PatientRepository'
 import type { PatientTagRepository } from '../domain/PatientTagRepository'
+import { SupabaseAllergyRepository } from './SupabaseAllergyRepository'
 import { MockPatientRepository } from './MockPatientRepository'
 import { SupabasePatientConsentRepository } from './SupabasePatientConsentRepository'
 import { SupabasePatientContactRepository } from './SupabasePatientContactRepository'
@@ -178,4 +184,73 @@ export function patientContactRepositoryFor(
   client: SupabaseClient<Database>,
 ): PatientContactRepository {
   return new SupabasePatientContactRepository(client)
+}
+
+// ---------------------------------------------------------------------------
+// Alergias (dado clinico de seguranca)
+// ---------------------------------------------------------------------------
+
+/**
+ * Nao ha adapter de demonstracao, e a ausencia e a decisao.
+ *
+ * Uma alergia ficticia e a unica coisa pior que alergia nenhuma: quem le a
+ * ficha nao tem como saber que aquele "latex" foi inventado pelo modo demo.
+ * Sem Supabase a funcao devolve `isLive: false` com lista vazia, e o painel se
+ * anuncia como demonstracao — mesmo desenho dos consentimentos.
+ */
+class EmptyAllergyRepository implements AllergyRepository {
+  async listByPatient(): Promise<Allergy[]> {
+    return []
+  }
+
+  async findById(): Promise<null> {
+    return null
+  }
+
+  async record(): Promise<Allergy> {
+    throw readOnlyAllergies()
+  }
+
+  async update(): Promise<Allergy> {
+    throw readOnlyAllergies()
+  }
+
+  async setActive(): Promise<Allergy> {
+    throw readOnlyAllergies()
+  }
+}
+
+function readOnlyAllergies(): AllergyRepositoryError {
+  return new AllergyRepositoryError('unavailable', 'demo repository is read-only')
+}
+
+export async function getAllergySource(): Promise<{
+  repository: AllergyRepository
+  clinicId: string
+  isLive: boolean
+}> {
+  const source = await resolveDataSource()
+
+  if (source.mode === 'supabase') {
+    return {
+      repository: new SupabaseAllergyRepository(source.client),
+      clinicId: source.clinicId,
+      isLive: true,
+    }
+  }
+
+  if (source.mode === 'needs-onboarding') redirect('/onboarding')
+  if (source.mode === 'session-invalid') redirect('/onboarding')
+
+  return {
+    repository: new EmptyAllergyRepository(),
+    clinicId: source.clinicId,
+    isLive: false,
+  }
+}
+
+export function allergyRepositoryFor(
+  client: SupabaseClient<Database>,
+): AllergyRepository {
+  return new SupabaseAllergyRepository(client)
 }

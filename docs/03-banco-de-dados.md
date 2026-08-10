@@ -181,7 +181,7 @@ alterar nada:
 select tablename, policyname, cmd, roles
   from pg_policies
  where schemaname = 'public'
-   and tablename in ('conversations', 'messages', 'workflows')
+   and tablename in ('conversations', 'messages', 'workflows', 'allergies')
  order by tablename, cmd;
 ```
 
@@ -192,6 +192,23 @@ status, responsável e leitura só passam a gravar depois que essa policy existi
 O mesmo vale para `workflows` em `/automacoes`, que precisa de `INSERT`,
 `UPDATE` e `DELETE` para o papel com `clinic.settings`. As duas telas tratam a
 ausência do mesmo jeito: `write-forbidden`, com o texto apontando a policy.
+
+### `allergies.severity` é um número sem escala conhecida
+
+Mesma classe de `work_schedules.weekday`: um `integer` cuja convenção não está
+declarada em lugar nenhum — pode ser 1–3, 1–5 ou 0–10, e pode crescer para cima
+ou para baixo. A aplicação **não lê, não grava e não exibe** a coluna, e a tela
+diz por quê. Para responder:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+  from pg_constraint
+ where conrelid = 'public.allergies'::regclass;
+```
+
+Sem `check` declarado, a resposta vem de `select distinct severity from
+public.allergies` combinado com o que a clínica sabe da própria operação — ou de
+declarar a constraint antes de gravar o primeiro número.
 
 ### `workflows` guarda `jsonb` que a aplicação não controla sozinha
 

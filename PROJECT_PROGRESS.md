@@ -1942,6 +1942,74 @@ por texto acusaria os próprios comentários que documentam a ausência.
 
 ---
 
+## 8.24 Feature — Alergias do paciente (10/08/2026)
+
+`allergies` estava no schema aplicado e **nenhuma linha de código a tocava** —
+os únicos resultados no repositório eram os tipos gerados e o nome citado em
+`docs/03`. Era a maior tabela aplicada sem nada construído em cima, e sem
+dependência externa nenhuma.
+
+### O painel entra na ficha, atrás de `record.read`
+
+A ficha é visível a quem tem `patient.read`, o que inclui `finance` e `admin`. A
+matriz é explícita: o que esses dois não alcançam é "agenda, atendimento e
+prontuário". Alergia é informação de saúde, então entra na mesma trava —
+mostrá-la a `patient.read` abriria uma porta lateral para o dado clínico que
+`/prontuarios` protege. Escrever exige `record.write`.
+
+> Que a recepção precise saber de alergia a látex antes de preparar a sala é um
+> argumento real, mas mudaria a matriz de permissões do produto. Isso é decisão
+> de produto, e não efeito colateral de um painel novo — fica registrado aqui,
+> não implementado.
+
+### `severity` não é lida, não é gravada, não é mostrada
+
+A coluna existe e guarda um número. **A escala não pôde ser verificada**: pode
+ser 1–3, 1–5, 0–10, e pode crescer para cima ou para baixo. Mesmo bloqueio do
+`weekday` de S-02, com consequência pior — a gravidade de uma alergia é
+exatamente o que alguém confere antes de aplicar um medicamento, e quem lê "2"
+assume a escala que conhece.
+
+Ela fica fora do `select` também, e não só das escritas: ler colocaria o número
+no DTO, e número no DTO acaba na tela. A descrição da reação, em texto livre,
+sustenta a decisão clínica sem depender de escala nenhuma. A consulta que
+destrava está na mensagem exibida no próprio painel.
+
+### Não existe excluir
+
+Uma alergia registrada por engano continua sendo história clínica: alguém
+afirmou aquilo, e decisões podem ter sido tomadas com base na afirmação.
+"Descartar" usa `is_active` — sai da lista de atenção, permanece visível no
+histórico e é reversível. Os dois sentidos são auditados com ações distintas.
+
+### Substância repetida é risco, não duplicata boba
+
+"Dipirona — urticária" e "dipirona — choque anafilático" na mesma ficha deixam
+quem lê sem saber qual vale, e a leitura apressada pega a primeira. A
+comparação normaliza caixa e espaço, roda **no servidor** sobre a lista lida do
+banco, e alcança também as descartadas — reativar a entrada existente preserva
+quem registrou e quando. Se o banco tiver índice único, `23505` cai na mesma
+mensagem, sem a janela de corrida da checagem da aplicação.
+
+A edição lê a alergia antes de gravar para descobrir a qual paciente ela
+pertence: o input traz o id da alergia, não o do paciente, e aceitar um
+`patientId` do cliente deixaria alguém apontar a checagem para outra ficha.
+
+### Ficha vazia não afirma ausência
+
+O vazio diz "nenhuma alergia registrada até agora — isso não significa ausência
+de alergia". "Sem alergias" seria uma afirmação clínica que ninguém fez.
+
+### Estado
+
+`patients` continua **COMPLETO**; o painel de alergias entra como superfície
+nova do módulo, com 43 testes (12 domínio + 16 repositório + 15 UI). Escrita
+recusada por policy ausente vira `write-forbidden` apontando `allergies`, como
+em `conversations` e `workflows` — a verificação está no
+`docs/03-banco-de-dados.md` §7.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
