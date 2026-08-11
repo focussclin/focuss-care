@@ -6,7 +6,9 @@ import { getSessionState } from '@/lib/auth/session'
 import { can } from '@/lib/auth/permissions'
 import { getProfileRepository } from '@/modules/identity/infrastructure/repository'
 import { getIntegrationCredentialRepository } from '@/modules/integrations/infrastructure/credentials-repository'
+import { listFactors } from '@/modules/identity/actions/mfa.action'
 import { PersonalProfileForm } from '@/modules/identity/ui/PersonalProfileForm'
+import { SecondFactorPanel } from '@/modules/identity/ui/SecondFactorPanel'
 import { toClinicSettingsDto } from '@/modules/settings/application/toSettingsDto'
 import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 import {
@@ -74,6 +76,18 @@ export default async function ConfiguracoesPage() {
       : null
 
   /*
+   * Fatores de segundo fator da CONTA (S-MFA).
+   *
+   * So faz sentido com sessao real: em demonstracao nao ha conta no provedor, e
+   * `listFactors` devolveria indisponivel — o que a tela mostraria como erro
+   * quando na verdade e ausencia de sessao.
+   */
+  const mfaFactors =
+    session.status === 'active'
+      ? await listFactors()
+      : { active: [], pending: [], unavailable: false }
+
+  /*
    * Bloqueios de agenda — leitura para todos, escrita para `appointment.write`.
    *
    * Ver quando a clínica estará fechada não expõe dado de ninguém: é a mesma
@@ -138,13 +152,31 @@ export default async function ConfiguracoesPage() {
       canManage={can(role, 'clinic.settings')}
       profileSlot={
         profile ? (
-          <PersonalProfileForm
-            profile={{
-              fullName: profile.fullName,
-              email: profile.email,
-              phone: profile.phone,
-            }}
-          />
+          <>
+            <PersonalProfileForm
+              profile={{
+                fullName: profile.fullName,
+                email: profile.email,
+                phone: profile.phone,
+              }}
+            />
+            {/*
+              Segundo fator (S-MFA) fica ao lado do perfil, e nao no cartao da
+              clinica: e da CONTA, vale em toda clinica, e quem administra a
+              clinica nao decide o fator de ninguem.
+            */}
+            <SecondFactorPanel
+              active={mfaFactors.active.map((factor) => ({
+                id: factor.id,
+                friendlyName: factor.friendlyName,
+              }))}
+              pending={mfaFactors.pending.map((factor) => ({
+                id: factor.id,
+                friendlyName: factor.friendlyName,
+              }))}
+              loadError={mfaFactors.unavailable}
+            />
+          </>
         ) : null
       }
       isLive={source.isLive}

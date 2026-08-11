@@ -14,6 +14,7 @@ import {
   reinstateEmployeeSchema,
   teamMessages,
   terminateEmployeeSchema,
+  updateEmployeeHireDateSchema,
   type AnswerTimeOffInput,
   type CreateEmployeeInput,
   type CreateTimeOffInput,
@@ -21,6 +22,7 @@ import {
   type ReinstateEmployeeInput,
   type TerminateEmployeeInput,
   type TimeOffDto,
+  type UpdateEmployeeHireDateInput,
 } from '../schemas/team.schema'
 
 /**
@@ -198,6 +200,57 @@ export async function reinstateEmployeeAction(
   rawInput: unknown,
 ): Promise<ActionResult<EmployeeDto, 'employeeId'>> {
   return runReinstateEmployee(rawInput)
+}
+
+/**
+ * Corrige a data de admissao sem criar outro funcionario.
+ *
+ * O campo vazio remove a data de cadastros legados. A regra de ordem com um
+ * desligamento existente continua no repositorio, junto da leitura que evita
+ * decidir sobre um estado antigo.
+ */
+const runUpdateEmployeeHireDate = createAction<
+  UpdateEmployeeHireDateInput,
+  EmployeeDto,
+  'employeeId' | 'hireDate'
+>({
+  name: 'employee.hire_date.update',
+  schema: updateEmployeeHireDateSchema,
+  roles: rolesWith('team.manage'),
+  messages,
+  revalidatePaths: ['/equipe'],
+
+  handler: async (input, context) => {
+    const repository = teamRepositoryFor(context.supabase)
+
+    try {
+      const employee = await repository.updateEmployeeHireDate(
+        context.clinicId,
+        input.employeeId,
+        input.hireDate ? parseDateOnly(input.hireDate) : null,
+      )
+
+      return ok<EmployeeDto>(toEmployeeDto(employee))
+    } catch (cause) {
+      return toTeamFailure<'employeeId' | 'hireDate'>(
+        'employee.hire_date.update',
+        cause,
+      )
+    }
+  },
+
+  audit: (output) => ({
+    action: 'employee.hire_date_updated',
+    entityType: 'employee',
+    entityId: output.id,
+    after: { hire_date: output.hireDate },
+  }),
+})
+
+export async function updateEmployeeHireDateAction(
+  rawInput: unknown,
+): Promise<ActionResult<EmployeeDto, 'employeeId' | 'hireDate'>> {
+  return runUpdateEmployeeHireDate(rawInput)
 }
 
 /**

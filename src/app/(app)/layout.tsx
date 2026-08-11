@@ -4,6 +4,9 @@ import type { ReactNode } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { listUserClinics } from '@/lib/auth/clinics'
 import { describeRole, getSessionState } from '@/lib/auth/session'
+import { clinicStatusNotice } from '@/lib/clinic/clinic-status'
+import { requiresSecondFactor } from '@/lib/security/mfa'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { currentUser } from '@/lib/mocks/clinic-data'
 import { ClinicSwitcher } from '@/modules/identity/ui/ClinicSwitcher'
 import { toNotificationDto } from '@/modules/notifications/application/toNotificationDto'
@@ -57,7 +60,6 @@ import type { Notification } from '@/modules/notifications/domain/Notification'
  * Ver node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/
  * 02-route-segment-config/instant.md §"Disabling static shell validation".
  */
-export const instant = false
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSessionState()
 
@@ -72,6 +74,28 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   if (session.status === 'anonymous') redirect('/login')
   if (session.status === 'needs-onboarding') redirect('/onboarding')
   if (session.status === 'claims-stale') redirect('/onboarding')
+
+  /*
+   * Segundo fator ainda nao apresentado — feature S-MFA.
+   *
+   * O desvio do `signInAction` nao basta: ele so cobre quem acabou de entrar
+   * pelo formulario. Sem ESTE portao, digitar `/pacientes` na barra de endereco
+   * entraria com a sessao `aal1`, e cadastrar um fator seria seguranca falsa.
+   *
+   * Fica na casca porque a casca e o unico ponto por onde toda rota privada
+   * passa. `requiresSecondFactor` so e verdadeiro quando ha fator cadastrado E a
+   * sessao nao o apresentou; leitura indisponivel devolve niveis nulos e nao
+   * tranca ninguem.
+   */
+  if (session.status === 'active') {
+    const supabase = await createSupabaseServerClient()
+    const { data: assurance } =
+      (await supabase?.auth.mfa.getAuthenticatorAssuranceLevel()) ?? {}
+
+    if (requiresSecondFactor(assurance ?? { currentLevel: null, nextLevel: null })) {
+      redirect('/verificacao')
+    }
+  }
 
   const identity =
     session.status === 'not-configured'
@@ -153,6 +177,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       clinicName={identity.clinicName}
       clinicSwitcher={clinicSwitcher}
       notificationSlot={notificationSlot}
+      /*
+       * O estado comercial da clinica (C-ST). Quem le precisa saber ANTES de
+       * digitar meia ficha que a escrita esta bloqueada — descobrir no botao
+       * "salvar" e perder o trabalho.
+       */
+      clinicNotice={
+        session.status === 'active' && session.clinicStatus
+          ? (clinicStatusNotice(session.clinicStatus) ?? undefined)
+          : undefined
+      }
     >
       {children}
     </AppShell>

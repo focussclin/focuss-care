@@ -3,7 +3,7 @@ import 'server-only'
 import { cache } from 'react'
 
 import { getActiveClinicId, getActiveClinicRole } from '@/lib/auth/active-clinic'
-import type { MembershipRole } from '@/lib/supabase/database.types'
+import type { ClinicStatus, MembershipRole } from '@/lib/supabase/database.types'
 import { isSupabaseConfigured } from '@/lib/supabase/config'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -34,6 +34,17 @@ export type SessionState =
       user: SessionUser
       clinicId: string
       clinicName: string | null
+      /**
+       * `clinics.status` — o estado COMERCIAL da clinica.
+       *
+       * Nao confundir com o `status` desta uniao, que e o estado da SESSAO. A
+       * coluna existia desde o primeiro schema e nao era lida por ninguem: uma
+       * clinica `suspended` no banco funcionava inteira (C-ST).
+       *
+       * `null` quando a leitura falhou. Nesse caso nada e bloqueado — ver
+       * `readClinic`.
+       */
+      clinicStatus: ClinicStatus | null
       role: MembershipRole | null
     }
 
@@ -154,24 +165,38 @@ export const getSessionState = cache(async function getSessionState(): Promise<S
     return { status: 'claims-stale', user, clinicId: membership.clinic_id }
   }
 
+  const clinic = await readClinic(supabase, clinicId)
+
   return {
     status: 'active',
     user,
     clinicId,
-    clinicName: await readClinicName(supabase, clinicId),
+    clinicName: clinic.name,
+    clinicStatus: clinic.status,
     role: await getActiveClinicRole(),
   }
 })
 
-async function readClinicName(
+/**
+ * Nome e estado da clinica, na MESMA leitura.
+ *
+ * O estado entrou junto do nome de proposito: os dois vem da mesma linha, e uma
+ * segunda consulta so para ler uma coluna custaria uma ida de rede em toda
+ * requisicao autenticada.
+ *
+ * Falha de leitura devolve `null` nos dois, e `null` NAO bloqueia nada — mesma
+ * escolha que a cota do plano e o horario de funcionamento fazem: um Postgres
+ * indisponivel nao pode virar clinica trancada.
+ */
+async function readClinic(
   supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
   clinicId: string,
-): Promise<string | null> {
+): Promise<{ name: string | null; status: ClinicStatus | null }> {
   const { data } = await supabase
     .from('clinics')
-    .select('trade_name')
+    .select('trade_name, status')
     .eq('id', clinicId)
     .maybeSingle()
 
-  return data?.trade_name ?? null
+  return { name: data?.trade_name ?? null, status: data?.status ?? null }
 }

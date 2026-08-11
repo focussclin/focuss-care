@@ -46,6 +46,7 @@ export type TeamWriteFailure =
    * data futura tiraria a pessoa da equipe hoje, enquanto ela ainda trabalha.
    */
   | 'termination-in-future'
+  | 'hire-after-termination'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
   | 'not-found'
   /** A policy de RLS recusou. */

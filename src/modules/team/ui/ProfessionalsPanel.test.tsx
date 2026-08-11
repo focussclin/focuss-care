@@ -176,10 +176,13 @@ describe('cadastro', () => {
     expect(createProfessionalAction).not.toHaveBeenCalled()
   })
 
-  it('os nove conselhos do enum são oferecidos', () => {
+  it('os DEZ conselhos do enum são oferecidos', () => {
     /*
      * O enum `council_type` do banco tinha oito valores inalcançáveis pela
-     * aplicação inteira — só `CRM` chegava a algum lugar.
+     * aplicação inteira — só `CRM` chegava a algum lugar. `OUTRO` foi o último
+     * a entrar: sem ele, quem tem conselho fora das nove siglas ficava sem
+     * conselho NENHUM, e o número real ia embora junto com a sigla que não
+     * cabia.
      */
     renderPanel({ professionals: [] })
     fireEvent.click(screen.getByRole('button', { name: /novo profissional/i }))
@@ -199,6 +202,8 @@ describe('cadastro', () => {
       'COREN',
       'CREF',
       'CRFa',
+      // Rotulado, e nao cru: "OUTRO" na lista pareceria erro de sistema.
+      'Outro conselho',
     ])
   })
 })

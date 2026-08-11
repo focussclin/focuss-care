@@ -5,6 +5,11 @@ import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { patientWriteRoles } from '../application/patientWriteRoles'
+import {
+  limitReachedMessage,
+} from '@/lib/subscription/plan-limits'
+import { hasQuotaFor } from '@/lib/subscription/plan-quota'
+
 import { toNewPatientData } from '../application/toNewPatientData'
 import { toPatientDto } from '../application/toPatientDto'
 import { toWriteFailure } from '../application/writeFailure'
@@ -69,6 +74,25 @@ const runCreatePatient = createAction<
 
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)
+
+    /*
+     * Limite do PLANO, antes de escrever.
+     *
+     * `plans.max_patients` era exibido em `/assinaturas` com barra de uso e nao
+     * barrava nada. A checagem vem antes do repositorio de proposito: recusar
+     * depois do insert exigiria apagar a linha, e apagar paciente e o que este
+     * produto nao faz.
+     *
+     * Sem assinatura, ou com leitura indisponivel, o limite e nulo e a escrita
+     * segue — ver `plan-quota.ts`.
+     */
+    const quota = await hasQuotaFor(context.supabase, context.clinicId, 'patients')
+    if (!quota.allowed && quota.max !== null) {
+      return err<CreatePatientField>(
+        'conflict',
+        limitReachedMessage('patients', quota.max),
+      )
+    }
 
     try {
       /*

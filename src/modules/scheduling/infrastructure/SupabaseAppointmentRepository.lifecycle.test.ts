@@ -358,3 +358,45 @@ describe('andamento vindo da fila', () => {
     })
   })
 })
+
+/**
+ * `checked_in_at` era a última coluna de `appointments` sem escrita nenhuma.
+ *
+ * O STATUS já chegava a `checked_in` desde a sincronização com a fila; o carimbo
+ * de quando a pessoa chegou continuava nulo — `status` respondia "chegou" e nada
+ * respondia "a que horas".
+ */
+describe('carimbo da chegada', () => {
+  it('a chegada grava `checked_in_at`', async () => {
+    const fake = createFake({ current: { status: 'confirmed', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER)
+
+    const patch = fake.argsOf('update')[0][0] as Record<string, unknown>
+    expect(patch.status).toBe('checked_in')
+    expect(typeof patch.checked_in_at).toBe('string')
+  })
+
+  it('o início do atendimento NÃO carimba de novo', async () => {
+    /*
+     * `in_progress` tem `waiting_queue.started_at`, gravado pelo módulo de
+     * atendimento. Carimbar aqui criaria dois relógios para o mesmo instante, e
+     * eles divergiriam.
+     */
+    const fake = createFake({ current: { status: 'checked_in', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'in_progress', USER)
+
+    const patch = fake.argsOf('update')[0][0] as Record<string, unknown>
+    expect(patch.status).toBe('in_progress')
+    expect(patch).not.toHaveProperty('checked_in_at')
+  })
+
+  it('o desfecho também não mexe no carimbo da chegada', async () => {
+    const fake = createFake({ current: { status: 'checked_in', starts_at: PAST } })
+
+    await fake.subject.recordOutcome(CLINIC, APPOINTMENT, 'completed', USER)
+
+    expect(fake.argsOf('update')[0][0]).not.toHaveProperty('checked_in_at')
+  })
+})

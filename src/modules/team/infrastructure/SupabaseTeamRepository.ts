@@ -16,7 +16,11 @@ import type {
   NewTimeOffData,
   TimeOff,
 } from '../domain/Employee'
-import { isEmployed, refuseTermination } from '../domain/Employee'
+import {
+  isEmployed,
+  refuseHireDate,
+  refuseTermination,
+} from '../domain/Employee'
 import type {
   CreatedInvitation,
   MembershipStatus,
@@ -411,6 +415,60 @@ export class SupabaseTeamRepository implements TeamRepository {
          * e o que impede a linha "ativo, desligado em 12/03" de existir.
          */
         is_active: isEmployed(terminationDate),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', employeeId)
+      .select(EMPLOYEE_COLUMNS)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) {
+      throw new TeamRepositoryError(
+        'forbidden',
+        'o funcionario e legivel mas a escrita foi recusada',
+      )
+    }
+
+    return toEmployee(row as EmployeeRow)
+  }
+
+  async updateEmployeeHireDate(
+    clinicId: string,
+    employeeId: string,
+    hireDate: Date | null,
+  ): Promise<Employee> {
+    const { data: current, error: readError } = await this.client
+      .from('employees')
+      .select('termination_date')
+      .eq('clinic_id', clinicId)
+      .eq('id', employeeId)
+      .maybeSingle()
+
+    if (readError) throw toWriteError(readError)
+    if (!current) {
+      throw new TeamRepositoryError(
+        'not-found',
+        `nenhum funcionario ${employeeId} na clinica ativa`,
+      )
+    }
+
+    const terminationDate = current.termination_date
+      ? new Date(`${current.termination_date}T00:00:00`)
+      : null
+    const refusal = refuseHireDate(hireDate, terminationDate)
+
+    if (refusal) {
+      throw new TeamRepositoryError(
+        'hire-after-termination',
+        `admissao recusada: ${refusal}`,
+      )
+    }
+
+    const { data: row, error } = await this.client
+      .from('employees')
+      .update({
+        hire_date: hireDate ? toDateOnly(hireDate) : null,
         updated_at: new Date().toISOString(),
       })
       .eq('clinic_id', clinicId)

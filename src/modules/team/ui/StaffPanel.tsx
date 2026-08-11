@@ -3,6 +3,7 @@
 import {
   CalendarOff,
   Info,
+  Pencil,
   Plus,
   RotateCcw,
   UserMinus,
@@ -25,6 +26,7 @@ import {
   createTimeOffAction,
   reinstateEmployeeAction,
   terminateEmployeeAction,
+  updateEmployeeHireDateAction,
 } from '../actions/staff.action'
 import {
   contractTypeOptions,
@@ -95,6 +97,10 @@ export function StaffPanel({
    * data digitada nao sobrevive a troca — ela pertence AQUELE desligamento.
    */
   const [terminating, setTerminating] = useState<{
+    id: string
+    date: string
+  } | null>(null)
+  const [editingHireDate, setEditingHireDate] = useState<{
     id: string
     date: string
   } | null>(null)
@@ -174,6 +180,22 @@ export function StaffPanel({
   function handleReinstate(id: string) {
     run(async () => {
       const result = await reinstateEmployeeAction({ employeeId: id })
+
+      return { ok: result.ok, message: result.ok ? undefined : result.error.message }
+    })
+  }
+
+  function handleHireDate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingHireDate) return
+
+    run(async () => {
+      const result = await updateEmployeeHireDateAction({
+        employeeId: editingHireDate.id,
+        hireDate: editingHireDate.date,
+      })
+
+      if (result.ok) setEditingHireDate(null)
 
       return { ok: result.ok, message: result.ok ? undefined : result.error.message }
     })
@@ -318,27 +340,44 @@ export function StaffPanel({
                   </StatusBadge>
 
                   {editable ? (
-                    employee.isActive ? (
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         disabled={isPending}
-                        onClick={() =>
-                          setTerminating({ id: employee.id, date: today })
-                        }
+                        onClick={() => {
+                          setTerminating(null)
+                          setEditingHireDate({
+                            id: employee.id,
+                            date: employee.hireDate ?? '',
+                          })
+                        }}
                       >
-                        <UserMinus aria-hidden className="size-4" />
-                        Registrar desligamento
+                        <Pencil aria-hidden className="size-4" />
+                        Editar admissão
                       </Button>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        disabled={isPending}
-                        onClick={() => handleReinstate(employee.id)}
-                      >
-                        <RotateCcw aria-hidden className="size-4" />
-                        Reverter
-                      </Button>
-                    )
+                      {employee.isActive ? (
+                        <Button
+                          variant="secondary"
+                          disabled={isPending}
+                          onClick={() => {
+                            setEditingHireDate(null)
+                            setTerminating({ id: employee.id, date: today })
+                          }}
+                        >
+                          <UserMinus aria-hidden className="size-4" />
+                          Registrar desligamento
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          disabled={isPending}
+                          onClick={() => handleReinstate(employee.id)}
+                        >
+                          <RotateCcw aria-hidden className="size-4" />
+                          Reverter
+                        </Button>
+                      )}
+                    </div>
                   ) : null}
                 </div>
 
@@ -367,6 +406,36 @@ export function StaffPanel({
                       variant="ghost"
                       disabled={isPending}
                       onClick={() => setTerminating(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </form>
+                ) : null}
+
+                {editingHireDate?.id === employee.id ? (
+                  <form
+                    onSubmit={handleHireDate}
+                    className="flex flex-wrap items-end gap-3 rounded-field border border-border-card bg-background p-3"
+                  >
+                    <TextField
+                      label="Data de admissão"
+                      type="date"
+                      value={editingHireDate.date}
+                      onChange={(event) =>
+                        setEditingHireDate({
+                          id: employee.id,
+                          date: event.target.value,
+                        })
+                      }
+                      hint="Deixe vazio para remover a data do cadastro."
+                    />
+                    <Button type="submit" disabled={isPending}>
+                      {isPending ? 'Salvando…' : 'Salvar admissão'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={isPending}
+                      onClick={() => setEditingHireDate(null)}
                     >
                       Cancelar
                     </Button>

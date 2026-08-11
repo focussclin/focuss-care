@@ -16,7 +16,7 @@ import {
   setProfessionalActiveAction,
   updateProfessionalAction,
 } from '../actions/professional.action'
-import { COUNCIL_TYPES } from '../domain/Professional'
+import { COUNCIL_LABELS, COUNCIL_TYPES } from '../domain/Professional'
 import {
   professionalMessages,
   type LinkableMemberDto,
@@ -247,7 +247,10 @@ export function ProfessionalsPanel({
             onChange={(event) => set('councilType', event.target.value)}
             options={[
               { value: '', label: 'Sem conselho' },
-              ...COUNCIL_TYPES.map((council) => ({ value: council, label: council })),
+              ...COUNCIL_TYPES.map((council) => ({
+                value: council,
+                label: COUNCIL_LABELS[council],
+              })),
             ]}
           />
 

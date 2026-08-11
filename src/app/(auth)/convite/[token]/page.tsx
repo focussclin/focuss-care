@@ -43,7 +43,6 @@ export const metadata: Metadata = {
  * O que se ganharia em troca é pequeno: o shell seria o título "Você foi
  * convidado", pintado antes de saber se a pessoa sequer pode aceitar.
  */
-export const instant = false
 
 export default async function ConvitePage({
   params,

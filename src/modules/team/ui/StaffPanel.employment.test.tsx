@@ -19,6 +19,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 const createEmployeeAction = vi.fn()
 const terminateEmployeeAction = vi.fn()
 const reinstateEmployeeAction = vi.fn()
+const updateEmployeeHireDateAction = vi.fn()
 const createTimeOffAction = vi.fn()
 const answerTimeOffAction = vi.fn()
 
@@ -26,6 +27,7 @@ vi.mock('../actions/staff.action', () => ({
   createEmployeeAction: (input: unknown) => createEmployeeAction(input),
   terminateEmployeeAction: (input: unknown) => terminateEmployeeAction(input),
   reinstateEmployeeAction: (input: unknown) => reinstateEmployeeAction(input),
+  updateEmployeeHireDateAction: (input: unknown) => updateEmployeeHireDateAction(input),
   createTimeOffAction: (input: unknown) => createTimeOffAction(input),
   answerTimeOffAction: (input: unknown) => answerTimeOffAction(input),
 }))
@@ -67,6 +69,7 @@ beforeEach(() => {
   createEmployeeAction.mockResolvedValue({ ok: true, data: {} })
   terminateEmployeeAction.mockResolvedValue({ ok: true, data: {} })
   reinstateEmployeeAction.mockResolvedValue({ ok: true, data: {} })
+  updateEmployeeHireDateAction.mockResolvedValue({ ok: true, data: {} })
 })
 
 describe('o período do vínculo aparece', () => {
@@ -196,6 +199,47 @@ describe('reverter', () => {
         employeeId: EMPLOYEE,
       }),
     )
+  })
+})
+
+describe('editar admissão', () => {
+  it('abre preenchida com a data atual e envia a correção', async () => {
+    renderPanel()
+
+    fireEvent.click(screen.getByRole('button', { name: /editar admissão/i }))
+
+    const field = screen.getByLabelText(/data de admissão/i) as HTMLInputElement
+    expect(field.value).toBe('2026-03-01')
+
+    fireEvent.change(field, { target: { value: '2026-04-01' } })
+    fireEvent.click(screen.getByRole('button', { name: /salvar admissão/i }))
+
+    await waitFor(() =>
+      expect(updateEmployeeHireDateAction).toHaveBeenCalledWith({
+        employeeId: EMPLOYEE,
+        hireDate: '2026-04-01',
+      }),
+    )
+  })
+
+  it('permite remover a data de um cadastro antigo', async () => {
+    renderPanel({ employees: [employee({ hireDate: null })] })
+
+    fireEvent.click(screen.getByRole('button', { name: /editar admissão/i }))
+    fireEvent.click(screen.getByRole('button', { name: /salvar admissão/i }))
+
+    await waitFor(() =>
+      expect(updateEmployeeHireDateAction).toHaveBeenCalledWith({
+        employeeId: EMPLOYEE,
+        hireDate: '',
+      }),
+    )
+  })
+
+  it('não aparece para quem não pode gerenciar a equipe', () => {
+    renderPanel({ canManage: false })
+
+    expect(screen.queryByRole('button', { name: /editar admissão/i })).toBeNull()
   })
 })
 

@@ -1,3 +1,4 @@
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -54,7 +55,7 @@ const INVOICE_SELECT = `
   due_date,
   notes,
   created_at,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   invoice_items (
     id,
     description,
@@ -98,7 +99,7 @@ interface InvoiceRow {
   due_date: string | null
   notes: string | null
   created_at: string
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   invoice_items: {
     id: string
     description: string
@@ -936,7 +937,7 @@ function toInvoice(row: InvoiceRow): Invoice {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     number: row.number,
     status: row.status,
     subtotalCents: row.subtotal_cents,

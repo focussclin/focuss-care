@@ -207,6 +207,19 @@ O mesmo vale para `workflows` em `/automacoes`, que precisa de `INSERT`,
 `UPDATE` e `DELETE` para o papel com `clinic.settings`. As duas telas tratam a
 ausência do mesmo jeito: `write-forbidden`, com o texto apontando a policy.
 
+### `plans.features` não tem vocabulário declarado
+
+`features` é `jsonb` e `plans` é catálogo **global**, povoado fora da aplicação.
+Não há seed, migration nem documentação que diga quais chaves existem. Inventá-las
+faria o gating de recurso ler nada e liberar tudo — parecendo funcionar. A
+aplicação **não lê nem grava** `features`, `is_public` e `ai_tokens_month`.
+
+```sql
+select id, name, is_public, ai_tokens_month, features
+  from public.plans
+ order by sort_order;
+```
+
 ### `price_list_items` guarda o repasse de DUAS formas
 
 `professional_share_percent` e `professional_share_cents` expressam a mesma

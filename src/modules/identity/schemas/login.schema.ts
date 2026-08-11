@@ -10,6 +10,15 @@ export const loginMessages = {
   invalidCredentials:
     'Não foi possível entrar. Confira seus dados e tente novamente.',
   unexpected: 'Algo deu errado. Tente novamente em instantes.',
+  /**
+   * Tentativas demais.
+   *
+   * Diz quanto esperar, e **não** diz se o e-mail existe — a frase é a mesma
+   * para conta real e inventada. Revelar aqui transformaria o controle de taxa
+   * num enumerador de contas.
+   */
+  tooManyAttempts: (seconds: number) =>
+    `Muitas tentativas seguidas. Aguarde ${seconds} segundo${seconds === 1 ? '' : 's'} e tente de novo.`,
 } as const
 
 export const loginSchema = z.object({

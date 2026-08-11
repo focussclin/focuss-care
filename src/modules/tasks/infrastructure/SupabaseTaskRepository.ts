@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from '@/lib/supabase/database.types'
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 
 import type { NewTaskData, Task, TaskStatus, TaskUpdateData } from '../domain/Task'
 import type { TaskRepository } from '../domain/TaskRepository'
@@ -33,7 +34,7 @@ const TASK_SELECT = `
   created_at,
   updated_at,
   assignee:profiles!clinic_tasks_assigned_to_fkey ( id, full_name ),
-  patient:patients ( id, full_name )
+  patient:patients ( id, full_name, social_name )
 `
 
 /**
@@ -63,7 +64,7 @@ function toTask(row: TaskRow): Task {
       : null,
     target: {
       patientId: row.patient_id,
-      patientName: row.patient?.full_name ?? null,
+      patientName: row.patient ? preferredNameOfRow(row.patient) : null,
       appointmentId: row.appointment_id,
       invoiceId: row.invoice_id,
     },

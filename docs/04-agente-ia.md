@@ -174,6 +174,69 @@ interpretar corretamente.
 
 ---
 
+## 4.1 Referências externas absorvidas — sem importar código
+
+As referências abaixo foram auditadas como fontes de padrões de produto, não
+como dependências. O Focuss Care não copia implementação, prompt, credencial ou
+modelo de dados de terceiros; conserva o isolamento por clínica, o RBAC e o
+princípio **IA sugere, humano assina**.
+
+### Roteiro orientado a estado
+
+O [FoodGPT](https://github.com/DevSamurai/food-gpt) usa um roteiro detalhado,
+catálogo fechado, identificação do contato e confirmação antes de finalizar um
+pedido. Para uma clínica, a adaptação segura é um playbook de intenções e slots:
+
+1. identificar paciente ou lead sem expor dado desnecessário;
+2. entender o objetivo (informação, agendamento, reagendamento, cancelamento ou
+   humano);
+3. coletar somente os campos daquela intenção;
+4. consultar uma tool autorizada e apresentar o resultado real;
+5. confirmar a ação antes de persistir, salvo quando o modo da clínica permitir
+   automação;
+6. resumir o próximo passo e encerrar ou transferir.
+
+O roteiro não vira um prompt monolítico. Ele deve ser estado estruturado em
+`ai_conversations.context`, com validação por Zod e transições do domínio. Dado
+clínico não entra como "memória" só porque apareceu na conversa.
+
+### Fila operacional e senha
+
+O [NovoSGA](https://github.com/novosga/novosga) organiza atendimento por filas,
+senhas, operadores e painel de chamada. O [Chamados](https://github.com/uspdev/chamados)
+acrescenta triagem, filas por setor/categoria, estados adicionais, anotação
+interna, observadores e preferências de notificação.
+
+No Focuss Care, esses conceitos se separam em dois contextos que não podem ser
+misturados:
+
+- `waiting_queue` é a fila presencial, com check-in, chamada, sala e display;
+- `conversations` é a fila de relacionamento, com triagem, prioridade,
+  responsável, tags, status e handoff IA/humano.
+
+O Inbox pode absorver a ideia de triagem por categoria e anotação interna sem
+enviar essas informações ao paciente. A IA usa a mesma fila de atendimento, mas
+fica impedida de responder quando o handoff está ativo. Novos estados ou
+prioridade só entram com migration, evento, RLS e testes de concorrência; não
+serão simulados na tela.
+
+### Decisões de implementação
+
+- O playbook clínico será composto por intenções determinísticas e tools
+  controladas, não por um texto copiado de atendimento comercial.
+- Confirmações, opt-out e handoff continuam no `Intent Router`, sem depender de
+  interpretação do LLM.
+- A fila será serializada por `conversationId`; retry, DLQ e transferência serão
+  responsabilidade do worker, não de um request do Next.js.
+- Notas internas, observadores e contexto estruturado respeitarão o tenant e o
+  papel que pode ler o dado; prontuário nunca será contexto implícito da IA.
+
+Esta auditoria melhora o desenho, mas **não desbloqueia AI-01..07**: ainda faltam
+aprovação do desenho operacional, worker/Redis, provedor e as migrations
+correspondentes. Até lá, `/chat-ia` permanece honesta e sem chamada fictícia.
+
+---
+
 ## 5. Modelo de eventos
 
 Fila única com filas nomeadas por natureza (BullMQ):

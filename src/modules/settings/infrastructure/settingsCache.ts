@@ -1,8 +1,5 @@
 import 'server-only'
 
-import { cacheLife, cacheTag } from 'next/cache'
-
-import { cacheTags } from '@/lib/cache/tags'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 import { DEFAULT_APPOINTMENT_DEFAULTS } from '../domain/settingsDefaults'
@@ -54,22 +51,16 @@ import { storedAppointmentDefaultsSchema } from '../schemas/settings.schema'
 export async function getCachedDefaultDuration(
   clinicId: string,
 ): Promise<number> {
-  'use cache: private'
-
   /*
    * A tag carrega `clinic_id` (P4) e vem de `clinicId`, que é ARGUMENTO — ou
    * seja, também faz parte da chave do cache. Não há como uma entrada de uma
    * clínica ser servida a outra: a chave difere antes de a tag importar.
    */
-  cacheTag(cacheTags.clinicSettings(clinicId))
-
   /*
    * 300s é o mínimo para o conteúdo entrar no App Shell da rota; abaixo de 30s
    * o prefetch expiraria antes do clique. Ver cacheLife.md §"Prerendering
    * behavior".
    */
-  cacheLife({ stale: 300 })
-
   const client = await createSupabaseServerClient()
   if (!client) return DEFAULT_APPOINTMENT_DEFAULTS.durationMinutes
 

@@ -1,3 +1,4 @@
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -46,7 +47,7 @@ const AUTHORIZATION_SELECT = `
   answered_at,
   expires_at,
   denial_reason,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   patient_insurances (
     card_number,
     insurance_plans (
@@ -66,7 +67,7 @@ const AUTHORIZATION_SEARCH_SELECT = `
   authorization_number,
   status,
   requested_at,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   patient_insurances (
     insurance_plans (
       insurance_providers ( name )
@@ -89,7 +90,7 @@ const CLAIM_DENIAL_SELECT = `
   notes,
   invoices (
     number,
-    patients ( full_name ),
+    patients ( full_name, social_name ),
     insurance_plans ( name )
   ),
   invoice_items ( description )
@@ -104,7 +105,7 @@ const PATIENT_INSURANCE_SELECT = `
   valid_until,
   is_primary,
   is_active,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   insurance_plans (
     name,
     insurance_providers ( name )
@@ -121,7 +122,7 @@ interface AuthorizationRow {
   answered_at: string | null
   expires_at: string | null
   denial_reason: string | null
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   patient_insurances: {
     card_number: string
     insurance_plans: {
@@ -137,7 +138,7 @@ interface AuthorizationSearchRow {
   authorization_number: string | null
   status: AuthorizationStatus
   requested_at: string
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   patient_insurances: {
     insurance_plans: {
       insurance_providers: { name: string } | null
@@ -160,7 +161,7 @@ interface ClaimDenialRow {
   notes: string | null
   invoices: {
     number: number | null
-    patients: { full_name: string } | null
+    patients: { full_name: string; social_name: string | null } | null
     insurance_plans: { name: string } | null
   } | null
   invoice_items: { description: string } | null
@@ -175,7 +176,7 @@ interface PatientInsuranceRow {
   valid_until: string | null
   is_primary: boolean
   is_active: boolean
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   insurance_plans: {
     name: string
     insurance_providers: { name: string } | null
@@ -391,7 +392,7 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     const { data, error } = await this.client
       .from('invoices')
       .select(
-        'id, number, total_cents, patients ( full_name ), insurance_plans ( name )',
+        'id, number, total_cents, patients ( full_name, social_name ), insurance_plans ( name )',
       )
       .eq('clinic_id', clinicId)
       .eq('payer_type', 'insurance')
@@ -405,17 +406,17 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
       id: string
       number: number | null
       total_cents: number
-      patients: { full_name: string } | null
+      patients: { full_name: string; social_name: string | null } | null
       insurance_plans: { name: string } | null
     }[]
 
     return rows.map((row) => ({
       id: row.id,
-      patientName: row.patients?.full_name ?? 'Paciente',
+      patientName: preferredNameOfRow(row.patients, 'Paciente'),
       invoiceNumber: row.number,
       totalCents: row.total_cents,
       label: `Fatura ${row.number ? `nº ${row.number}` : row.id.slice(0, 8)} · ${
-        row.patients?.full_name ?? 'Paciente'
+        preferredNameOfRow(row.patients, 'Paciente')
       } · ${row.insurance_plans?.name ?? 'Convênio'}`,
     }))
   }
@@ -524,7 +525,7 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     const { data, error } = await this.client
       .from('patient_insurances')
       .select(
-        'id, card_number, valid_until, patients ( full_name ), insurance_plans ( name )',
+        'id, card_number, valid_until, patients ( full_name, social_name ), insurance_plans ( name )',
       )
       .eq('clinic_id', clinicId)
       .eq('is_active', true)
@@ -536,13 +537,13 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
       id: string
       card_number: string
       valid_until: string | null
-      patients: { full_name: string } | null
+      patients: { full_name: string; social_name: string | null } | null
       insurance_plans: { name: string } | null
     }[]
 
     return rows.map((row) => ({
       id: row.id,
-      patientName: row.patients?.full_name ?? 'Paciente',
+      patientName: preferredNameOfRow(row.patients, 'Paciente'),
       planName: row.insurance_plans?.name ?? 'Plano',
       cardNumber: row.card_number,
       validUntil: row.valid_until ? new Date(`${row.valid_until}T00:00:00`) : null,
@@ -979,7 +980,7 @@ function toPatientInsurance(row: PatientInsuranceRow): PatientInsurance {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     planId: row.insurance_plan_id,
     planName: row.insurance_plans?.name ?? 'Plano',
     providerName: row.insurance_plans?.insurance_providers?.name ?? 'Operadora',
@@ -999,7 +1000,7 @@ function toAuthorization(row: AuthorizationRow): Authorization {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     planName: plan?.name ?? 'Plano',
     providerName: plan?.insurance_providers?.name ?? 'Operadora',
     authorizationNumber: row.authorization_number,
@@ -1017,7 +1018,7 @@ function toAuthorizationSearchHit(
 ): AuthorizationSearchHit {
   return {
     id: row.id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     authorizationNumber: row.authorization_number,
     status: row.status,
     providerName:
@@ -1032,7 +1033,7 @@ function toClaimDenial(row: ClaimDenialRow): ClaimDenial {
     id: row.id,
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoices?.number ?? null,
-    patientName: row.invoices?.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.invoices?.patients),
     planName: row.invoices?.insurance_plans?.name ?? 'Convênio',
     invoiceItemDescription: row.invoice_items?.description ?? null,
     denialCode: row.denial_code,

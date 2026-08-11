@@ -94,6 +94,10 @@ export class MockTeamRepository implements TeamRepository {
     return this.refuseWrite('setEmployeeTermination')
   }
 
+  async updateEmployeeHireDate(): Promise<never> {
+    return this.refuseWrite('updateEmployeeHireDate')
+  }
+
   async createEmployee(): Promise<never> {
     return this.refuseWrite('createEmployee')
   }

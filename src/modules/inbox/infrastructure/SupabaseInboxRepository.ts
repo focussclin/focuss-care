@@ -1,3 +1,4 @@
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -32,7 +33,7 @@ const CONVERSATION_SELECT = `
         unread_count,
         created_at,
         updated_at,
-        patient:patients ( id, full_name ),
+        patient:patients ( id, full_name, social_name ),
         assigned:profiles ( id, full_name )
       `
 
@@ -44,7 +45,7 @@ interface ConversationPatch {
 }
 
 interface ConversationJoinRow extends ConversationRow {
-  patient: { id: string; full_name: string } | null
+  patient: { id: string; full_name: string; social_name: string | null } | null
   assigned: { id: string; full_name: string } | null
 }
 
@@ -241,7 +242,7 @@ function toConversation(row: ConversationJoinRow): InboxConversation {
     lastMessageAt: row.last_message_at ? new Date(row.last_message_at) : null,
     unreadCount: row.unread_count,
     patientId: row.patient_id,
-    patientName: row.patient?.full_name ?? null,
+    patientName: row.patient ? preferredNameOfRow(row.patient) : null,
     messages: [],
   }
 }

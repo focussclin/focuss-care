@@ -8,13 +8,23 @@
 
 ---
 
-## Estado atualizado — 09/08/2026
+## Estado atualizado — 11/08/2026
 
 `npm run db:types` foi executado com segurança contra o projeto configurado e
 confirmou que as migrations dos módulos preparados ainda não estão refletidas
 integralmente no schema remoto. Não foi executado DDL remoto neste ambiente.
 As rotas existentes continuam declarando `schema-not-ready` e mantendo as
 escritas desabilitadas até a aplicação confirmada das migrations.
+
+O build local também foi validado no runtime OpenNext Cloudflare com
+`npx opennextjs-cloudflare build`; ele passou sem o erro de middleware Node.js.
+Em Workers Builds, mantenha o comando de build documentado na seção Cloudflare
+e use `npx wrangler deploy` somente na etapa de deploy do provedor.
+
+O novo projeto escolhido (`pqlgoekzjemrncdzppnl`) foi consultado pela
+Management API e está vazio, sem tabelas. O checklist completo de chaves,
+callbacks, integrações e troca de VPS está em
+[`PROJECT_KEYS_AND_INTEGRATIONS.md`](./PROJECT_KEYS_AND_INTEGRATIONS.md).
 
 **Nova exceção desta etapa (09/08/2026):** a migration
 `supabase/migrations/20260809_rooms.sql` ainda não foi aplicada. A implementação

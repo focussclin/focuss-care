@@ -1,6 +1,8 @@
 'use server'
 
 import { rolesWith } from '@/lib/auth/permissions'
+import { limitReachedMessage } from '@/lib/subscription/plan-limits'
+import { hasQuotaFor } from '@/lib/subscription/plan-quota'
 import { createAction } from '@/modules/_shared/application/createAction'
 import type { ActionContext } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
@@ -125,6 +127,26 @@ const runCreate = createAction<CreateProfessionalInput, ProfessionalDto, Profess
     const rejected = await rejectForeignUser(input.userId, context)
     if (rejected) return rejected
 
+    /*
+     * Limite do PLANO, antes de escrever.
+     *
+     * A cota conta profissional ATIVO — a mesma conta de `/assinaturas`. Por
+     * isso reativar tambem passa por aqui (ver `runSetActive`): sem isso,
+     * desativar e reativar seria o caminho para furar o limite sem cadastrar
+     * ninguem novo.
+     */
+    const quota = await hasQuotaFor(
+      context.supabase,
+      context.clinicId,
+      'professionals',
+    )
+    if (!quota.allowed && quota.max !== null) {
+      return err<ProfessionalField>(
+        'conflict',
+        limitReachedMessage('professionals', quota.max),
+      )
+    }
+
     try {
       const professional = await professionalRepositoryFor(context.supabase).create(
         context.clinicId,
@@ -207,6 +229,28 @@ const runSetActive = createAction<
   messages,
   revalidatePaths: [...REVALIDATE],
   handler: async (input, context) => {
+    /*
+     * Reativar consome cota; desativar libera.
+     *
+     * A conta de `/assinaturas` e de profissional ATIVO. Sem esta guarda,
+     * desativar e reativar seria o caminho para furar o limite sem cadastrar
+     * ninguem novo — e o furo nao apareceria em lugar nenhum, porque o total
+     * cadastrado continuaria igual.
+     */
+    if (input.isActive) {
+      const quota = await hasQuotaFor(
+        context.supabase,
+        context.clinicId,
+        'professionals',
+      )
+      if (!quota.allowed && quota.max !== null) {
+        return err<'professionalId' | 'isActive'>(
+          'conflict',
+          limitReachedMessage('professionals', quota.max),
+        )
+      }
+    }
+
     try {
       const professional = await professionalRepositoryFor(context.supabase).setActive(
         context.clinicId,

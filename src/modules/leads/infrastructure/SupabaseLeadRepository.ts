@@ -39,7 +39,7 @@ const LEAD_SELECT = `
   created_at,
   updated_at,
   assigned:profiles ( id, full_name ),
-  converted_patient:patients ( id, full_name )
+  converted_patient:patients ( id, full_name, social_name )
 `
 
 const LEAD_ROW_CAP = 300

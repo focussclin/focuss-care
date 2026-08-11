@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ZodType } from 'zod'
 
 import { recordAuditEvent, type AuditEvent } from '@/lib/audit/audit-log'
+import { canWrite, writeBlockedMessage } from '@/lib/clinic/clinic-status'
 import { getSessionState } from '@/lib/auth/session'
 import type { CacheTag } from '@/lib/cache/tags'
 import { describeCause } from '@/lib/observability/describe-cause'
@@ -239,6 +240,25 @@ export function createAction<TInput, TOutput, F extends string = string>(
     // 3. Autorizar papel.
     if (options.roles && (!session.role || !options.roles.includes(session.role))) {
       return err<F>('forbidden', message('forbidden'))
+    }
+
+    /*
+     * 3b. O estado COMERCIAL da clinica — feature C-ST.
+     *
+     * `clinics.status` existia com cinco valores e ninguem o lia: uma clinica
+     * `suspended` no banco funcionava inteira, e cancelar assinatura nao tinha
+     * efeito sobre o acesso.
+     *
+     * Fica AQUI, e nao em cada action, porque a regra e uma so para as 118 —
+     * espalha-la garantiria que a proxima action nascesse sem ela. E vem DEPOIS
+     * do papel de proposito: quem nem podia executar a acao recebe 'forbidden',
+     * e nao um aviso sobre a assinatura da clinica.
+     *
+     * `null` (leitura falhou) nao bloqueia: um Postgres indisponivel nao pode
+     * virar clinica trancada. Mesma escolha da cota do plano.
+     */
+    if (session.clinicStatus && !canWrite(session.clinicStatus)) {
+      return err<F>('forbidden', writeBlockedMessage(session.clinicStatus))
     }
 
     // 4. Validar a entrada.

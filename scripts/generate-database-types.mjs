@@ -144,6 +144,17 @@ if (!response.ok) {
 const spec = await response.json()
 const definitions = spec.definitions ?? {}
 
+/*
+ * Algumas migrations são preparadas localmente antes de serem aplicadas no
+ * projeto remoto. O código pode continuar compilando nesse intervalo, mas a
+ * próxima execução de `db:types` não pode apagar os tipos que a camada de
+ * integração já usa. Estes suplementos só entram quando o PostgREST ainda
+ * não expõe a tabela; assim que a migration for aplicada, o schema remoto
+ * volta a ser a fonte de verdade e o suplemento desaparece sozinho.
+ */
+const needsIntegrationCredentialSupplement =
+  !definitions.clinic_integration_credentials
+
 /** Funcoes expostas via /rpc/<nome>. */
 const rpcNames = Object.keys(spec.paths ?? {})
   .filter((path) => path.startsWith('/rpc/'))
@@ -219,7 +230,9 @@ lines.push(' *')
 lines.push(' * Fonte: schema real do projeto Supabase (documento OpenAPI do PostgREST).')
 lines.push(' * Regenerar com:  npm run db:types')
 lines.push(' *')
-lines.push(` * Tabelas: ${tables.length} · Views: ${views.length} · Enums: ${enums.size}`)
+lines.push(
+  ` * Tabelas: ${tables.length + (needsIntegrationCredentialSupplement ? 1 : 0)} · Views: ${views.length} · Enums: ${enums.size}`,
+)
 lines.push(' *')
 lines.push(' * Nota sobre Insert: o OpenAPI nao expoe DEFAULTs, entao id/created_at/')
 lines.push(' * updated_at sao tratados como opcionais. Demais colunas NOT NULL entram')
@@ -241,6 +254,17 @@ lines.push('// -----------------------------------------------------------------
 for (const [name, { values }] of [...enums.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   lines.push(`export type ${name} =`)
   lines.push(values.map((v) => `  | '${v}'`).join('\n'))
+  lines.push('')
+}
+
+if (!enumNames.has('IntegrationCredentialProvider')) {
+  lines.push('/** Provedores do cofre server-side preparado localmente. */')
+  lines.push('export type IntegrationCredentialProvider =')
+  lines.push("  | 'brevo'")
+  lines.push("  | 'evolution'")
+  lines.push("  | 'deepseek'")
+  lines.push("  | 'google_calendar'")
+  lines.push("  | 'outlook_calendar'")
   lines.push('')
 }
 
@@ -292,6 +316,57 @@ for (const table of tables) {
   lines.push('      }')
 }
 
+if (needsIntegrationCredentialSupplement) {
+  lines.push('      clinic_integration_credentials: {')
+  lines.push('        Row: {')
+  lines.push('          id: string')
+  lines.push('          clinic_id: string')
+  lines.push('          provider: IntegrationCredentialProvider')
+  lines.push('          encrypted_payload: string')
+  lines.push('          key_version: number')
+  lines.push('          configured_by: string | null')
+  lines.push('          created_at: string')
+  lines.push('          updated_at: string')
+  lines.push('        }')
+  lines.push('        Insert: {')
+  lines.push('          id?: string')
+  lines.push('          clinic_id: string')
+  lines.push('          provider: IntegrationCredentialProvider')
+  lines.push('          encrypted_payload: string')
+  lines.push('          key_version?: number')
+  lines.push('          configured_by?: string | null')
+  lines.push('          created_at?: string')
+  lines.push('          updated_at?: string')
+  lines.push('        }')
+  lines.push('        Update: {')
+  lines.push('          id?: string')
+  lines.push('          clinic_id?: string')
+  lines.push('          provider?: IntegrationCredentialProvider')
+  lines.push('          encrypted_payload?: string')
+  lines.push('          key_version?: number')
+  lines.push('          configured_by?: string | null')
+  lines.push('          created_at?: string')
+  lines.push('          updated_at?: string')
+  lines.push('        }')
+  lines.push('        Relationships: [')
+  lines.push('          {')
+  lines.push("            foreignKeyName: 'clinic_integration_credentials_clinic_id_fkey'")
+  lines.push("            columns: ['clinic_id']")
+  lines.push('            isOneToOne: false')
+  lines.push("            referencedRelation: 'clinics'")
+  lines.push("            referencedColumns: ['id']")
+  lines.push('          },')
+  lines.push('          {')
+  lines.push("            foreignKeyName: 'clinic_integration_credentials_configured_by_fkey'")
+  lines.push("            columns: ['configured_by']")
+  lines.push('            isOneToOne: false')
+  lines.push("            referencedRelation: 'profiles'")
+  lines.push("            referencedColumns: ['id']")
+  lines.push('          },')
+  lines.push('        ]')
+  lines.push('      }')
+}
+
 lines.push('    }')
 
 lines.push('    Views: {')
@@ -340,11 +415,16 @@ for (const table of tables) {
     `export type ${rowAliasName(table.name)} = Database['public']['Tables']['${table.name}']['Row']`,
   )
 }
+if (needsIntegrationCredentialSupplement) {
+  lines.push(
+    "export type ClinicIntegrationCredentialRow = Database['public']['Tables']['clinic_integration_credentials']['Row']",
+  )
+}
 lines.push('')
 
 writeFileSync(OUTPUT, lines.join('\n'), 'utf8')
 
 console.log(`OK: ${OUTPUT}`)
 console.log(
-  `   ${tables.length} tabelas · ${views.length} views · ${enums.size} enums · ${lines.length} linhas`,
+  `   ${tables.length + (needsIntegrationCredentialSupplement ? 1 : 0)} tabelas (${tables.length} remotas) · ${views.length} views · ${enums.size} enums · ${lines.length} linhas`,
 )

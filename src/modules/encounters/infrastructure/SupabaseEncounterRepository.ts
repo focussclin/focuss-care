@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from '@/lib/supabase/database.types'
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 
 import type {
   Encounter,
@@ -31,7 +32,7 @@ const QUEUE_SELECT = `
   called_at,
   started_at,
   finished_at,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   professionals ( display_name )
 `
 
@@ -44,7 +45,7 @@ const ENCOUNTER_SELECT = `
   chief_complaint,
   started_at,
   ended_at,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   professionals ( display_name )
 `
 
@@ -60,7 +61,7 @@ type QueueJoinRow = {
   called_at: string | null
   started_at: string | null
   finished_at: string | null
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   professionals: { display_name: string } | null
 }
 
@@ -73,7 +74,7 @@ type EncounterJoinRow = {
   chief_complaint: string | null
   started_at: string
   ended_at: string | null
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   professionals: { display_name: string } | null
 }
 
@@ -81,7 +82,7 @@ function toQueueEntry(row: QueueJoinRow): QueueEntry {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     appointmentId: row.appointment_id,
     professionalId: row.professional_id,
     professionalName: row.professionals?.display_name ?? null,
@@ -99,7 +100,7 @@ function toEncounter(row: EncounterJoinRow): Encounter {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     professionalId: row.professional_id,
     professionalName: row.professionals?.display_name ?? 'Profissional',
     appointmentId: row.appointment_id,

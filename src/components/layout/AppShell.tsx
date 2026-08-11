@@ -33,6 +33,14 @@ export interface AppShellProps {
    * `components/` nao importa `modules/`.
    */
   clinicSwitcher?: ReactNode
+  /**
+   * Aviso sobre o estado COMERCIAL da clinica (C-ST).
+   *
+   * Chega como texto pronto, e nao como o enum: `components/` nao conhece
+   * `clinics.status` nem decide o que cada estado significa — quem decide e
+   * `lib/clinic/clinic-status.ts`. `undefined` e o caso normal, e nao ha banner.
+   */
+  clinicNotice?: string
   children: ReactNode
 }
 
@@ -43,6 +51,7 @@ export function AppShell({
   clinicName,
   clinicSwitcher,
   notificationSlot,
+  clinicNotice,
   children,
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -113,6 +122,21 @@ export function AppShell({
             tabIndex={-1}
             className="mx-auto w-full max-w-[1680px] px-4 py-6 outline-none sm:px-6 md:py-8 lg:px-8 xl:px-10"
           >
+            {/*
+              O aviso fica DENTRO do main, acima do conteudo, e nao numa faixa
+              fixa no topo: preso ao topo ele cobriria a barra em telas
+              pequenas, e some do campo de visao justamente de quem rola a
+              pagina para trabalhar.
+            */}
+            {clinicNotice ? (
+              <p
+                role="status"
+                className="mb-6 rounded-card border border-attention/30 bg-attention-surface px-4 py-3 text-aux text-attention"
+              >
+                {clinicNotice}
+              </p>
+            ) : null}
+
             {children}
           </main>
         </div>

@@ -1,3 +1,4 @@
+import { preferredPatientName } from '@/lib/patients/preferred-name'
 import type { BiologicalSex } from '@/lib/supabase/database.types'
 import type { EmergencyContact } from '@/modules/_shared/domain/types'
 
@@ -98,8 +99,17 @@ export function preferredName(patient: {
   name: string
   socialName?: string | null
 }): string {
-  const social = patient.socialName?.trim()
-  return social ? social : patient.name
+  /*
+   * Delega para `lib/patients/preferred-name`, que e onde a regra passou a
+   * morar: os outros nove modulos que exibem nome de paciente nao podem
+   * importar o interior deste. A assinatura daqui continua em `name` porque e a
+   * forma da entidade `Patient`; la o campo e `fullName`, que e a forma da
+   * linha do banco.
+   */
+  return preferredPatientName({
+    fullName: patient.name,
+    socialName: patient.socialName,
+  })
 }
 
 /**

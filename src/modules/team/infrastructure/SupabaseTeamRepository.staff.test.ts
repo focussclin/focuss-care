@@ -445,3 +445,70 @@ describe('desligamento', () => {
     expect(employee.isActive).toBe(false)
   })
 })
+
+describe('edicao da admissao', () => {
+  it('atualiza a data escopada por clinica e funcionario', async () => {
+    const fake = createFakeClient({
+      employee: employeeRow({ hire_date: '2026-03-01' }),
+      updated: employeeRow({ hire_date: '2026-04-01' }),
+    })
+
+    const employee = await new SupabaseTeamRepository(
+      fake.client,
+    ).updateEmployeeHireDate(CLINIC, EMPLOYEE, new Date('2026-04-01T00:00:00'))
+
+    const patch = fake
+      .ofTable('employees')
+      .find((call) => call.method === 'update')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(patch.hire_date).toBe('2026-04-01')
+    expect(employee.hireDate?.getDate()).toBe(1)
+    expect(fake.ofTable('employees')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('employees')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['id', EMPLOYEE] }),
+    )
+  })
+
+  it('permite remover a data de um cadastro legado', async () => {
+    const fake = createFakeClient({
+      employee: employeeRow({ hire_date: '2026-03-01' }),
+      updated: employeeRow({ hire_date: null }),
+    })
+
+    await new SupabaseTeamRepository(
+      fake.client,
+    ).updateEmployeeHireDate(CLINIC, EMPLOYEE, null)
+
+    const patch = fake
+      .ofTable('employees')
+      .find((call) => call.method === 'update')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(patch.hire_date).toBeNull()
+  })
+
+  it('recusa inverter o periodo de um desligado sem escrever', async () => {
+    const fake = createFakeClient({
+      employee: employeeRow({ termination_date: '2026-08-10' }),
+    })
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).updateEmployeeHireDate(
+        CLINIC,
+        EMPLOYEE,
+        new Date('2026-09-01T00:00:00'),
+      ),
+    ).rejects.toMatchObject({ reason: 'hire-after-termination' })
+
+    expect(
+      fake.ofTable('employees').some((call) => call.method === 'update'),
+    ).toBe(false)
+  })
+})

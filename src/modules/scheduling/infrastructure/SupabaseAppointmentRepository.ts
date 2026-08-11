@@ -8,6 +8,7 @@ import {
   parseStoredBusinessHours,
 } from '@/lib/clinic/business-hours'
 import type { Database } from '@/lib/supabase/database.types'
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 
 import type {
   AppointmentOutcome,
@@ -61,7 +62,7 @@ type AppointmentJoinRow = {
   ends_at: string
   status: AppointmentStatus
   internal_notes: string | null
-  patients: { full_name: string } | null
+  patients: { full_name: string; social_name: string | null } | null
   professionals: { display_name: string } | null
   /*
    * Opcionais no TIPO, e não só no valor.
@@ -95,7 +96,7 @@ const SELECT_WITH_NAMES = `
   ends_at,
   status,
   internal_notes,
-  patients ( full_name ),
+  patients ( full_name, social_name ),
   professionals ( display_name )
 `
 
@@ -140,7 +141,7 @@ function toAppointment(row: AppointmentJoinRow): Appointment {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patients?.full_name ?? 'Paciente',
+    patientName: preferredNameOfRow(row.patients, 'Paciente'),
     professionalId: row.professional_id,
     professionalName: row.professionals?.display_name ?? 'Profissional',
     type: row.reason ?? 'Atendimento',
@@ -533,7 +534,24 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     progress: AppointmentProgress,
     changedBy: string,
   ): Promise<Appointment> {
-    return this.transition(clinicId, appointmentId, progress, changedBy)
+    /*
+     * `checked_in_at` era a ultima coluna de `appointments` sem escrita.
+     *
+     * O STATUS ja chegava a `checked_in` desde a sincronizacao com a fila; o
+     * carimbo de quando a pessoa chegou continuava nulo. Sem ele, `status`
+     * responde "chegou" e nada responde "as que horas" — e e essa a diferenca
+     * entre saber que ha fila e saber quanto ela esperou.
+     *
+     * So na chegada: `in_progress` tem `waiting_queue.started_at`, que ja e
+     * gravado pelo modulo de atendimento. Carimbar de novo aqui criaria dois
+     * relogios para o mesmo instante, e eles divergiriam.
+     */
+    const extra: Record<string, string> =
+      progress === 'checked_in'
+        ? { checked_in_at: new Date().toISOString() }
+        : {}
+
+    return this.transition(clinicId, appointmentId, progress, changedBy, extra)
   }
 
   /**

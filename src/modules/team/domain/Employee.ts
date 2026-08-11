@@ -97,6 +97,23 @@ export function refuseTermination(
 }
 
 /**
+ * A admissao pode ser corrigida sem criar um segundo vinculo.
+ * A data pode ser removida para preservar cadastros antigos sem esse campo.
+ */
+export type HireDateRefusal = 'after-termination'
+
+export function refuseHireDate(
+  hireDate: Date | null,
+  terminationDate: Date | null,
+): HireDateRefusal | null {
+  if (hireDate && terminationDate && hireDate.getTime() > terminationDate.getTime()) {
+    return 'after-termination'
+  }
+
+  return null
+}
+
+/**
  * Uma ausência: férias, atestado, folga.
  *
  * Nasce em `requested` e recebe resposta — o mesmo desenho da guia de convênio

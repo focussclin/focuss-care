@@ -1,7 +1,10 @@
 import { err, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { isTeamRepositoryError } from '../domain/TeamRepositoryError'
-import { employeeMessages, teamMessages } from '../schemas/team.schema'
+import {
+  employeeMessages,
+  teamMessages,
+} from '../schemas/team.schema'
 
 /**
  * Falha de escrita da equipe -> `Result` com mensagem em pt-BR.
@@ -40,6 +43,8 @@ export function toTeamFailure<F extends string>(
         return err<F>('conflict', employeeMessages.terminationBeforeHire)
       case 'termination-in-future':
         return err<F>('conflict', employeeMessages.terminationInFuture)
+      case 'hire-after-termination':
+        return err<F>('conflict', employeeMessages.hireDateAfterTermination)
       case 'not-found':
         return err<F>('not-found', teamMessages.notFound)
       case 'forbidden':

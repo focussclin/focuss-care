@@ -120,6 +120,12 @@ export interface TeamRepository {
     terminationDate: Date | null,
   ): Promise<Employee>
 
+  updateEmployeeHireDate(
+    clinicId: string,
+    employeeId: string,
+    hireDate: Date | null,
+  ): Promise<Employee>
+
   /**
    * Ausências registradas, mais recentes primeiro.
    *

@@ -140,6 +140,8 @@ export const employeeMessages = {
   datesRequired: 'Informe as datas de início e fim.',
   datesInverted: 'A data de fim precisa ser igual ou depois da de início.',
   hireDateInvalid: 'Informe uma data de admissão válida.',
+  hireDateAfterTermination:
+    'A admissão não pode ser posterior ao desligamento já registrado. Confira as duas datas.',
   terminationRequired: 'Informe a data do desligamento.',
   /**
    * As duas recusas do desligamento, com o motivo na própria frase.
@@ -268,6 +270,23 @@ export const reinstateEmployeeSchema = z.object({
 })
 
 export type ReinstateEmployeeInput = z.infer<typeof reinstateEmployeeSchema>
+
+/** Corrige a admissao existente; vazio remove a data de cadastros antigos. */
+export const updateEmployeeHireDateSchema = z.object({
+  employeeId: z.uuid(employeeMessages.employeeRequired),
+  hireDate: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value),
+      employeeMessages.hireDateInvalid,
+    )
+    .transform((value) => (value === '' ? null : value)),
+})
+
+export type UpdateEmployeeHireDateInput = z.infer<
+  typeof updateEmployeeHireDateSchema
+>
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, employeeMessages.datesRequired)
 

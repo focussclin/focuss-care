@@ -1,0 +1,13 @@
+.git
+.github
+.next
+.open-next
+node_modules
+.env*
+!.env.example
+.dev.vars
+coverage
+test-results
+playwright-report
+*.log
+FOCUS_CARE_*.md

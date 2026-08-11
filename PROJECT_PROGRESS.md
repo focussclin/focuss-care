@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2800 testes em 218 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2942 testes em 228 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -59,7 +59,7 @@ de estoque).
 | `scheduling` | **COMPLETO** | Criar, remarcar, cancelar, histórico de status, conflito de horário, horário de funcionamento e **reserva opcional de sala** — o campo só aparece quando a clínica tem salas, e `room_id` fica fora do payload quando não há |
 | `encounters` | **COMPLETO** | Check-in, fila presencial, chamar, iniciar, encerrar e **sinais vitais** na ficha do paciente — append-only, sem classificação de valores |
 | `records` | **COMPLETO** | Prontuário versionado append-only, retificação por nova versão, auditoria de leitura e **prescrições** na ficha — texto livre, append-only, **sem assinatura, emissão ou impressão** |
-| `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
+| `team` | **EM ANDAMENTO** | Vínculos, papéis, revogação, funcionários, ausências, **admissão corrigível** e **emissão de convite por RPC** funcionam; escalas seguem ausentes (P-WD) |
 | `settings` | **COMPLETO** | Identidade da clínica, horário de funcionamento, duração padrão da agenda e preferência de avisos operacionais |
 | `reporting` | **COMPLETO** | Indicadores do dia e do período, atividade recente — só o que há linha para sustentar |
 | `billing` | **EM ANDAMENTO** | Cobrança, pagamento, caixa, **contas a pagar com baixa** e **recibo interno por pagamento** funcionam; **emissão fiscal numerada ausente** (RPC bloqueada) |
@@ -3811,11 +3811,381 @@ limpos. Teleatendimento continua fora do escopo.
 
 | O quê | Por que não entrou |
 | --- | --- |
-| Editar a admissão depois do cadastro | O campo entra na criação. Corrigir uma admissão errada é edição de vínculo, e a tela ainda não tem esse formulário — entra com ele, não como um segundo botão solto na linha |
+| ~~Editar a admissão depois do cadastro~~ | **Resolvido em §8.46.** A correção persiste a data no vínculo existente, permite limpar cadastros legados e mantém a ordem com um desligamento já registrado |
 | `appointments.checked_in_at` | A coluna existe e ninguém a escreve: §8.43 carimba o `status`, não o instante. É da fatia de sincronização fila-agenda, já fechada |
 | `memberships.invited_by` / `invited_at` | Quem convidou e quando — trilha do acesso, não do vínculo trabalhista. Pertence à tela de convites |
 | Salário e CPF do funcionário | Segue de §8.33: o produto não tem folha, e guardá-los agora acumula risco sem contrapartida |
 | Escalas de trabalho | Segue bloqueada por P-WD: `work_schedules.weekday` não tem convenção verificável neste ambiente |
+
+---
+
+## 8.46 Feature — Correção da admissão do funcionário (11/08/2026)
+
+A pendência local que restava na fatia de funcionários era corrigir a data de
+admissão depois do cadastro. Isso não exigia migration: `employees.hire_date` já
+era lida e escrita na criação, mas não havia uma operação de atualização.
+
+### Uma edição, sem novo vínculo
+
+`updateEmployeeHireDateAction` exige `team.manage`, recebe a clínica da sessão e
+atualiza somente `hire_date` do funcionário filtrado por `clinic_id` e `id`.
+O campo vazio remove a data de cadastros antigos que nunca a tiveram. A tela
+mostra a edição na própria linha, com loading, cancelamento e erro no mesmo
+feedback das outras ações de equipe.
+
+### O período continua válido
+
+Quando já existe desligamento, a operação recusa uma admissão posterior a ele
+antes de escrever. A leitura e a decisão ficam no repositório para não validar
+contra uma linha antiga; o estado impossível não chega ao banco. A data no
+mesmo dia da saída continua válida.
+
+### Segurança e auditoria
+
+A action passa pelo pipeline de mutação, RBAC `team.manage`, tenant da sessão,
+revalidação de `/equipe` e auditoria `employee.hire_date_updated`. O evento
+registra apenas a nova data, nunca nome, CPF ou salário. O adapter não seleciona
+essas duas colunas sensíveis.
+
+### Estado
+
+Incluídos testes de domínio, action, adapter e tela para permissão, conversão de
+dia sem fuso, limpeza de legado, escopo por clínica e recusa de período inválido.
+O projeto fecha esta validação com **2814 testes em 218 arquivos**, typecheck,
+lint e build limpos.
+Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:** escalas de trabalho e disponibilidade por
+profissional continuam bloqueadas por **P-WD**, pois a convenção de `weekday`
+nas tabelas existentes ainda precisa ser verificada no banco.
+
+## 8.47 Auditoria de referências para a IA de atendimento (11/08/2026)
+
+Foram auditados os padrões públicos de [FoodGPT](https://github.com/DevSamurai/food-gpt),
+[NovoSGA](https://github.com/novosga/novosga) e
+[Chamados](https://github.com/uspdev/chamados). O resultado foi incorporado ao
+desenho em `docs/04-agente-ia.md`: playbook por estado e slots, triagem,
+separação entre fila presencial e Inbox, notas internas, handoff e fila
+serializada por conversa.
+
+Nenhum código, prompt, credencial ou modelo de dados foi copiado. A implementação
+de runtime segue **BLOQUEADA** por worker/Redis, provedor e aprovação operacional;
+essa auditoria não transforma `/chat-ia` em uma demonstração falsa e não altera
+o status de AI-01..07.
+
+## 8.48 Reauditoria do schema e do build Cloudflare (11/08/2026)
+
+`npm run db:types` foi executado novamente contra o projeto configurado. O
+PostgREST ainda expõe **56 tabelas**, portanto as migrations dos módulos
+preparados continuam não aplicadas no remoto. Nenhum DDL foi executado nesta
+rodada.
+
+Essa leitura encontrou um defeito no próprio gerador: ao enxergar o schema
+remoto sem `clinic_integration_credentials`, ele removia os tipos preparados
+que o cofre server-side usa e quebrava o `typecheck`. O gerador agora mantém o
+suplemento somente enquanto a tabela não aparece; depois da migration aplicada,
+o tipo do PostgREST prevalece automaticamente.
+
+Também foi validado o runtime de publicação: `npm run build` e
+`npx opennextjs-cloudflare build` passaram com 46 rotas e sem o erro anterior de
+middleware Node.js. O preview de desenvolvimento continua separado do build e
+deve permanecer em `npm run dev`.
+
+## 8.49 Preparação para troca de projeto e infraestrutura (11/08/2026)
+
+O novo projeto `pqlgoekzjemrncdzppnl` foi validado pela Management API, mas está
+sem tabelas. O bundle `APLICAR_TUDO_20260809.sql` não é uma instalação inicial:
+ele referencia a fundação já existente (`clinics`, `profiles`, Auth, RLS e
+RPCs). Por isso nenhuma migration foi aplicada nele, evitando uma instalação
+parcial ou um banco sem as políticas que protegem os tenants.
+
+Foi criado `PROJECT_KEYS_AND_INTEGRATIONS.md` com os nomes das variáveis, APIs,
+callbacks, cofre de integrações e checklist para migração da VPS. Não há valores
+secretos no documento. A troca definitiva exige um dump/base schema do projeto
+antigo ou uma cópia/fork dele, além das chaves correspondentes do projeto novo.
+
+## 8.49 Feature — Limites de plano aplicados (11/08/2026)
+
+`plans` **nunca era lido**. `max_professionals`, `max_patients` e `storage_mb`
+eram exibidos em `/assinaturas` com barra de uso e nível de alerta, e nenhuma
+escrita os consultava: cadastrar o 11º profissional num plano de 10 funcionava
+normalmente. Um SaaS cujo plano não limita nada não tem plano — tem tabela de
+preços.
+
+### Onde a regra mora
+
+`lib/subscription/plan-limits.ts` (regra pura) e `plan-quota.ts` (a leitura). A
+cota é transversal: quem a consulta é `patients` e `team`, e o dado vive em
+`subscription` — nenhum módulo importa o interior de outro. Mesma posição de
+`lib/auth/permissions.ts`.
+
+### Três decisões de borda
+
+| Situação | Decisão | Por quê |
+| --- | --- | --- |
+| Clínica **sem assinatura** | passa | `SubscriptionOverview` já documenta que clínica criada antes de existir cobrança não tem linha; tratar ausência como limite zero trancaria toda clínica que existe hoje |
+| **Falha de leitura** | passa | Mesma escolha do expediente na agenda: Postgres lento não pode virar clínica que não trabalha |
+| **Reativar** profissional | consome cota | A conta é de profissional ATIVO; sem isso, desativar e reativar fura o limite sem cadastrar ninguém — e o total cadastrado continua igual |
+
+Desativar **nunca** consulta cota: é a operação que devolve a clínica à regra.
+
+A guarda vem antes do repositório. Recusar depois do insert exigiria apagar a
+linha, e o produto não apaga paciente nem profissional.
+
+**Um defeito real encontrado pelo teste:** `'profissional' + 'is'` produzia
+"profissionalis". O plural em `-al` vira `-ais`, e era essa frase que a pessoa
+leria no momento em que o sistema a impede de trabalhar. Formas por extenso
+substituíram a aritmética de sufixo.
+
+---
+
+## 8.50 Feature — Controle de taxa no login (11/08/2026)
+
+Não havia **nenhum** controle de taxa no produto. `signInAction` aceitava
+tentativas na velocidade da rede — senha fraca mais tentativa ilimitada é o
+caminho mais curto para dentro de um sistema com dado de saúde.
+
+### Backoff, não bloqueio
+
+Cinco tentativas livres, depois 1s dobrando até 5 min, esquecendo em 15 min.
+Bloqueio permanente viraria arma: quem soubesse o e-mail trancaria a conta de
+fora, e o suporte seria o caminho do ataque.
+
+A chave combina **e-mail e origem**. Só e-mail deixaria qualquer um trancar conta
+alheia; só IP puniria a clínica inteira atrás de um NAT por causa de uma pessoa.
+
+A verificação acontece **antes** do Supabase: depois seria tarde, porque a
+tentativa já teria custado a ida ao provedor — o recurso que a força bruta
+consome. Acerto limpa o contador; entrada inválida não conta como tentativa.
+
+### A limitação, declarada
+
+O estado vive em **memória do processo**. Em Cloudflare Workers cada isolate tem
+a própria memória: quem cair em isolates diferentes ganha uma janela em cada um.
+**Isto não é controle de taxa distribuído.** O que entrega de verdade é encarecer
+o ataque ingênuo — um cliente, uma conexão, muitas tentativas.
+
+Duas saídas para a versão durável, nenhuma disponível hoje: tabela
+`login_attempts` (depende de migration, **B1**) ou regra de WAF no edge (não passa
+por este código; é decisão de infraestrutura, e é a mais barata).
+
+---
+
+## 8.51 Feature — O estado da clínica governa o acesso (11/08/2026)
+
+`clinics.status` existia desde o primeiro schema com cinco valores e **nenhuma
+linha do produto o lia**. Uma clínica `suspended` ou `canceled` no banco
+continuava funcionando inteira: cancelar assinatura não tinha efeito nenhum sobre
+o acesso. Para um SaaS, é o interruptor faltando.
+
+Foi encontrado investigando `ClinicStatus.trial` — o valor inalcançável revelou
+a coluna inteira sem uso.
+
+### A escala, e o meio é o que importa
+
+| Estado | Escrita | Leitura |
+| --- | --- | --- |
+| `trial`, `active` | sim | sim |
+| `past_due` | **sim** | sim |
+| `suspended`, `canceled` | não | **sim** |
+
+`past_due` não corta nada. Boleto atrasado não pode impedir a recepção de
+registrar quem acabou de chegar nem o profissional de fechar o prontuário de quem
+está na sala — cortar aí transformaria pendência financeira em risco
+assistencial.
+
+`suspended` e `canceled` mantêm a leitura, e não é descuido: prontuário tem prazo
+legal de guarda, e reter o histórico de pacientes como garantia de pagamento
+seria usar dado de terceiro como alavanca de cobrança.
+
+### O portão mora no `createAction`
+
+Um lugar para as 118 actions. Espalhá-lo garantiria que a próxima nascesse sem
+ele. Vem **depois** do papel: quem nem podia executar recebe `forbidden` por
+permissão, e não um aviso sobre a assinatura — que não é problema dele e
+revelaria o estado comercial a quem não tem acesso.
+
+Estado nulo (leitura falhou) não bloqueia, pela mesma razão da cota.
+
+O aviso aparece na casca, acima do conteúdo: quem lê precisa saber **antes** de
+digitar meia ficha que a escrita está bloqueada.
+
+---
+
+## 8.52 Feature — Nome social em todas as telas (11/08/2026)
+
+A regra do nome social existia desde a fatia de identificação e alcançava **duas
+telas**: a ficha e a listagem de pacientes. Nos outros nove módulos — agenda,
+atendimento, financeiro, convênios, inbox, tarefas, CRM, conciliação, documentos
+— o paciente aparecia pelo nome de registro.
+
+O efeito prático: a pessoa era chamada pelo nome social na tela de cadastro e
+pelo nome de registro **na sala de espera**, que é exatamente o dano que a coluna
+existe para evitar.
+
+### A regra mudou de lugar
+
+De `modules/patients/domain` para `lib/patients/preferred-name.ts`. Nenhum módulo
+importa o interior de outro, e era isso que prendia a regra a um só. O domínio de
+pacientes delega, mantendo a própria assinatura (`name`, forma da entidade)
+distinta da forma da linha (`full_name`).
+
+15 embeds de `patients` passaram a pedir `social_name`, e a exibição de todos
+passa por `preferredNameOfRow`.
+
+### A varredura é o que sustenta
+
+`preferred-name.test.ts` lê o **código-fonte** e reprova dois padrões:
+
+1. embed de `patients` pedindo `full_name` sem `social_name`;
+2. leitura de `row.patients?.full_name` fora do módulo de pacientes — pedir a
+   coluna e não usá-la seria o mesmo defeito com tráfego a mais.
+
+A razão de ser uma varredura: um embed esquecido **não quebra nada**. A consulta
+funciona, a tela mostra um nome, e o defeito é chamar alguém pelo nome errado —
+que nenhum teste de unidade vê e nenhum usuário reporta como bug do sistema.
+
+---
+
+## 8.53 Auditoria — Gating por plano fica bloqueado (11/08/2026)
+
+`plans.features` (jsonb), `plans.is_public` e `plans.ai_tokens_month` continuam
+sem leitura, e **não foram implementados de propósito**.
+
+`features` não tem vocabulário declarado em lugar nenhum: não há seed, não há
+migration que a popule, e `docs/03-banco-de-dados.md` descreve `plans` como
+"catálogo global de planos do SaaS, igual para todos" — ou seja, uma tabela já
+povoada por fora. Inventar chaves teria o pior desfecho possível: o gate leria
+nada, liberaria tudo, e pareceria estar funcionando.
+
+É a mesma classe de `allergies.severity` e `price_list_items.professional_share_*`
+— convenção alheia não se adivinha.
+
+`is_public` não tem consumidor: não existe catálogo público de planos.
+
+**Para destravar, rode no banco:**
+
+```sql
+select id, name, is_public, ai_tokens_month, features from public.plans order by sort_order;
+```
+
+Com as chaves reais em mãos, o gating vira uma fatia de meio dia — a cota
+(§8.49) já provou o caminho.
+
+---
+
+## 8.54 Preparação de novo Supabase e destino VPS (11/08/2026)
+
+O projeto local aponta para `pqlgoekzjemrncdzppnl`, mas a consulta administrativa
+confirmou que o banco novo ainda possui zero tabelas. As migrations incrementais
+não foram aplicadas para evitar uma instalação parcial sem `clinics`, `profiles`,
+Auth e as políticas RLS de fundação.
+
+`PROJECT_KEYS_AND_INTEGRATIONS.md` concentra os nomes das variáveis e APIs sem
+valores reais. O `Dockerfile`, `.dockerignore` e `docs/VPS_MIGRATION.md` deixam
+o app pronto para Coolify/VPS, mas o cutover segue pendente de host, domínio,
+acesso e schema base. Nenhum deploy ou troca de DNS foi executado.
+
+---
+
+## 8.54 Feature — Verificação em duas etapas (11/08/2026)
+
+O produto guarda prontuário, prescrição e dado financeiro, e a única barreira era
+senha. O controle de taxa (§8.50) encareceu a força bruta; **senha vazada em
+outro serviço continuava valendo integralmente**.
+
+TOTP pelo Supabase Auth — sem provedor externo, sem credencial nova: o segredo
+nasce no banco de autenticação e o código é calculado no aparelho. SMS exigiria
+gateway e é o mais fraco dos três, porque portabilidade de número é ataque
+conhecido.
+
+### O vocabulário que decide tudo
+
+O Supabase classifica a sessão em `aal1` (senha) e `aal2` (senha + fator). Duas
+perguntas, e confundi-las é o erro clássico:
+
+- `currentLevel` — o que a sessão **já** tem;
+- `nextLevel` — o que ela **pode** ter, dado o que a conta cadastrou.
+
+Exigir o código só quando `nextLevel === 'aal2'` **e** `currentLevel === 'aal1'`.
+Comparar só o próximo mandaria para a tela do código quem acabou de digitá-lo.
+
+Nível nulo — leitura falhou, ou projeto sem MFA — **não tranca ninguém**: exigir
+código sem saber qual fator deixaria a pessoa de fora por uma consulta
+indisponível.
+
+### O portão está na casca, não só no login
+
+O desvio do `signInAction` cobre quem entra pelo formulário. Sem o portão em
+`(app)/layout.tsx`, **digitar `/pacientes` na barra de endereço entraria com a
+sessão `aal1`** — e cadastrar um fator seria segurança falsa: a tela diria
+"ativa" e a senha sozinha continuaria abrindo tudo.
+
+A consulta do AAL acontece **depois** da senha. Antes, vazaria se a conta tem 2FA
+para quem não a sabe.
+
+### Detalhes que a tela assume
+
+| Decisão | Razão |
+| --- | --- |
+| Segredo aparece **uma vez** | Segredo TOTP reexibível vale tanto quanto a senha |
+| Só fator `verified` conta | `unverified` é enrolamento abandonado; contá-lo diria "sua conta tem 2FA" sobre algo que ninguém consegue usar |
+| Fator pendente é descartável | Eles se acumulam e o provedor recusa nome repetido — sem limpar, quem errou o código uma vez trava no mesmo nome |
+| **Sem "lembrar deste aparelho"** | É o que esvazia o segundo fator: dispositivo lembrado é sessão que volta a valer só com a senha |
+| Código aceita "123 456" | Gerenciadores de senha copiam com espaço; recusar seria culpar a pessoa por um formato que ela não escolheu |
+| Erro cita o relógio | A causa mais comum de código recusado é hora do aparelho fora de sincronia, não dígito errado |
+
+O painel fica ao lado do perfil, não no cartão da clínica: o fator é da **conta**,
+vale em toda clínica, e quem administra a clínica não decide o fator de ninguém.
+
+`/verificacao` entrou em `instantOptOuts` — é portão de sessão que termina em
+`redirect`, o mesmo caso de `/onboarding`. Dentro de `<Suspense>` o desvio
+deixaria de ser 307 e passaria a depender de JavaScript.
+
+**Limitação:** não há como verificar daqui se o projeto Supabase tem MFA
+habilitado. Se não tiver, `enroll` falha e a mensagem diz isso — sem afirmar qual
+das duas causas é.
+
+---
+
+## 8.55 Feature — Conselho "OUTRO" e carimbo da chegada (11/08/2026)
+
+Duas colunas pequenas, as últimas alcançáveis fora dos bloqueios.
+
+**`CouncilType.OUTRO`** era o décimo valor do enum e o último inalcançável.
+Existe para o conselho fora da lista — CRMV, CRBM, CRESS. Sem ele, quem tem
+conselho fora das nove siglas ficava **sem conselho nenhum**: o número real ia
+embora junto com a sigla que não cabia. Aparece como "Outro conselho" na tela, e
+`formatCouncil` imprime "Conselho 12345/SP" em vez de "OUTRO 12345/SP", que
+pareceria erro de sistema numa ficha.
+
+**`appointments.checked_in_at`** era a última coluna de `appointments` sem
+escrita. O status já chegava a `checked_in` desde a sincronização com a fila; o
+carimbo continuava nulo — `status` respondia "chegou" e nada respondia "a que
+horas". Só na chegada: `in_progress` tem `waiting_queue.started_at`, e carimbar
+de novo criaria dois relógios para o mesmo instante.
+
+---
+
+## 8.56 Auditoria — O que resta é bloqueio, não escolha (11/08/2026)
+
+Depois de §8.49–§8.55, a varredura de colunas e enums devolve **apenas itens
+bloqueados**. Registro para a próxima auditoria não reabrir o que já foi decidido:
+
+| Item | Bloqueio |
+| --- | --- |
+| `memberships.invited_by`, `invited_at` | A aplicação **nunca insere** em `memberships` — as linhas nascem nas RPCs `create_clinic` e `accept_invitation`. Preenchê-las exige alterar a RPC, e isso é migration (**B1**) |
+| `clinics.logo_url` | Upload depende de bucket de Storage, que não existe. Aceitar URL externa faria a aplicação renderizar imagem de terceiro — integração que ninguém pediu |
+| `plans.features`, `is_public`, `ai_tokens_month` | Vocabulário não declarado — ver §8.53 |
+| `AiFeature`, `AiRole`, `document_embeddings`, `search_clinic_knowledge` | **AI-01** |
+| `MessageStatus: queued/sent/delivered`, `whatsapp_channels.provider_config` | **W-01** |
+| `WorkflowRunStatus: running/succeeded`, `workflow_runs.*` | **AU-01** — não há executor |
+| `availability_rules`, `work_schedules` | **P-WD** — convenção de `weekday` não verificável |
+| `clinical_attachments` | Sem bucket |
+| `document_sequences`, `professional_payouts*`, RPCs de emissão e repasse | **P-RPC** |
+
+**O que destrava mais produto de uma vez continua sendo aplicar as 18 migrations
+pendentes** — nenhuma linha de código as substitui.
 
 ---
 

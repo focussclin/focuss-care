@@ -37,7 +37,37 @@ export const COUNCIL_TYPES = [
   'COREN',
   'CREF',
   'CRFa',
+  /*
+   * O décimo valor do enum, e o último que faltava alcançar.
+   *
+   * Existe no banco para o conselho que não está na lista — CRMV, CRBM, CRESS e
+   * o que mais uma clínica multiprofissional contratar. Sem ele, quem tem
+   * conselho fora das nove siglas ficava sem conselho NENHUM no cadastro: o
+   * número real ia embora junto com a sigla que não cabia.
+   */
+  'OUTRO',
 ] as const satisfies readonly CouncilType[]
+
+/**
+ * O rótulo de cada sigla na tela.
+ *
+ * Só `OUTRO` difere do próprio valor — as nove siglas são como o profissional as
+ * escreve na carteira, e traduzi-las seria ruído. Um `Record` fechado, e não
+ * `?? value`, para que uma sigla nova no enum apareça como erro de tipo em vez
+ * de vazar crua para a tela.
+ */
+export const COUNCIL_LABELS: Record<CouncilType, string> = {
+  CRM: 'CRM',
+  CRO: 'CRO',
+  CRP: 'CRP',
+  CREFITO: 'CREFITO',
+  CRN: 'CRN',
+  CRF: 'CRF',
+  COREN: 'COREN',
+  CREF: 'CREF',
+  CRFa: 'CRFa',
+  OUTRO: 'Outro conselho',
+}
 
 export interface Professional {
   id: string
@@ -83,8 +113,17 @@ export function councilIsComplete(
 /** 'CRM 12345/SP', ou null quando o conselho não foi informado. */
 export function formatCouncil(professional: Professional): string | null {
   if (!professional.councilType || !professional.councilNumber) return null
+
   const estado = professional.councilState ? `/${professional.councilState}` : ''
-  return `${professional.councilType} ${professional.councilNumber}${estado}`
+
+  /*
+   * `OUTRO` não é sigla de conselho nenhum — imprimi-lo cru produziria
+   * "OUTRO 12345/SP", que parece erro de sistema numa ficha. "Conselho" diz o
+   * que o número é sem inventar a sigla que ninguém informou.
+   */
+  const sigla = professional.councilType === 'OUTRO' ? 'Conselho' : professional.councilType
+
+  return `${sigla} ${professional.councilNumber}${estado}`
 }
 
 /**

@@ -62,12 +62,17 @@ const { cacheTags } = await import('@/lib/cache/tags')
 const { createAction } = await import('./createAction')
 const { ok } = await import('../domain/Result')
 
-function activeSession(clinicId = CLINIC) {
+function activeSession(
+  clinicId = CLINIC,
+  clinicStatus: 'trial' | 'active' | 'past_due' | 'suspended' | 'canceled' = 'active',
+) {
   return {
     status: 'active' as const,
     user: { id: USER, email: null, displayName: 'Teste', avatarUrl: null },
     clinicId,
     clinicName: null,
+    /** `clinics.status` — o estado COMERCIAL, distinto do estado da sessao. */
+    clinicStatus,
     role: 'owner' as const,
   }
 }
@@ -269,5 +274,78 @@ describe('a invalidacao nao derruba a escrita', () => {
     expect(revalidatePath).not.toHaveBeenCalled()
 
     consoleError.mockRestore()
+  })
+})
+
+/**
+ * O estado COMERCIAL da clínica — feature **C-ST**.
+ *
+ * `clinics.status` existia com cinco valores e ninguém o lia: uma clínica
+ * `suspended` no banco funcionava inteira. O portão mora aqui, e não em cada
+ * action, porque a regra é uma só para as 118 — espalhá-la garantiria que a
+ * próxima action nascesse sem ela.
+ */
+describe('estado da clínica', () => {
+  it.each(['trial', 'active'] as const)('%s grava normalmente', async (status) => {
+    sessionState.mockResolvedValue(activeSession(CLINIC, status))
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('`past_due` CONTINUA gravando', async () => {
+    /*
+     * Boleto atrasado não pode impedir a recepção de registrar quem acabou de
+     * chegar. Cortar aqui transformaria pendência financeira em risco
+     * assistencial.
+     */
+    sessionState.mockResolvedValue(activeSession(CLINIC, 'past_due'))
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it.each(['suspended', 'canceled'] as const)('%s bloqueia a escrita', async (status) => {
+    sessionState.mockResolvedValue(activeSession(CLINIC, status))
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('forbidden')
+      expect(result.error.message).toMatch(/assinaturas/i)
+    }
+  })
+
+  it('o bloqueio vem DEPOIS do papel', async () => {
+    /*
+     * Quem nem podia executar a ação recebe 'forbidden' por falta de permissão,
+     * e não um aviso sobre a assinatura da clínica — que não é problema dele e
+     * revelaria o estado comercial para quem não tem acesso.
+     */
+    sessionState.mockResolvedValue({
+      ...activeSession(CLINIC, 'suspended'),
+      role: 'receptionist' as const,
+    })
+
+    const restricted = patientAction({ roles: ['owner'] })
+    const result = await restricted({ name: 'Maria' })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).not.toMatch(/assinaturas/i)
+  })
+
+  it('estado desconhecido NÃO bloqueia', async () => {
+    /*
+     * `null` é leitura que falhou. Um Postgres indisponível não pode virar
+     * clínica trancada — mesma escolha da cota do plano e do expediente.
+     */
+    sessionState.mockResolvedValue({ ...activeSession(), clinicStatus: null })
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
   })
 })

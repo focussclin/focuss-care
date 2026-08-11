@@ -69,6 +69,12 @@ const NOT_MENU_ROUTES = new Set([
   '/redefinir-senha',
   '/onboarding',
   '/convite/[token]',
+  /*
+   * Segunda etapa do login (S-MFA): a casca devolve para ca quem ainda nao
+   * apresentou o fator. Item de menu para ela seria um atalho para uma tela que
+   * so existe entre a senha e o dashboard.
+   */
+  '/verificacao',
   // Subrota alcançada a partir da ficha do paciente, não do menu.
   '/pacientes/[patientId]',
   '/pacientes/[patientId]/historico',

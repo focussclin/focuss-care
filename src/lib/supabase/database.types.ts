@@ -4,7 +4,7 @@
  * Fonte: schema real do projeto Supabase (documento OpenAPI do PostgREST).
  * Regenerar com:  npm run db:types
  *
- * Tabelas: 56 · Views: 1 · Enums: 32
+ * Tabelas: 57 · Views: 1 · Enums: 32
  *
  * Nota sobre Insert: o OpenAPI nao expoe DEFAULTs, entao id/created_at/
  * updated_at sao tratados como opcionais. Demais colunas NOT NULL entram
@@ -78,19 +78,6 @@ export type ChannelProvider =
   | 'zapi'
   | 'twilio'
   | 'other'
-
-/**
- * Provedores aceitos pelo cofre de credenciais server-side.
- *
- * A migration desta tabela ainda precisa ser aplicada no projeto remoto;
- * manter o tipo aqui permite que a aplicação compile enquanto isso.
- */
-export type IntegrationCredentialProvider =
-  | 'brevo'
-  | 'evolution'
-  | 'deepseek'
-  | 'google_calendar'
-  | 'outlook_calendar'
 
 export type ClaimDenialStatus =
   | 'received'
@@ -259,6 +246,14 @@ export type WorkflowTrigger =
   | 'invoice_overdue'
   | 'patient_birthday'
   | 'schedule'
+
+/** Provedores do cofre server-side preparado localmente. */
+export type IntegrationCredentialProvider =
+  | 'brevo'
+  | 'evolution'
+  | 'deepseek'
+  | 'google_calendar'
+  | 'outlook_calendar'
 
 // ---------------------------------------------------------------------------
 // Database
@@ -972,54 +967,6 @@ export type Database = {
             columns: ['clinic_id']
             isOneToOne: false
             referencedRelation: 'clinics'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      clinic_integration_credentials: {
-        Row: {
-          id: string
-          clinic_id: string
-          provider: IntegrationCredentialProvider
-          encrypted_payload: string
-          key_version: number
-          configured_by: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          clinic_id: string
-          provider: IntegrationCredentialProvider
-          encrypted_payload: string
-          key_version?: number
-          configured_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          clinic_id?: string
-          provider?: IntegrationCredentialProvider
-          encrypted_payload?: string
-          key_version?: number
-          configured_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'clinic_integration_credentials_clinic_id_fkey'
-            columns: ['clinic_id']
-            isOneToOne: false
-            referencedRelation: 'clinics'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'clinic_integration_credentials_configured_by_fkey'
-            columns: ['configured_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
         ]
@@ -3871,6 +3818,54 @@ export type Database = {
           },
         ]
       }
+      clinic_integration_credentials: {
+        Row: {
+          id: string
+          clinic_id: string
+          provider: IntegrationCredentialProvider
+          encrypted_payload: string
+          key_version: number
+          configured_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          provider: IntegrationCredentialProvider
+          encrypted_payload: string
+          key_version?: number
+          configured_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          provider?: IntegrationCredentialProvider
+          encrypted_payload?: string
+          key_version?: number
+          configured_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'clinic_integration_credentials_clinic_id_fkey'
+            columns: ['clinic_id']
+            isOneToOne: false
+            referencedRelation: 'clinics'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'clinic_integration_credentials_configured_by_fkey'
+            columns: ['configured_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: {
       v_medical_records_current: {
@@ -4031,7 +4026,6 @@ export type AvailabilityRuleRow = Database['public']['Tables']['availability_rul
 export type CashEntryRow = Database['public']['Tables']['cash_entries']['Row']
 export type CashSessionRow = Database['public']['Tables']['cash_sessions']['Row']
 export type ClinicSettingRow = Database['public']['Tables']['clinic_settings']['Row']
-export type ClinicIntegrationCredentialRow = Database['public']['Tables']['clinic_integration_credentials']['Row']
 export type ClinicalAttachmentRow = Database['public']['Tables']['clinical_attachments']['Row']
 export type ClinicRow = Database['public']['Tables']['clinics']['Row']
 export type ConsentRow = Database['public']['Tables']['consents']['Row']
@@ -4076,3 +4070,4 @@ export type WhatsappChannelRow = Database['public']['Tables']['whatsapp_channels
 export type WorkScheduleRow = Database['public']['Tables']['work_schedules']['Row']
 export type WorkflowRunRow = Database['public']['Tables']['workflow_runs']['Row']
 export type WorkflowRow = Database['public']['Tables']['workflows']['Row']
+export type ClinicIntegrationCredentialRow = Database['public']['Tables']['clinic_integration_credentials']['Row']

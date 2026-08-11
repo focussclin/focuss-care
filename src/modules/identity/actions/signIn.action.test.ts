@@ -26,6 +26,28 @@ vi.mock('next/navigation', () => ({
   },
 }))
 
+/*
+ * O controle de taxa entrou no caminho do login. Aqui ele e sempre permissivo:
+ * este arquivo prova o DESTINO do login, e a curva do backoff tem arquivo
+ * proprio (`lib/security/rate-limit.test.ts`). Deixar o real rodar exigiria
+ * contexto de requisicao do Next, que estes casos nao tem.
+ */
+vi.mock('@/lib/security/login-throttle', () => ({
+  checkLoginThrottle: async () => ({ allowed: true, retryAfterMs: 0 }),
+  registerLoginFailure: async () => {},
+  clearLoginThrottle: async () => {},
+}))
+
+/*
+ * O login consulta o nivel de garantia (AAL) depois da senha, para decidir se
+ * pede o segundo fator. Aqui a conta nunca tem fator: este arquivo prova o
+ * DESTINO, e o desvio do segundo fator tem arquivo proprio.
+ */
+const getAuthenticatorAssuranceLevel = vi.fn(async () => ({
+  data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+  error: null,
+}))
+
 const signInWithPassword = vi.fn()
 const createSupabaseServerClient = vi.fn()
 
@@ -56,9 +78,14 @@ async function destinationOf(next?: string): Promise<string | null> {
 beforeEach(() => {
   vi.clearAllMocks()
   signInWithPassword.mockResolvedValue({ data: {}, error: null })
+  getAuthenticatorAssuranceLevel.mockResolvedValue({
+    data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+    error: null,
+  })
   createSupabaseServerClient.mockResolvedValue({
     auth: {
       signInWithPassword: (input: unknown) => signInWithPassword(input),
+      mfa: { getAuthenticatorAssuranceLevel },
     },
   })
 })

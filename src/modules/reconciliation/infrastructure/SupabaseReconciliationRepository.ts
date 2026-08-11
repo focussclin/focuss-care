@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from '@/lib/supabase/database.types'
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 
 import type {
   BankAccount,
@@ -103,7 +104,7 @@ export class SupabaseReconciliationRepository implements ReconciliationRepositor
   async listInvoiceCandidates(clinicId: string): Promise<ReconciliationCandidate[]> {
     const { data, error } = await this.client
       .from('invoices')
-      .select('id, total_cents, due_date, created_at, patients ( full_name )')
+      .select('id, total_cents, due_date, created_at, patients ( full_name, social_name )')
       .eq('clinic_id', clinicId)
       .in('status', RECONCILABLE_INVOICE_STATUSES)
       .order('created_at', { ascending: false })
@@ -283,7 +284,9 @@ function toTransaction(row: BankTransactionRow): BankTransaction {
 function toInvoiceCandidate(row: InvoiceCandidateRow): ReconciliationCandidate {
   return {
     id: row.id,
-    label: row.patients?.full_name ? `Fatura · ${row.patients.full_name}` : 'Fatura sem paciente',
+    label: row.patients
+      ? `Fatura · ${preferredNameOfRow(row.patients)}`
+      : 'Fatura sem paciente',
     amountCents: row.total_cents,
     date: new Date(row.due_date ? `${row.due_date}T12:00:00` : row.created_at),
     reference: row.due_date ? `venc. ${row.due_date}` : null,

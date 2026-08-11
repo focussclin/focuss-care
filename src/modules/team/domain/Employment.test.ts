@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isEmployed, refuseTermination } from './Employee'
+import { isEmployed, refuseHireDate, refuseTermination } from './Employee'
 
 /**
  * O período do vínculo — feature **S-03**.
@@ -77,5 +77,35 @@ describe('quando o desligamento é recusado', () => {
 
     expect(refuseTermination(hireLater, new Date('2026-12-01T00:00:00'), TODAY))
       .toBe('in-future')
+  })
+})
+
+describe('quando a admissao e corrigida', () => {
+  it('aceita uma data anterior ao desligamento', () => {
+    expect(
+      refuseHireDate(
+        new Date('2026-03-01T00:00:00'),
+        new Date('2026-08-10T00:00:00'),
+      ),
+    ).toBeNull()
+  })
+
+  it('recusa admissao posterior ao desligamento', () => {
+    expect(
+      refuseHireDate(
+        new Date('2026-09-01T00:00:00'),
+        new Date('2026-08-10T00:00:00'),
+      ),
+    ).toBe('after-termination')
+  })
+
+  it('permite remover a data ou corrigir no mesmo dia da saida', () => {
+    expect(refuseHireDate(null, new Date('2026-08-10T00:00:00'))).toBeNull()
+    expect(
+      refuseHireDate(
+        new Date('2026-08-10T00:00:00'),
+        new Date('2026-08-10T00:00:00'),
+      ),
+    ).toBeNull()
   })
 })

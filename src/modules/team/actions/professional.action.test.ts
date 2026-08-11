@@ -29,6 +29,16 @@ const sessionState = vi.fn()
 vi.mock('@/lib/auth/session', () => ({ getSessionState: () => sessionState() }))
 
 const supabase = { __fake: true }
+/*
+ * A cota do plano entrou como colaborador destas actions (Q-01). Aqui ela e
+ * sempre permissiva: este arquivo prova outra coisa, e deixar a leitura real
+ * rodar contra o cliente falso faria estes casos falharem por um motivo que nao
+ * e o deles.
+ */
+vi.mock('@/lib/subscription/plan-quota', () => ({
+  hasQuotaFor: async () => ({ allowed: true, max: null }),
+}))
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => supabase,
 }))

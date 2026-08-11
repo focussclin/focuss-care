@@ -12,11 +12,10 @@ import type { NextConfig } from "next";
  * `experimental.ppr` — as tres foram removidas no Next 16 e NAO devem ser
  * declaradas aqui.
  *
- * **Nada esta cacheado hoje.** Com a flag ligada, o padrao continua sendo
- * dinamico: so o que declara `use cache` entra em cache. Toda rota de `(app)/`
- * le a sessao em cookie e continua render-time — o que a flag muda e que agora
- * existe a ferramenta para cachear com tag por clinica quando houver uma leitura
- * cacheavel segura (ver docs/06-acoes-e-auditoria.md §8).
+ * **Nada esta cacheado hoje.** O recurso exige o runtime Node.js e nao e
+ * compativel com o runtime workerd do Cloudflare Workers/OpenNext. Mantemos a
+ * flag desligada ate que exista uma estrategia de cache suportada pelo destino
+ * de deploy. Toda rota de `(app)/` le a sessao em cookie e continua render-time.
  */
 /**
  * Interrupções de autorização (I-05 do roadmap — resto da dívida D10).
@@ -32,7 +31,8 @@ import type { NextConfig } from "next";
  * node_modules/next/dist/docs/01-app/03-api-reference/04-functions/forbidden.md.
  */
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // Cache Components requer Node.js; o Worker roda em workerd.
+  cacheComponents: false,
   experimental: {
     authInterrupts: true,
   },

@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from '@/lib/supabase/database.types'
+import { preferredNameOfRow } from '@/lib/patients/preferred-name'
 
 import type {
   DocumentListQuery,
@@ -30,7 +31,7 @@ const DOCUMENT_SELECT = `
   size_bytes,
   uploaded_by,
   created_at,
-  patient:patients!patient_documents_patient_id_fkey(id, full_name)
+  patient:patients!patient_documents_patient_id_fkey(id, full_name, social_name)
 `
 
 const DOCUMENT_ROW_CAP = 200
@@ -102,7 +103,7 @@ function toDocument(row: PatientDocumentRow): PatientDocument {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: row.patient?.full_name ?? 'Paciente não localizado',
+    patientName: preferredNameOfRow(row.patient, 'Paciente não localizado'),
     kind: row.kind,
     storagePath: row.storage_path,
     fileName: row.file_name,

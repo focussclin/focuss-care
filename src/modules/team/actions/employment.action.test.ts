@@ -39,13 +39,16 @@ vi.mock('@/lib/audit/audit-log', () => ({
 }))
 
 const setEmployeeTermination = vi.fn()
+const updateEmployeeHireDate = vi.fn()
 vi.mock('../infrastructure/repository', () => ({
-  teamRepositoryFor: () => ({ setEmployeeTermination }),
+  teamRepositoryFor: () => ({ setEmployeeTermination, updateEmployeeHireDate }),
 }))
 
-const { terminateEmployeeAction, reinstateEmployeeAction } = await import(
-  './staff.action'
-)
+const {
+  terminateEmployeeAction,
+  reinstateEmployeeAction,
+  updateEmployeeHireDateAction,
+} = await import('./staff.action')
 const { employeeMessages } = await import('../schemas/team.schema')
 const { TeamRepositoryError } = await import('../domain/TeamRepositoryError')
 
@@ -79,6 +82,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   sessionState.mockResolvedValue(session())
   setEmployeeTermination.mockResolvedValue(employee())
+  updateEmployeeHireDate.mockResolvedValue(employee())
 })
 
 describe('quem registra o desligamento', () => {
@@ -211,5 +215,74 @@ describe('o que a trilha registra', () => {
     const event = recordAuditEvent.mock.calls[0][0] as { action: string }
 
     expect(event.action).toBe('employee.reinstated')
+  })
+
+  it('correcao guarda a nova data, nunca o nome', async () => {
+    updateEmployeeHireDate.mockResolvedValue(
+      employee({ hireDate: new Date('2026-04-01T00:00:00') }),
+    )
+
+    await updateEmployeeHireDateAction({
+      employeeId: EMPLOYEE,
+      hireDate: '2026-04-01',
+    })
+
+    const event = recordAuditEvent.mock.calls[0][0] as {
+      action: string
+      after: Record<string, unknown>
+    }
+
+    expect(event.action).toBe('employee.hire_date_updated')
+    expect(event.after).toEqual({ hire_date: '2026-04-01' })
+    expect(JSON.stringify(event)).not.toContain('Ana Ribeiro')
+  })
+})
+
+describe('edição da admissão', () => {
+  it('exige team.manage', async () => {
+    sessionState.mockResolvedValue(session('professional'))
+
+    const result = await updateEmployeeHireDateAction({
+      employeeId: EMPLOYEE,
+      hireDate: '2026-04-01',
+    })
+
+    expect(result.ok).toBe(false)
+    expect(updateEmployeeHireDate).not.toHaveBeenCalled()
+  })
+
+  it('usa a clínica da sessão e converte o dia sem fuso', async () => {
+    await updateEmployeeHireDateAction({
+      employeeId: EMPLOYEE,
+      hireDate: '2026-04-01',
+      clinicId: 'outra-clinica',
+    })
+
+    const [clinicId, employeeId, date] = updateEmployeeHireDate.mock.calls[0]
+
+    expect(clinicId).toBe(CLINIC)
+    expect(employeeId).toBe(EMPLOYEE)
+    expect((date as Date).getFullYear()).toBe(2026)
+    expect((date as Date).getMonth()).toBe(3)
+    expect((date as Date).getDate()).toBe(1)
+  })
+
+  it('permite limpar a data de um legado', async () => {
+    await updateEmployeeHireDateAction({
+      employeeId: EMPLOYEE,
+      hireDate: '',
+    })
+
+    expect(updateEmployeeHireDate).toHaveBeenCalledWith(CLINIC, EMPLOYEE, null)
+  })
+
+  it('recusa formato inválido antes do repositório', async () => {
+    const result = await updateEmployeeHireDateAction({
+      employeeId: EMPLOYEE,
+      hireDate: '01/04/2026',
+    })
+
+    expect(result.ok).toBe(false)
+    expect(updateEmployeeHireDate).not.toHaveBeenCalled()
   })
 })
