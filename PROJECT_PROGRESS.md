@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (10/08/2026):** 2244 testes em 178 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2393 testes em 186 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -2819,6 +2819,73 @@ dentro de uma fatia de agenda seria decidir arquitetura por conveniência. O efe
 prático: a agenda e a fila de espera continuam podendo discordar sobre o mesmo
 paciente, e `completed` é registrado pela agenda, não pelo encerramento do
 atendimento.
+
+---
+
+## 8.35 Feature — Identificação e contato do paciente (10/08/2026)
+
+`PatientRepository` já registrava a dívida por escrito: "CPF, CNS, endereco,
+contato de emergencia e foto ficam para a fatia de edicao (P-01 completa)". O
+cadastro gravava cinco campos e o adapter preenchia o resto com **constante** —
+`biological_sex: 'not_informed'` em toda linha da base, três dos quatro valores
+do enum inalcançáveis pela aplicação inteira.
+
+### O que passou a existir
+
+`social_name`, `biological_sex`, `gender_identity`, `phone_alt` e
+`emergency_contact`. Todos opcionais: o cadastro de balcão continua sendo nome e
+telefone, e exigir sexo biológico para marcar uma consulta inventaria dado
+clínico na pressa do atendimento.
+
+### Nome social não é apelido
+
+Quando existe, **vence** o nome de registro em toda exibição — ficha, listagem,
+cartões. Quem decide isso é `preferredName`, no domínio: espalhar
+`socialName ?? name` pelas telas é como uma delas acaba chamando alguém pelo nome
+errado na sala de espera. O nome de registro reaparece na ficha **quando difere**,
+porque quem confere documento, guia ou receita precisa dos dois.
+
+É o único campo novo que entra também no cadastro: é na primeira conversa que a
+pessoa diz como quer ser chamada, e deixar para a edição garante que a próxima
+chamada use o nome errado.
+
+### Sexo biológico e identidade de gênero continuam separados
+
+O schema já os separava e a separação é correta: o primeiro tem uso clínico
+(faixa de referência, dose), o segundo é autodeclaração. **Nenhum dos dois é
+filtrado por papel**, e foi decisão: nome social e identidade existem para que
+todo mundo que atende use o tratamento certo, e escondê-los da recepção derrota o
+propósito. Sexo biológico está em qualquer carteirinha e a recepção precisa dele
+para preencher guia e pedido de exame.
+
+### O `jsonb` é fechado e relido
+
+`emergency_contact` não tinha forma declarada — e não havia convenção alheia a
+adivinhar, porque **nada escrevia na coluna**. A aplicação define a forma
+(`{ name, phone, relationship }`), fecha em Zod com `.strict()` e **relê na
+leitura**, como `workflows.trigger_config`.
+
+Conteúdo que não casa **não vira `null` em silêncio**: a coluna tem dado, e
+mostrar "sem contato" sobre um contato que existe é mentira. A ficha e o
+formulário avisam que salvar vai substituí-lo.
+
+Nome e telefone andam juntos: nome sem telefone não permite avisar ninguém, e é
+numa emergência que alguém procura esse campo. A regra vale nas **duas** escritas
+— aplicá-la só na edição deixaria o cadastro gravar meio contato, e o defeito
+apareceria justamente na emergência.
+
+### Estado
+
+`patients` passa a 343 testes (+68). `changedFields` cobre os cinco campos novos
+— continua registrando QUAIS mudaram, nunca os valores.
+
+**Fica pendente, com motivo:**
+
+| Campo | Por que não entrou |
+| --- | --- |
+| `cpf`, `cns`, `address` | Grupo DOCUMENTAL, que pertence ao faturamento. CPF pede validação de dígito e uma decisão sobre duplicidade na clínica; gravar identificador fiscal sem as duas coisas acumula risco sem contrapartida |
+| `photo_url` | Depende de bucket de Storage, que não existe |
+| Nome social nas outras telas | `patients ( full_name )` aparece em **9 módulos** (agenda, recepção, financeiro, convênios, inbox, tarefas, CRM, conciliação, atendimentos). Propagar é mudança transversal; propagar pela metade seria pior — o nome mudaria em algumas telas e não em outras |
 
 ---
 
