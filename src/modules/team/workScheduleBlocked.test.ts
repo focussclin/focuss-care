@@ -94,7 +94,14 @@ describe('escalas de trabalho continuam bloqueadas', () => {
     ).map((path) => path.replace(process.cwd(), ''))
 
     expect(offenders, 'antes de tocar em work_schedules, prove a convenção de weekday').toEqual([])
-  })
+  }, 30_000)
+  /*
+   * Limite próprio porque este caso NÃO é um teste de unidade: ele lê os ~600
+   * arquivos de `src` um a um. Sozinho leva ~300ms; com a suíte inteira
+   * disputando o disco, já passou de 8s e estourou o padrão de 5s — falha
+   * intermitente que não diz nada sobre `work_schedules` e ensina a suíte a ser
+   * ignorada.
+   */
 
   it('a porta do repositório não expõe operação de escala', () => {
     // Um método na porta é um convite: alguém o implementa sem ler o porquê.

@@ -83,7 +83,18 @@ Valores em **centavos** (`*_cents`, inteiros) — sem ponto flutuante para dinhe
 `professionals` · `employees` · `time_off`
 
 `professionals.user_id` é opcional: dá para pôr alguém na agenda antes de a pessoa
-ter conta.
+ter conta. A consequência, que a tela de `/equipe` declara: sem `user_id`,
+`current_professional_id()` não resolve, e essa pessoa **não assina** prontuário
+nem prescrição.
+
+O campo referencia `profiles.id` — **coluna única**, que prova existência e não
+tenancy. A aplicação confere o vínculo contra `memberships` desta clínica com
+status `active` antes de gravar; a RLS protege a linha (`clinic_id`), não o
+conteúdo do campo.
+
+`professionals.agenda_color` **não é lida nem gravada**: nenhuma tela a consome —
+a agenda colore por status do atendimento — e o formato (hexadecimal, token de
+tema, nome CSS) não está declarado em lugar nenhum.
 
 ### Comunicação
 `conversations` · `messages` · `message_templates` · `whatsapp_channels` ·
@@ -184,7 +195,7 @@ select tablename, policyname, cmd, roles
    and tablename in ('conversations', 'messages', 'workflows', 'allergies',
                      'availability_exceptions', 'services', 'vitals',
                      'message_templates', 'prescriptions', 'prescription_items',
-                     'price_lists', 'price_list_items')
+                     'price_lists', 'price_list_items', 'professionals')
  order by tablename, cmd;
 ```
 

@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (10/08/2026):** 1245 testes em 114 arquivos · `typecheck`,
+**Validação atual (10/08/2026):** 2244 testes em 178 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -100,7 +100,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/assinaturas` | **COMPLETO** | Banco (subscription) — plano, estado e cotas contadas do uso real | `clinic.settings` |
-| `/equipe` | **EM ANDAMENTO** | Banco (team) + emissão/cópia de convite | `team.read`; emitir exige `team.manage` |
+| `/equipe` | **COMPLETO** | Banco (team) — acesso, convites, funcionários, ausências e cadastro de profissionais (§8.33). Escalas seguem bloqueadas por **P-WD** | `team.read`; escrever exige `team.manage` |
 | `/configuracoes` | **COMPLETO** | Banco (settings + identity) | Membro; perfil é sempre próprio, clínica exige `clinic.settings` |
 | `/indicadores` | **COMPLETO** | Banco (reporting) — série de 12 meses contada por `count`, sem transferir linha | `report.read` |
 | `/relatorios` | **COMPLETO** | Banco (reporting) | `report.read` |
@@ -2621,6 +2621,100 @@ Painel em `/servicos`, abaixo do catálogo, como slot com leitura e falha
 próprias — se as tabelas não carregarem, o cadastro de serviço continua
 servindo. `catalog` segue **COMPLETO** para o que as tabelas suportam, agora com
 98 testes (44 novos: 12 de domínio, 16 de repositório, 16 de UI).
+
+---
+
+## 8.33 Feature — Cadastro de profissionais (10/08/2026)
+
+Reauditei o menu restante varrendo os enums de `database.types.ts` atrás de
+valores que nenhum código alcança — é a varredura que mais rende, porque um
+enum inteiro sem uso é uma funcionalidade que o banco espera e a aplicação não
+oferece. Sobraram `AiFeature`/`AiRole` (IA bloqueada), `MessageStatus.queued`
+(sem envio), `WorkflowRunStatus.succeeded` (sem executor), `BiologicalSex` e
+**`CouncilType`: oito das nove siglas inalcançáveis** — só `CRM` chegava a
+algum lugar, e por acaso.
+
+Puxando o fio: `grep "from('professionals')"` devolve **quatro leitores e
+nenhum escritor**. Agenda, prontuário, prescrição e assinatura dependiam de uma
+linha que só existia se alguém a inserisse direto no banco.
+
+### O que estava travado
+
+`professionals` é pré-requisito de quatro coisas já construídas:
+
+| Depende | Como |
+| --- | --- |
+| Agenda | o seletor de profissional lê `professionals` com `is_active = true` |
+| Prontuário | `medical_records.author_id` |
+| Prescrições (§8.29) | `prescriptions.author_id` + `current_professional_id()` |
+| Equipe | a especialidade que aparece ao lado do membro |
+
+A prescrição tinha a porta certa — quem não tem cadastro profissional não
+prescreve — e nenhum caminho pela aplicação para atravessá-la.
+
+### Três tabelas diferentes, e a tela é a única pista
+
+`memberships` é ACESSO, `professionals` é quem ATENDE, `employees` é o vínculo
+TRABALHISTA. A mesma pessoa pode ser as três, ou só uma: o dentista que atende
+sem login é profissional e não é membro; a recepcionista é membro e funcionária,
+e não é profissional. O painel novo fica entre o acesso (acima) e o vínculo
+trabalhista (abaixo), nessa ordem, porque é o que ele é.
+
+### `user_id` é opcional — e a tela diz o preço disso
+
+`docs/03-banco-de-dados.md` registra que dá para pôr alguém na agenda antes de a
+pessoa ter conta. O que ninguém dizia é a consequência: sem `user_id`,
+`current_professional_id()` não resolve, e essa pessoa **não assina** prontuário
+nem prescrição. A lista sinaliza quem está nessa situação, em vez de deixar
+descobrir na hora de fechar um atendimento.
+
+### A guarda de tenant que a FK não dá
+
+`professionals.user_id` referencia `profiles.id` — **coluna única**. Ela prova
+que o usuário existe em algum lugar do banco, não que pertence a esta clínica, e
+a RLS protege a LINHA (`clinic_id`), não o conteúdo do campo. Sem guarda, um
+administrador poderia apontar o cadastro para alguém de fora e dar a essa pessoa
+a assinatura clínica daqui.
+
+O servidor confere o vínculo contra `memberships` desta clínica **com status
+`active`** — convite pendente ainda não é conta, e acesso revogado não volta a
+assinar por um caminho lateral. Mesma classe de buraco fechada em §8.27 (vitals)
+e §8.29 (prescrições).
+
+### A cor de agenda fica fora, e é provável, não achismo
+
+`agenda_color` não tem consumidor nenhum: a agenda colore por STATUS do
+atendimento, e o tipo que chega até ela (`_shared/domain/types.ts`) carrega só
+id, nome e especialidade. Somado a isso, o formato não está declarado em lugar
+algum — hexadecimal, token do tema, nome CSS. Um seletor aqui gravaria um valor
+que ninguém exibe; a coluna nasce nula e continua nula, e o painel diz por quê.
+
+`default_slot_minutes` é o contrário: `NOT NULL` sem default, então **tem** que
+receber valor. Está no formulário com o rótulo honesto de que a agenda ainda não
+o aplica sozinha.
+
+### Não há exclusão, e desativar é ação própria
+
+`medical_records.author_id` e `prescriptions.author_id` apontam para cá: apagar
+o profissional apagaria autoria de prontuário, que tem prazo legal de guarda. A
+porta do repositório não tem `delete`.
+
+Desativar tira o profissional do seletor da agenda de toda a clínica e derruba a
+assinatura dele — botão próprio, nunca um checkbox no meio do formulário de
+nome e conselho. Por isso as actions revalidam `/equipe` **e** `/agenda`.
+
+### Estado
+
+Painel em `/equipe`, com leitura e falha próprias — se `professionals` não
+carregar, quem veio revogar um acesso continua conseguindo. `team` passa a 135
+testes (63 novos: 15 de domínio, 17 de repositório, 17 de action, 20 de UI e
+schema). As nove siglas de `council_type` ficam alcançáveis.
+
+**Fica pendente:** `scheduling.listProfessionals` filtra `is_active` mas não
+`deleted_at`, enquanto equipe, assinatura e este cadastro filtram os dois. A
+aplicação nunca apaga profissional, então o caso só aparece com linha removida
+por fora do produto — não toquei porque é outro módulo, mas é inconsistência
+real.
 
 ---
 

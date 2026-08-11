@@ -22,8 +22,13 @@ import {
   type TeamMemberDto,
   type TimeOffDto,
 } from '../schemas/team.schema'
+import type {
+  LinkableMemberDto,
+  ProfessionalDto,
+} from '../schemas/professional.schema'
 import { RevokeAccessDialog } from './RevokeAccessDialog'
 import { InviteMemberPanel } from './InviteMemberPanel'
+import { ProfessionalsPanel } from './ProfessionalsPanel'
 import { StaffPanel } from './StaffPanel'
 
 export interface EquipeScreenProps {
@@ -35,6 +40,10 @@ export interface EquipeScreenProps {
   /** Vinculo trabalhista e ausencias (S-02). */
   employees: readonly EmployeeDto[]
   timeOff: readonly TimeOffDto[]
+  /** Quem atende — o cadastro que a agenda e o prontuário consomem (S-03). */
+  professionals: readonly ProfessionalDto[]
+  /** Preenchido quando a leitura de profissionais falhou. */
+  professionalsError?: string | null
   isLive?: boolean
 }
 
@@ -64,6 +73,8 @@ export function EquipeScreen({
   canManage,
   employees,
   timeOff,
+  professionals,
+  professionalsError = null,
   isLive = false,
 }: EquipeScreenProps) {
   const router = useRouter()
@@ -73,6 +84,10 @@ export function EquipeScreen({
 
   const activeMembers = members.filter((member) => member.status !== 'revoked')
   const revokedMembers = members.filter((member) => member.status === 'revoked')
+
+  const linkableMembers: readonly LinkableMemberDto[] = members
+    .filter((member) => member.status === 'active')
+    .map((member) => ({ userId: member.userId, name: member.name }))
 
   function handleRoleChange(member: TeamMemberDto, role: string) {
     setError(null)
@@ -298,6 +313,27 @@ export function EquipeScreen({
           </Card>
         </section>
       ) : null}
+
+      {/*
+        Profissionais (S-03).
+
+        Fica entre o ACESSO (acima) e o vínculo TRABALHISTA (abaixo) porque é
+        exatamente o que está no meio: quem atende. As três coisas são tabelas
+        diferentes, e a ordem da tela é a única pista de que não são a mesma.
+      */}
+      <ProfessionalsPanel
+        professionals={professionals}
+        /*
+          Só quem tem acesso ATIVO pode ser vinculado. Convite pendente ainda
+          não é conta, e conta revogada não deveria voltar a assinar prontuário
+          por um caminho lateral. O servidor confere de novo, contra
+          `memberships`.
+        */
+        members={linkableMembers}
+        canManage={canManage}
+        isLive={isLive}
+        loadError={professionalsError}
+      />
 
       {/*
         Funcionários e ausências (S-02).

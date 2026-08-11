@@ -5,11 +5,16 @@ import { connection } from 'next/server'
 import { getActiveClinicRole } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
+import { toProfessionalDto } from '@/modules/team/application/toProfessionalDto'
 import {
   toPendingInvitationDto,
   toTeamMemberDto,
 } from '@/modules/team/application/toTeamDto'
+import type { Professional } from '@/modules/team/domain/Professional'
+import { isProfessionalError } from '@/modules/team/domain/ProfessionalRepository'
+import { getProfessionalSource } from '@/modules/team/infrastructure/professional-repository'
 import { getTeamRepository } from '@/modules/team/infrastructure/repository'
+import { professionalMessages } from '@/modules/team/schemas/professional.schema'
 import { EquipeScreen } from '@/modules/team/ui/EquipeScreen'
 
 export const metadata: Metadata = {
@@ -34,8 +39,9 @@ export default async function EquipePage() {
   const role = await getActiveClinicRole()
   if (!can(role, 'team.read')) forbidden()
 
-  const [teamSource, session] = await Promise.all([
+  const [teamSource, professionalSource, session] = await Promise.all([
     getTeamRepository(),
+    getProfessionalSource(),
     getSessionState(),
   ])
 
@@ -45,6 +51,26 @@ export default async function EquipePage() {
     teamSource.repository.listEmployees(teamSource.clinicId),
     teamSource.repository.listTimeOff(teamSource.clinicId, TIME_OFF_LIMIT),
   ])
+
+  /*
+   * Os profissionais têm leitura própria, e falha própria.
+   *
+   * Se `professionals` não carregar, o resto da tela continua servindo: quem
+   * veio revogar um acesso não deveria ficar sem a lista de membros por causa
+   * de uma policy do cadastro de quem atende.
+   */
+  let professionals: Professional[] = []
+  let professionalsError: string | null = null
+
+  try {
+    professionals = await professionalSource.repository.list(professionalSource.clinicId)
+  } catch (cause) {
+    if (!isProfessionalError(cause)) throw cause
+    professionalsError =
+      cause.reason === 'forbidden'
+        ? professionalMessages.forbidden
+        : professionalMessages.unavailable
+  }
 
   return (
     <EquipeScreen
@@ -75,6 +101,8 @@ export default async function EquipePage() {
         endsOn: entry.endsOn.toISOString(),
         answeredAt: entry.answeredAt?.toISOString() ?? null,
       }))}
+      professionals={professionals.map(toProfessionalDto)}
+      professionalsError={professionalsError}
       isLive={teamSource.isLive}
     />
   )
