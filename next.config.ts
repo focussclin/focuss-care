@@ -32,7 +32,8 @@ import type { NextConfig } from "next";
  * node_modules/next/dist/docs/01-app/03-api-reference/04-functions/forbidden.md.
  */
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // Cache Components requer Node.js; o Worker roda em workerd.
+  cacheComponents: false,
   experimental: {
     authInterrupts: true,
   },

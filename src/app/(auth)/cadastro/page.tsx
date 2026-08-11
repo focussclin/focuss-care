@@ -9,7 +9,6 @@ export const metadata: Metadata = {
   description: 'Comece a organizar sua clínica com o Focuss Care.',
 }
 
-export const instant = false
 
 export default async function CadastroPage() {
   const session = await getSessionState()

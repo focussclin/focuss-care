@@ -57,7 +57,6 @@ import type { Notification } from '@/modules/notifications/domain/Notification'
  * Ver node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/
  * 02-route-segment-config/instant.md §"Disabling static shell validation".
  */
-export const instant = false
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getSessionState()
 
