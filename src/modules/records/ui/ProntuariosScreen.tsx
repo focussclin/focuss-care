@@ -1,6 +1,13 @@
 'use client'
 
-import { FileText, History, LockKeyhole, PenLine, Plus } from 'lucide-react'
+import {
+  FileText,
+  History,
+  LockKeyhole,
+  PenLine,
+  Plus,
+  Stethoscope,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -17,6 +24,10 @@ import {
   type MedicalRecordDto,
 } from '../schemas/record.schema'
 import { RecordEditorModal } from './RecordEditorModal'
+import {
+  encounterStatusLabel,
+  formatEncounterMoment,
+} from './recordEncounterLabel'
 
 export interface RecordPatientOption {
   id: string
@@ -170,6 +181,43 @@ export function ProntuariosScreen({
                   </div>
                 </div>
 
+                {/*
+                  De qual consulta este registro saiu.
+
+                  Fica ACIMA do texto porque é o contexto que o explica: a
+                  queixa diz por que a pessoa veio, e a evolução diz o que foi
+                  feito. Ler a conduta antes do motivo inverte a ordem em que
+                  quem atende pensa.
+                */}
+                {record.encounter ? (
+                  <div className="flex flex-col gap-1 rounded-field border border-border-card bg-background px-3.5 py-2.5">
+                    <p className="flex items-center gap-2 text-label text-muted">
+                      <Stethoscope aria-hidden className="size-3.5 shrink-0" />
+                      Atendimento de {formatEncounterMoment(record.encounter)} ·{' '}
+                      {encounterStatusLabel(record.encounter.status)}
+                      {record.encounter.professionalName
+                        ? ` · ${record.encounter.professionalName}`
+                        : ''}
+                    </p>
+
+                    {record.encounter.chiefComplaint ? (
+                      <p className="text-label text-foreground">
+                        <span className="font-semibold">Queixa principal:</span>{' '}
+                        {record.encounter.chiefComplaint}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : record.encounterId ? (
+                  /*
+                    Há vínculo e o atendimento não pôde ser lido. Dizer "sem
+                    vínculo" aqui seria afirmar o contrário do que a linha diz —
+                    e é justamente o registro que menos pode mentir.
+                  */
+                  <p className="text-label text-muted">
+                    Vinculado a um atendimento que não pôde ser carregado.
+                  </p>
+                ) : null}
+
                 <p className="text-aux leading-6 whitespace-pre-wrap text-foreground">
                   {record.content}
                 </p>
@@ -196,6 +244,7 @@ export function ProntuariosScreen({
         open={creating}
         onOpenChange={setCreating}
         patients={patients}
+        isLive={isLive}
         onDone={() => router.refresh()}
       />
 

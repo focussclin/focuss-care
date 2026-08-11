@@ -18,6 +18,7 @@ const USER = 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f'
 const AUTHOR = '22222222-2222-4222-8222-222222222222'
 const PATIENT = '33333333-3333-4333-8333-333333333333'
 const RECORD = '9019956f-bdd8-4d61-868d-09b02332dad0'
+const ENCOUNTER = '44444444-4444-4444-8444-444444444444'
 
 interface RecordedCall {
   query: number
@@ -43,11 +44,29 @@ function recordRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function encounterRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: ENCOUNTER,
+    status: 'open',
+    started_at: '2026-08-07T11:30:00.000Z',
+    ended_at: null,
+    chief_complaint: 'Dor lombar há três dias',
+    professional: { display_name: 'Dra. Helena' },
+    ...overrides,
+  }
+}
+
 function createFakeClient(results: {
   previous?: unknown
   successor?: unknown
   inserted?: unknown
   rows?: unknown[]
+  /** Linhas por TABELA — o que uma leitura hidratada precisa distinguir. */
+  rowsByTable?: Record<string, unknown[]>
+  /** Tabela cuja leitura falha, para provar que a falha é best-effort. */
+  failingTable?: string
+  /** Resposta de `maybeSingle` por tabela, quando a ordem não basta. */
+  singleByTable?: Record<string, unknown>
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
@@ -63,7 +82,18 @@ function createFakeClient(results: {
 
     const query: Record<string, unknown> = {}
 
-    for (const method of ['select', 'eq', 'in', 'is', 'order', 'limit', 'insert', 'update', 'delete']) {
+    for (const method of [
+      'select',
+      'eq',
+      'neq',
+      'in',
+      'is',
+      'order',
+      'limit',
+      'insert',
+      'update',
+      'delete',
+    ]) {
       query[method] = (...args: unknown[]) => {
         record(method, args)
         return query
@@ -80,6 +110,11 @@ function createFakeClient(results: {
 
     query.maybeSingle = async () => {
       record('maybeSingle', [])
+
+      if (results.singleByTable && table in results.singleByTable) {
+        return { data: results.singleByTable[table], error: null }
+      }
+
       maybeSingleCount += 1
 
       // Em `amend` a ordem e: (1) versao anterior, (2) sucessor.
@@ -99,11 +134,16 @@ function createFakeClient(results: {
     query.then = (
       onFulfilled: (value: unknown) => unknown,
       onRejected?: (reason: unknown) => unknown,
-    ) =>
-      Promise.resolve({ data: results.rows ?? [], error: null }).then(
-        onFulfilled,
-        onRejected,
-      )
+    ) => {
+      const failed = results.failingTable === table
+      const rows = results.rowsByTable?.[table] ?? results.rows ?? []
+
+      return Promise.resolve(
+        failed
+          ? { data: null, error: { code: '42501', message: 'recusado' } }
+          : { data: rows, error: null },
+      ).then(onFulfilled, onRejected)
+    }
 
     return query
   })
@@ -290,6 +330,31 @@ describe('create', () => {
     expect(await hashOf('texto A')).not.toBe(await hashOf('texto B'))
   })
 
+  it('grava o atendimento vinculado', async () => {
+    const fake = createFakeClient({})
+
+    await new SupabaseMedicalRecordRepository(fake.client).create(
+      CLINIC,
+      {
+        patientId: PATIENT,
+        encounterId: ENCOUNTER,
+        recordType: 'evolution',
+        content: 'Conduta mantida.',
+      },
+      AUTHOR,
+      USER,
+    )
+
+    const insert = fake
+      .ofTable('medical_records')
+      .find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(insert.encounter_id).toBe(ENCOUNTER)
+  })
+
   it('guarda o conteúdo nas duas colunas, com a mesma origem', async () => {
     const fake = createFakeClient({})
 
@@ -315,6 +380,94 @@ describe('create', () => {
     // Se divergirem, a tela mostra uma coisa e a busca encontra outra.
     expect(insert.content).toEqual({ text: 'Conduta mantida.' })
     expect(insert.content_text).toBe('Conduta mantida.')
+  })
+})
+
+describe('atendimentos a que vincular', () => {
+  it('só os do paciente, na clínica ativa', async () => {
+    const fake = createFakeClient({
+      rowsByTable: { encounters: [encounterRow()] },
+    })
+
+    const encounters = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listPatientEncounters(CLINIC, PATIENT, 10)
+
+    expect(encounters).toHaveLength(1)
+    expect(fake.ofTable('encounters')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(fake.ofTable('encounters')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['patient_id', PATIENT] }),
+    )
+  })
+
+  it('atendimento cancelado é excluído pelo banco, não em memória', async () => {
+    /*
+     * Filtrar depois de ler faria o teto de linhas contar cancelamentos: um
+     * paciente com muitos deles devolveria uma lista curta demais.
+     */
+    const fake = createFakeClient({
+      rowsByTable: { encounters: [encounterRow()] },
+    })
+
+    await new SupabaseMedicalRecordRepository(fake.client).listPatientEncounters(
+      CLINIC,
+      PATIENT,
+      10,
+    )
+
+    expect(fake.ofTable('encounters')).toContainEqual(
+      expect.objectContaining({ method: 'neq', args: ['status', 'canceled'] }),
+    )
+  })
+
+  it('linha sem início não vira atendimento', async () => {
+    const fake = createFakeClient({
+      rowsByTable: {
+        encounters: [encounterRow(), encounterRow({ id: 'x', started_at: null })],
+      },
+    })
+
+    const encounters = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listPatientEncounters(CLINIC, PATIENT, 10)
+
+    // Descartar e mais honesto que inventar uma data de inicio.
+    expect(encounters).toHaveLength(1)
+  })
+
+  it('a pertinência confere clínica, atendimento e paciente no mesmo WHERE', async () => {
+    const fake = createFakeClient({
+      singleByTable: { encounters: { id: ENCOUNTER } },
+    })
+
+    const belongs = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).encounterBelongsTo(CLINIC, ENCOUNTER, PATIENT)
+
+    expect(belongs).toBe(true)
+
+    const filters = fake
+      .ofTable('encounters')
+      .filter((call) => call.method === 'eq')
+      .map((call) => call.args)
+
+    // Comparar em memoria daria o mesmo resultado e uma armadilha: bastaria
+    // esquecer uma das comparacoes para o vinculo cruzar a fronteira do tenant.
+    expect(filters).toContainEqual(['clinic_id', CLINIC])
+    expect(filters).toContainEqual(['id', ENCOUNTER])
+    expect(filters).toContainEqual(['patient_id', PATIENT])
+  })
+
+  it('atendimento de outro paciente devolve falso', async () => {
+    const fake = createFakeClient({ singleByTable: { encounters: null } })
+
+    const belongs = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).encounterBelongsTo(CLINIC, ENCOUNTER, PATIENT)
+
+    expect(belongs).toBe(false)
   })
 })
 
@@ -364,6 +517,92 @@ describe('leitura', () => {
     expect(columns).toContain('content_text')
     expect(columns).not.toContain('content_hash')
     expect(columns).not.toContain('signature')
+  })
+
+  it('traz o atendimento vinculado sem consulta por linha', async () => {
+    const fake = createFakeClient({
+      rowsByTable: {
+        v_medical_records_current: [
+          recordRow({ id: 'r1', encounter_id: ENCOUNTER }),
+          recordRow({ id: 'r2', encounter_id: ENCOUNTER }),
+        ],
+        professionals: [{ id: AUTHOR, display_name: 'Dra. Helena' }],
+        encounters: [encounterRow()],
+      },
+    })
+
+    const records = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listRecent(CLINIC, 10)
+
+    expect(records[0].encounter?.chiefComplaint).toBe('Dor lombar há três dias')
+    expect(records[1].encounter?.id).toBe(ENCOUNTER)
+
+    // Duas linhas, UMA consulta de atendimento: o N+1 aqui multiplicaria por
+    // trinta a cada abertura da tela.
+    const selects = fake
+      .ofTable('encounters')
+      .filter((call) => call.method === 'select')
+    expect(selects).toHaveLength(1)
+  })
+
+  it('registro sem vínculo não consulta atendimento nenhum', async () => {
+    const fake = createFakeClient({
+      rowsByTable: {
+        v_medical_records_current: [recordRow({ encounter_id: null })],
+        professionals: [],
+      },
+    })
+
+    const records = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listRecent(CLINIC, 10)
+
+    expect(records[0].encounterId).toBeNull()
+    expect(records[0].encounter).toBeNull()
+    expect(fake.ofTable('encounters')).toHaveLength(0)
+  })
+
+  it('atendimento ilegível não apaga o vínculo nem derruba a leitura', async () => {
+    /*
+     * O contexto e best-effort: se a segunda consulta falhar, o registro
+     * continua legivel. `encounter` fica nulo e `encounterId` permanece — dizer
+     * "sem vinculo" aqui seria afirmar o contrario do que a linha diz.
+     */
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = createFakeClient({
+      rowsByTable: {
+        v_medical_records_current: [recordRow({ encounter_id: ENCOUNTER })],
+        professionals: [],
+      },
+      failingTable: 'encounters',
+    })
+
+    const records = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listRecent(CLINIC, 10)
+
+    expect(records).toHaveLength(1)
+    expect(records[0].encounterId).toBe(ENCOUNTER)
+    expect(records[0].encounter).toBeNull()
+
+    spy.mockRestore()
+  })
+
+  it('o contexto do atendimento também filtra pela clínica ativa', async () => {
+    const fake = createFakeClient({
+      rowsByTable: {
+        v_medical_records_current: [recordRow({ encounter_id: ENCOUNTER })],
+        professionals: [],
+        encounters: [encounterRow()],
+      },
+    })
+
+    await new SupabaseMedicalRecordRepository(fake.client).listRecent(CLINIC, 10)
+
+    expect(fake.ofTable('encounters')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
   })
 
   it('a cadeia de versões tem teto — cadeia corrompida não trava o request', async () => {

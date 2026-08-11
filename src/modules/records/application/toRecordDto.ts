@@ -1,5 +1,28 @@
-import type { MedicalRecord } from '../domain/MedicalRecord'
-import type { MedicalRecordDto } from '../schemas/record.schema'
+import type { MedicalRecord, RecordEncounter } from '../domain/MedicalRecord'
+import type {
+  MedicalRecordDto,
+  RecordEncounterDto,
+} from '../schemas/record.schema'
+
+/**
+ * Atendimento -> o que a tela e o seletor de vínculo recebem.
+ *
+ * `Date` não atravessa a fronteira do servidor para o cliente sem virar string
+ * em algum ponto; fazer isso aqui deixa o formato explícito e igual ao do
+ * registro (ISO 8601 em UTC, formatado na tela pelo fuso de quem lê).
+ */
+export function toRecordEncounterDto(
+  encounter: RecordEncounter,
+): RecordEncounterDto {
+  return {
+    id: encounter.id,
+    status: encounter.status,
+    startedAt: encounter.startedAt.toISOString(),
+    endedAt: encounter.endedAt?.toISOString() ?? null,
+    professionalName: encounter.professionalName,
+    chiefComplaint: encounter.chiefComplaint,
+  }
+}
 
 /**
  * Entidade -> o que atravessa a fronteira da Server Action.
@@ -14,6 +37,7 @@ export function toMedicalRecordDto(record: MedicalRecord): MedicalRecordDto {
     id: record.id,
     patientId: record.patientId,
     encounterId: record.encounterId,
+    encounter: record.encounter ? toRecordEncounterDto(record.encounter) : null,
     authorId: record.authorId,
     authorName: record.authorName,
     recordType: record.recordType,

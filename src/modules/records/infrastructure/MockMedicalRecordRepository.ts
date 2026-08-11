@@ -1,6 +1,6 @@
 import { getPatientNotes } from '@/lib/mocks/clinic-data'
 
-import type { MedicalRecord } from '../domain/MedicalRecord'
+import type { MedicalRecord, RecordEncounter } from '../domain/MedicalRecord'
 import type { MedicalRecordRepository } from '../domain/MedicalRecordRepository'
 import { MedicalRecordRepositoryError } from '../domain/MedicalRecordRepositoryError'
 
@@ -37,6 +37,23 @@ export class MockMedicalRecordRepository implements MedicalRecordRepository {
   }
 
   /**
+   * Sem atendimento na demonstracao.
+   *
+   * Fabricar consultas de exemplo aqui daria ao seletor de vinculo uma lista
+   * plausivel de atendimentos que nunca aconteceram — e o vinculo nem chegaria a
+   * ser gravado, porque `create` recusa. Lista vazia diz a verdade: nao ha a que
+   * vincular.
+   */
+  async listPatientEncounters(): Promise<RecordEncounter[]> {
+    return []
+  }
+
+  /** Nada pertence a uma clinica que nao existe. */
+  async encounterBelongsTo(): Promise<boolean> {
+    return false
+  }
+
+  /**
    * Escrita nao existe na demonstracao.
    *
    * Devolver um objeto daria "registrado no prontuario" para algo que nao saiu
@@ -61,6 +78,7 @@ export class MockMedicalRecordRepository implements MedicalRecordRepository {
       id: `rec-mock-${note.id}`,
       patientId,
       encounterId: null,
+      encounter: null,
       authorId: `prof-mock-${index}`,
       authorName: note.authorName,
       recordType: 'evolution' as const,

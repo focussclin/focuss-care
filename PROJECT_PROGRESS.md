@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2393 testes em 186 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2484 testes em 194 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -18,7 +18,8 @@ documentos e cofre de integrações) não aparecem integralmente no schema remot
 Por isso o menu mantém essas rotas bloqueadas até a aplicação confirmada das
 migrations. A última consulta não alterou secrets nem executou DDL remoto.
 
-**Commits desta etapa:** `6c536e6` (reparo de policies privadas do Storage),
+**Commits desta etapa:** `ee959f8` (queixa principal e vínculo clínico inicial),
+`6c536e6` (reparo de policies privadas do Storage),
 `7027fcd` e `2c63eee` (gates de autorização), `2f53a01` (testes do repositório
 de estoque).
 
@@ -2966,6 +2967,45 @@ empurraria "quem está com quem" para baixo.
 **Fica pendente:** a queixa não aparece no prontuário (`/prontuarios`) nem na
 ficha do paciente. `medical_records.encounter_id` existe e permitiria o vínculo;
 é fatia própria, do módulo `records`.
+
+---
+
+## 8.37 Feature — Vínculo do prontuário ao atendimento (11/08/2026)
+
+O campo `medical_records.encounter_id` já existia no schema, mas era uma coluna
+sem superfície: o formulário nunca permitia escolher a consulta e cada evolução
+era salva sem contexto. Esta fatia fecha a ligação entre **Atendimentos → queixa
+principal → Prontuários**.
+
+### Persistência e isolamento
+
+O seletor carrega até dez atendimentos do paciente escolhido por Server Action,
+com `record.read`, ordenados do mais recente para o mais antigo e sem consultas
+canceladas. A gravação confere no banco, com `clinic_id`, `encounter_id` e
+`patient_id` no mesmo `WHERE`; uma FK isolada não seria suficiente para impedir
+que um id válido de outro paciente ou tenant fosse associado ao registro.
+
+O vínculo é salvo junto da primeira versão do prontuário. Retificações não
+alteram paciente, tipo ou atendimento: a nova versão herda o contexto da
+anterior, preservando a cadeia append-only.
+
+### Contexto clínico na leitura
+
+As listagens de prontuário hidratam autores e atendimentos em consultas por lote,
+sem N+1. Quando o atendimento está acessível, a tela mostra data, status,
+profissional e queixa principal. Quando existe `encounter_id`, mas a leitura do
+atendimento não está disponível, a interface informa isso sem fingir que o
+registro não tem vínculo. O texto da queixa não é duplicado no `audit_log`.
+
+O seletor exibe a queixa truncada apenas como ajuda para distinguir consultas;
+o texto completo fica no contexto do registro. Trocas rápidas de paciente
+descartam respostas atrasadas e não permitem enviar o vínculo anterior.
+
+### Estado
+
+`records` passa a 132 testes e o projeto a 2484 testes em 194 arquivos.
+Typecheck, lint, build e suíte completa estão limpos. Teleatendimento continua
+fora do escopo.
 
 ---
 

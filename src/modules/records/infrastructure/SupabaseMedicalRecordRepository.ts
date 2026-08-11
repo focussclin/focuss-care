@@ -6,7 +6,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from '@/lib/supabase/database.types'
 
-import type { MedicalRecord, RecordType } from '../domain/MedicalRecord'
+import type {
+  MedicalRecord,
+  RecordEncounter,
+  RecordEncounterStatus,
+  RecordType,
+} from '../domain/MedicalRecord'
 import type {
   MedicalRecordRepository,
   NewRecordData,
@@ -39,6 +44,40 @@ interface RecordRow {
 }
 
 /**
+ * Colunas do atendimento que o prontuário lê.
+ *
+ * `appointment_id`, `created_by` e `updated_at` ficam de fora: são vocabulário
+ * de agenda e de operação, e o prontuário não os mostra em lugar nenhum. O nome
+ * do profissional vem por embed porque `encounters` **declara** a FK — ao
+ * contrário da view do prontuário, que não declara nenhuma.
+ */
+const ENCOUNTER_COLUMNS =
+  'id, status, started_at, ended_at, chief_complaint, professional:professionals ( display_name )'
+
+interface EncounterRow {
+  id: string | null
+  status: RecordEncounterStatus | null
+  started_at: string | null
+  ended_at: string | null
+  chief_complaint: string | null
+  professional: { display_name: string | null } | null
+}
+
+function toRecordEncounter(row: EncounterRow): RecordEncounter | null {
+  // Sem id ou sem início não há atendimento a que vincular coisa alguma.
+  if (!row.id || !row.started_at) return null
+
+  return {
+    id: row.id,
+    status: row.status ?? 'open',
+    startedAt: new Date(row.started_at),
+    endedAt: row.ended_at ? new Date(row.ended_at) : null,
+    professionalName: row.professional?.display_name ?? null,
+    chiefComplaint: row.chief_complaint,
+  }
+}
+
+/**
  * Hash do conteúdo.
  *
  * `content_hash` é NOT NULL no schema e existe para integridade: dois registros
@@ -57,6 +96,7 @@ function contentHash(content: string): string {
 function toMedicalRecord(
   row: RecordRow,
   authorNames: Map<string, string>,
+  encounters: Map<string, RecordEncounter> = new Map(),
 ): MedicalRecord | null {
   // As colunas da view são todas nullable no tipo gerado. Uma linha sem id ou
   // sem paciente não é um registro — descartar é mais honesto que inventar.
@@ -68,6 +108,10 @@ function toMedicalRecord(
     id: row.id,
     patientId: row.patient_id,
     encounterId: row.encounter_id,
+    // Ausente NÃO é "sem vínculo": `encounterId` continua dizendo que há um.
+    encounter: row.encounter_id
+      ? (encounters.get(row.encounter_id) ?? null)
+      : null,
     authorId: row.author_id,
     authorName: authorNames.get(row.author_id) ?? 'Profissional',
     recordType: row.record_type ?? 'note',
@@ -106,7 +150,7 @@ export class SupabaseMedicalRecordRepository
 
     if (error) throw readFailure('listCurrentByPatient', error)
 
-    return this.withAuthorNames(clinicId, (data ?? []) as RecordRow[])
+    return this.hydrate(clinicId, (data ?? []) as RecordRow[])
   }
 
   async listRecent(clinicId: string, limit: number): Promise<MedicalRecord[]> {
@@ -119,7 +163,60 @@ export class SupabaseMedicalRecordRepository
 
     if (error) throw readFailure('listRecent', error)
 
-    return this.withAuthorNames(clinicId, (data ?? []) as RecordRow[])
+    return this.hydrate(clinicId, (data ?? []) as RecordRow[])
+  }
+
+  /**
+   * Atendimentos aos quais uma evolução pode ser vinculada.
+   *
+   * `neq('status', 'canceled')` vai no `WHERE`, e não num filtro depois da
+   * leitura: o teto de linhas é aplicado pelo banco, e filtrar em memória faria
+   * um paciente com muitos cancelamentos devolver uma lista curta demais.
+   */
+  async listPatientEncounters(
+    clinicId: string,
+    patientId: string,
+    limit: number,
+  ): Promise<RecordEncounter[]> {
+    const { data, error } = await this.client
+      .from('encounters')
+      .select(ENCOUNTER_COLUMNS)
+      .eq('clinic_id', clinicId)
+      .eq('patient_id', patientId)
+      .neq('status', 'canceled')
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (error) throw readFailure('listPatientEncounters', error)
+
+    return ((data ?? []) as unknown as EncounterRow[])
+      .map(toRecordEncounter)
+      .filter((encounter): encounter is RecordEncounter => encounter !== null)
+  }
+
+  /**
+   * Conferência de pertinência — os TRÊS filtros no mesmo `WHERE`.
+   *
+   * Ler o atendimento e comparar em memória daria o mesmo resultado e uma
+   * armadilha: bastaria alguém esquecer uma das comparações para o vínculo
+   * atravessar a fronteira do inquilino sem que nada reclamasse.
+   */
+  async encounterBelongsTo(
+    clinicId: string,
+    encounterId: string,
+    patientId: string,
+  ): Promise<boolean> {
+    const { data, error } = await this.client
+      .from('encounters')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('id', encounterId)
+      .eq('patient_id', patientId)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+
+    return data !== null
   }
 
   /**
@@ -156,7 +253,7 @@ export class SupabaseMedicalRecordRepository
       cursor = row.supersedes_id
     }
 
-    return this.withAuthorNames(clinicId, rows)
+    return this.hydrate(clinicId, rows)
   }
 
   async create(
@@ -310,48 +407,101 @@ export class SupabaseMedicalRecordRepository
   }
 
   /**
-   * Nomes dos autores, em uma consulta só.
+   * Autor e atendimento de cada linha — duas consultas, nunca N.
    *
    * A view não declara relacionamento (`Relationships: []`), então não há join
-   * embutido: o PostgREST não consegue trazer o nome junto. Uma consulta extra,
-   * limitada aos autores da página, é mais barata que o N+1 que sairia de
-   * buscar nome a nome.
+   * embutido: o PostgREST não consegue trazer nem o nome nem o atendimento
+   * junto. Duas consultas extras, limitadas ao que a página já leu, são mais
+   * baratas que o N+1 que sairia de buscar linha a linha.
+   *
+   * As duas são **best-effort e paralelas**: nenhuma delas é o registro clínico
+   * em si. Se falharem, o prontuário continua legível — com o autor como
+   * "Profissional" e o vínculo sem detalhe. Derrubar a leitura por causa de um
+   * rótulo seria trocar um problema de exibição por um de cuidado.
    */
-  private async withAuthorNames(
+  private async hydrate(
     clinicId: string,
     rows: RecordRow[],
   ): Promise<MedicalRecord[]> {
     const authorIds = [
       ...new Set(rows.map((row) => row.author_id).filter((id): id is string => !!id)),
     ]
+    const encounterIds = [
+      ...new Set(
+        rows.map((row) => row.encounter_id).filter((id): id is string => !!id),
+      ),
+    ]
 
-    const names = new Map<string, string>()
-
-    if (authorIds.length > 0) {
-      const { data, error } = await this.client
-        .from('professionals')
-        .select('id, display_name')
-        .eq('clinic_id', clinicId)
-        .in('id', authorIds)
-
-      if (error) {
-        // Nome é rótulo: sem ele a tela mostra "Profissional" e o registro
-        // continua legível. Derrubar a leitura do prontuário por causa disso
-        // seria trocar um problema de exibição por um de cuidado.
-        console.error('[records] withAuthorNames', {
-          code: error.code ?? null,
-          message: error.message ?? null,
-        })
-      }
-
-      for (const row of data ?? []) {
-        names.set(row.id, row.display_name)
-      }
-    }
+    const [names, encounters] = await Promise.all([
+      this.authorNames(clinicId, authorIds),
+      this.encountersById(clinicId, encounterIds),
+    ])
 
     return rows
-      .map((row) => toMedicalRecord(row, names))
+      .map((row) => toMedicalRecord(row, names, encounters))
       .filter((record): record is MedicalRecord => record !== null)
+  }
+
+  private async authorNames(
+    clinicId: string,
+    authorIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    const names = new Map<string, string>()
+    if (authorIds.length === 0) return names
+
+    const { data, error } = await this.client
+      .from('professionals')
+      .select('id, display_name')
+      .eq('clinic_id', clinicId)
+      .in('id', authorIds)
+
+    if (error) {
+      console.error('[records] authorNames', {
+        code: error.code ?? null,
+        message: error.message ?? null,
+      })
+    }
+
+    for (const row of data ?? []) {
+      names.set(row.id, row.display_name)
+    }
+
+    return names
+  }
+
+  /**
+   * Contexto dos atendimentos citados pela página.
+   *
+   * O `clinic_id` continua no filtro mesmo com os ids vindos das próprias
+   * linhas já lidas: é a mesma defesa em profundidade do resto do adapter, e
+   * custa um predicado.
+   */
+  private async encountersById(
+    clinicId: string,
+    encounterIds: readonly string[],
+  ): Promise<Map<string, RecordEncounter>> {
+    const encounters = new Map<string, RecordEncounter>()
+    if (encounterIds.length === 0) return encounters
+
+    const { data, error } = await this.client
+      .from('encounters')
+      .select(ENCOUNTER_COLUMNS)
+      .eq('clinic_id', clinicId)
+      .in('id', encounterIds)
+
+    if (error) {
+      console.error('[records] encountersById', {
+        code: error.code ?? null,
+        message: error.message ?? null,
+      })
+    }
+
+    for (const row of (data ?? []) as unknown as EncounterRow[]) {
+      const encounter = toRecordEncounter(row)
+      if (encounter) encounters.set(encounter.id, encounter)
+    }
+
+    return encounters
   }
 }
 

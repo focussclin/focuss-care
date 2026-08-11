@@ -1,4 +1,8 @@
-import type { MedicalRecord, RecordType } from './MedicalRecord'
+import type {
+  MedicalRecord,
+  RecordEncounter,
+  RecordType,
+} from './MedicalRecord'
 
 /** Dados de um registro novo, já normalizados pela camada de aplicação. */
 export interface NewRecordData {
@@ -38,6 +42,37 @@ export interface MedicalRecordRepository {
 
   /** Registros vigentes mais recentes da clínica, para a tela de prontuários. */
   listRecent(clinicId: string, limit: number): Promise<MedicalRecord[]>
+
+  /**
+   * Atendimentos do paciente aos quais um registro pode ser vinculado.
+   *
+   * Do mais recente para o mais antigo, **incluindo os encerrados**: a evolução
+   * costuma ser escrita depois que a consulta termina, e oferecer só o que está
+   * aberto obrigaria o profissional a registrar antes de encerrar — ou a deixar
+   * o registro solto, que é o estado que esta fatia veio corrigir.
+   *
+   * Atendimento `canceled` fica de fora: vincular a evolução a uma consulta que
+   * a clínica declarou não ter acontecido é contradição registrada em prontuário.
+   */
+  listPatientEncounters(
+    clinicId: string,
+    patientId: string,
+    limit: number,
+  ): Promise<RecordEncounter[]>
+
+  /**
+   * Este atendimento é desta clínica E deste paciente?
+   *
+   * As FKs de `medical_records` são de coluna única: provam que o atendimento
+   * existe, não que ele pertence ao inquilino nem ao paciente do registro. Sem
+   * esta conferência, um `encounter_id` vindo do formulário penduraria a evolução
+   * de uma pessoa no atendimento de outra — e o banco aceitaria.
+   */
+  encounterBelongsTo(
+    clinicId: string,
+    encounterId: string,
+    patientId: string,
+  ): Promise<boolean>
 
   /**
    * A cadeia inteira de versões de um registro, da mais nova para a mais antiga.

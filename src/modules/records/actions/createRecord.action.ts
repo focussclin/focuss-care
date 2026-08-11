@@ -34,6 +34,18 @@ import {
  * `authorId` **nunca vem do cliente**: sai da RPC do banco, na sessão. Aceitá-lo
  * do formulário deixaria alguém assinar um registro em nome de outro
  * profissional — que, em prontuário, é falsidade ideológica.
+ *
+ * # A terceira porta: o atendimento vinculado
+ *
+ * `encounter_id` era campo morto — a coluna existe desde o primeiro schema, o
+ * repositório sempre a gravou, e **o formulário nunca a enviou**: toda evolução
+ * da base nasceu solta, sem dizer de qual consulta saiu.
+ *
+ * Agora que o vínculo é escolhido na tela, ele passa a ser entrada não confiável
+ * como qualquer outra. A FK de `medical_records` é de coluna única: prova que o
+ * atendimento existe, não que ele é desta clínica nem deste paciente. Sem a
+ * conferência, um id trocado penduraria a evolução de uma pessoa na consulta de
+ * outra — e o banco aceitaria.
  */
 const runCreateRecord = createAction<
   CreateRecordInput,
@@ -64,6 +76,20 @@ const runCreateRecord = createAction<
     const repository = medicalRecordRepositoryFor(context.supabase)
 
     try {
+      if (
+        input.encounterId !== null &&
+        !(await repository.encounterBelongsTo(
+          context.clinicId,
+          input.encounterId,
+          input.patientId,
+        ))
+      ) {
+        return err<'patientId' | 'content'>(
+          'not-found',
+          recordMessages.encounterMismatch,
+        )
+      }
+
       const record = await repository.create(
         context.clinicId,
         {
@@ -98,6 +124,14 @@ const runCreateRecord = createAction<
       record_type: output.recordType,
       version: output.version,
       patient_id: output.patientId,
+      /*
+       * O VÍNCULO entra; a queixa do atendimento, não.
+       *
+       * Um id não diz nada sobre a saúde de ninguém, e é ele que responde a
+       * pergunta que a auditoria faz de verdade: "de qual consulta saiu este
+       * registro?". `chief_complaint` fica onde está, sob a RLS de `encounters`.
+       */
+      encounter_id: output.encounterId,
     },
   }),
 })
