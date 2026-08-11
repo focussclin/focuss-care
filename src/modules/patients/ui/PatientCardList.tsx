@@ -11,6 +11,8 @@ import {
   type Patient,
 } from '@/modules/_shared/domain/types'
 
+import { preferredName } from '../domain/PatientIdentity'
+
 export interface PatientCardListProps {
   patients: readonly Patient[]
 }
@@ -32,11 +34,11 @@ export function PatientCardList({ patients }: PatientCardListProps) {
               href={`/pacientes/${patient.id}`}
               className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-row-hover"
             >
-              <Avatar name={patient.name} size="md" />
+              <Avatar name={preferredName(patient)} size="md" />
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-aux font-semibold text-foreground">
-                  {patient.name}
+                  {preferredName(patient)}
                 </p>
                 <p className="mt-0.5 truncate text-label text-muted">
                   {patient.nextVisitAt

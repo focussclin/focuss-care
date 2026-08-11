@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import type { Database, PatientRow } from '@/lib/supabase/database.types'
+import type { Database, Json, PatientRow } from '@/lib/supabase/database.types'
 import type { Patient } from '@/modules/_shared/domain/types'
 
 import type {
@@ -29,12 +29,18 @@ import { toPatient } from './patientMapper'
 type Client = SupabaseClient<Database>
 
 /** Campos mínimos da listagem: nunca transporta CPF ou nota interna. */
+/*
+ * `social_name` entra na LISTAGEM tambem, e nao so no detalhe: a lista e onde a
+ * recepcao encontra a pessoa antes de chamar, e mostrar o nome de registro ali
+ * anularia o motivo de a coluna existir. `emergency_contact` fica de fora — a
+ * lista nao o exibe, e trazer jsonb por pagina inteira e peso sem uso.
+ */
 const PATIENT_LIST_COLUMNS =
-  'id, full_name, birth_date, phone, email, is_active, created_at'
+  'id, full_name, social_name, birth_date, phone, email, is_active, created_at'
 
 /** Campos permitidos no perfil server-side e no retorno de uma escrita. */
 const PATIENT_DETAIL_COLUMNS =
-  'id, full_name, birth_date, cpf, phone, email, admin_notes, is_active, created_at'
+  'id, full_name, social_name, birth_date, cpf, phone, phone_alt, email, biological_sex, gender_identity, emergency_contact, admin_notes, is_active, created_at'
 
 /**
  * Adapter Supabase.
@@ -266,10 +272,9 @@ export class SupabasePatientRepository implements PatientRepository {
    *
    * Os valores fixos sao os que o schema remoto exige e o formulario nao coleta:
    *
-   *  - `biological_sex: 'not_informed'` — a coluna e NOT NULL e o enum tem esse
-   *    valor exato; e a unica forma honesta de dizer "ninguem informou".
    *  - `address: {}` — a coluna e `jsonb` NOT NULL; objeto vazio e "sem endereco",
-   *    nao um endereco falso.
+   *    nao um endereco falso. Endereco pertence ao grupo documental, que sai com
+   *    o faturamento.
    *  - `is_active: true` — cadastro novo entra ativo. Arquivar e outra fatia.
    *
    * Nenhum default de banco e presumido: o que a coluna exige, o insert manda.
@@ -284,11 +289,20 @@ export class SupabasePatientRepository implements PatientRepository {
       .insert({
         clinic_id: clinicId,
         full_name: data.fullName,
+        social_name: data.socialName,
         birth_date: data.birthDate,
-        biological_sex: 'not_informed',
+        biological_sex: data.biologicalSex,
+        gender_identity: data.genderIdentity,
         phone: data.phone,
+        phone_alt: data.phoneAlt,
         email: data.email,
         address: {},
+        /*
+         * `as unknown as Json` e a mesma travessia de `workflows.trigger_config`:
+         * o tipo do dominio e fechado, e `Json` do supabase-js exige assinatura
+         * de indice. A forma ja foi validada pelo schema antes de chegar aqui.
+         */
+        emergency_contact: data.emergencyContact as unknown as Json,
         admin_notes: data.adminNotes,
         is_active: true,
         created_by: createdBy,
@@ -323,9 +337,19 @@ export class SupabasePatientRepository implements PatientRepository {
       .from('patients')
       .update({
         full_name: data.fullName,
+        social_name: data.socialName,
         birth_date: data.birthDate,
+        biological_sex: data.biologicalSex,
+        gender_identity: data.genderIdentity,
         phone: data.phone,
+        phone_alt: data.phoneAlt,
         email: data.email,
+        /*
+         * `as unknown as Json` e a mesma travessia de `workflows.trigger_config`:
+         * o tipo do dominio e fechado, e `Json` do supabase-js exige assinatura
+         * de indice. A forma ja foi validada pelo schema antes de chegar aqui.
+         */
+        emergency_contact: data.emergencyContact as unknown as Json,
         admin_notes: data.adminNotes,
         updated_at: new Date().toISOString(),
       })

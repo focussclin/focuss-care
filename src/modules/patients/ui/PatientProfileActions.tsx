@@ -12,6 +12,7 @@ import { createPatientMessages } from '../schemas/patient.schema'
 import {
   EditPatientModal,
   type EditablePatient,
+  type EditPatientModalProps,
   type EditPatientSubmitFailure,
 } from './EditPatientModal'
 
@@ -42,13 +43,16 @@ export function PatientProfileActions({
   const router = useRouter()
   const [isEditing, setEditing] = useState(openOnMount && isLive)
 
-  async function handleSubmit(values: {
-    name: string
-    phone: string
-    email?: string
-    birthDate?: string
-    notes?: string
-  }): Promise<EditPatientSubmitFailure | null> {
+  /*
+   * O tipo vem do MODAL, e nao e reescrito aqui.
+   *
+   * Enquanto era uma copia literal dos campos, P-01 completa acrescentou cinco e
+   * a copia teria ficado para tras — `...values` continuaria compilando e os
+   * campos novos simplesmente nao chegariam a action, em silencio.
+   */
+  async function handleSubmit(
+    values: Parameters<EditPatientModalProps['onSubmit']>[0],
+  ): Promise<EditPatientSubmitFailure | null> {
     try {
       const result = await updatePatientAction({
         ...values,

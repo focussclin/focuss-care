@@ -13,6 +13,8 @@ import {
   type Patient,
 } from '@/modules/_shared/domain/types'
 
+import { preferredName } from '../domain/PatientIdentity'
+
 export interface PatientsTableProps {
   patients: readonly Patient[]
 }
@@ -64,14 +66,14 @@ export function PatientsTable({ patients }: PatientsTableProps) {
               >
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <Avatar name={patient.name} size="md" />
+                    <Avatar name={preferredName(patient)} size="md" />
                     <div className="min-w-0">
                       <Link
                         href={`/pacientes/${patient.id}`}
                         onClick={(event) => event.stopPropagation()}
                         className="block truncate text-aux font-semibold text-foreground hover:underline"
                       >
-                        {patient.name}
+                        {preferredName(patient)}
                       </Link>
                       <p className="mt-0.5 truncate text-label text-muted">
                         {patient.email}
@@ -104,7 +106,7 @@ export function PatientsTable({ patients }: PatientsTableProps) {
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger
                       onClick={(event) => event.stopPropagation()}
-                      aria-label={`Ações para ${patient.name}`}
+                      aria-label={`Ações para ${preferredName(patient)}`}
                       className="inline-flex size-11 items-center justify-center rounded-field text-muted transition-colors hover:bg-surface hover:text-foreground"
                     >
                       <MoreVertical aria-hidden className="size-4" />

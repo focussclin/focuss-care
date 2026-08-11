@@ -13,6 +13,12 @@ import { StatusBadge } from '@/components/ui/status-badge'
 import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
+import { formatPhone } from '@/lib/utils/phone'
+import {
+  biologicalSexLabel,
+  preferredName,
+  showsLegalName,
+} from '@/modules/patients/domain/PatientIdentity'
 import { normalizePatientAdminNote } from '@/modules/patients/application/patientAdminNotes'
 import { buildPatientConsentRows } from '@/modules/patients/application/patientConsentRows'
 import { toPatientConsentDto } from '@/modules/patients/application/toPatientConsentDto'
@@ -355,7 +361,7 @@ export default async function PatientProfilePage({
 
           <div className="min-w-0">
             <h1 className="text-display-sm font-semibold tracking-[-0.01em] text-foreground">
-              {patient.name}
+              {preferredName(patient)}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
@@ -376,6 +382,17 @@ export default async function PatientProfilePage({
               birthDate: toIsoDate(patient.birthDate),
               adminNotes: patient.adminNotes ?? '',
               isActive: patient.status !== 'inactive',
+              socialName: patient.socialName ?? '',
+              biologicalSex: patient.biologicalSex ?? 'not_informed',
+              genderIdentity: patient.genderIdentity ?? '',
+              phoneAlt: patient.phoneAlt ?? '',
+              emergencyContactName: patient.emergencyContact?.name ?? '',
+              emergencyContactPhone: patient.emergencyContact?.phone ?? '',
+              emergencyContactRelationship:
+                patient.emergencyContact?.relationship ?? '',
+              emergencyContactUnreadable: Boolean(
+                patient.emergencyContactUnreadable,
+              ),
             }}
             isLive={patientSource.isLive}
             openOnMount={editar === '1'}
@@ -398,6 +415,18 @@ export default async function PatientProfilePage({
               <ProfileField label="E-mail" value={patient.email || '—'} />
               <ProfileField label="Telefone" value={patient.phone} />
               <ProfileField
+                label="Telefone alternativo"
+                value={patient.phoneAlt || '—'}
+              />
+              <ProfileField
+                label="Sexo biológico"
+                value={biologicalSexLabel(patient.biologicalSex ?? 'not_informed')}
+              />
+              <ProfileField
+                label="Identidade de gênero"
+                value={patient.genderIdentity || '—'}
+              />
+              <ProfileField
                 label="Data de nascimento"
                 value={
                   patient.birthDate
@@ -410,7 +439,52 @@ export default async function PatientProfilePage({
                 label="Preferência de contato"
                 value={patient.contactPreference ?? '—'}
               />
+              {/*
+                O nome de REGISTRO aparece quando difere do social: quem confere
+                documento, guia de convenio ou receita precisa dos dois. Mostrar
+                os dois e diferente de chamar pelo errado — o titulo da pagina ja
+                usa o social.
+              */}
+              {showsLegalName(patient) ? (
+                <ProfileField label="Nome de registro" value={patient.name} />
+              ) : null}
             </dl>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Contato de emergência"
+              description="A quem avisar se algo acontecer durante o atendimento."
+            />
+            {patient.emergencyContactUnreadable ? (
+              <p
+                role="status"
+                className="mx-5 mb-5 rounded-field border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
+              >
+                Há um contato gravado num formato que o sistema não reconhece.
+                Abra a edição e cadastre-o de novo para poder usá-lo.
+              </p>
+            ) : patient.emergencyContact ? (
+              <dl className="grid gap-x-6 gap-y-4 px-5 pb-5 sm:grid-cols-2">
+                <ProfileField label="Nome" value={patient.emergencyContact.name} />
+                <ProfileField
+                  label="Telefone"
+                  value={
+                    patient.emergencyContact.phone
+                      ? formatPhone(patient.emergencyContact.phone)
+                      : '—'
+                  }
+                />
+                <ProfileField
+                  label="Parentesco"
+                  value={patient.emergencyContact.relationship || '—'}
+                />
+              </dl>
+            ) : (
+              <p className="px-5 pb-5 text-aux text-muted">
+                Nenhum contato de emergência cadastrado.
+              </p>
+            )}
           </Card>
 
           {prescriptionSource ? (

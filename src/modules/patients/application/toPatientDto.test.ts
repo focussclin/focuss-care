@@ -57,6 +57,12 @@ describe('changedFields', () => {
     email: 'maria@email.com',
     birthDate: '1991-03-14',
     adminNotes: 'vem acompanhada',
+    // P-01 completa: os cinco campos novos, na forma canonica do schema.
+    socialName: null,
+    phoneAlt: null,
+    biologicalSex: 'not_informed' as const,
+    genderIdentity: null,
+    emergencyContact: null,
   }
 
   it('nao acusa mudanca quando nada mudou', () => {

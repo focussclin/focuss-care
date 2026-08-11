@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 import { normalizePhone } from '@/lib/utils/phone'
 
+import { BIOLOGICAL_SEX_VALUES } from '../domain/PatientIdentity'
+
 export const patientMessages = {
   nameRequired: 'Informe o nome completo.',
   nameTooLong: 'O nome pode ter no máximo 160 caracteres.',
@@ -10,6 +12,8 @@ export const patientMessages = {
   emailTooLong: 'O e-mail pode ter no máximo 254 caracteres.',
   notesTooLong: 'A observação pode ter no máximo 2000 caracteres.',
   invalidEmail: 'Digite um e-mail válido.',
+  genderIdentityTooLong: 'A identidade de gênero pode ter no máximo 80 caracteres.',
+  relationshipTooLong: 'O parentesco pode ter no máximo 60 caracteres.',
 } as const
 
 export const contactPreferenceOptions = [
@@ -39,6 +43,44 @@ export const newPatientSchema = z.object({
   birthDate: z.string().optional(),
   contactPreference: z.enum(['WhatsApp', 'Telefone', 'E-mail']),
   notes: z.string().max(2000, patientMessages.notesTooLong).optional(),
+
+  /*
+   * Identificacao e contato (P-01 completa).
+   *
+   * Sem `transform`, como o resto deste contrato de FORMULARIO: normalizar e
+   * trabalho do servidor, e o campo tem de continuar exibindo o que o usuario
+   * digitou. As mesmas regras sao reaplicadas em `createPatientSchema`.
+   */
+  socialName: z.string().max(160, patientMessages.nameTooLong).optional(),
+  biologicalSex: z.enum(BIOLOGICAL_SEX_VALUES).optional(),
+  genderIdentity: z
+    .string()
+    .max(80, patientMessages.genderIdentityTooLong)
+    .optional(),
+  phoneAlt: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || normalizePhone(value) !== null,
+      patientMessages.phoneInvalid,
+    )
+    .optional(),
+  emergencyContactName: z
+    .string()
+    .max(160, patientMessages.nameTooLong)
+    .optional(),
+  emergencyContactPhone: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || normalizePhone(value) !== null,
+      patientMessages.phoneInvalid,
+    )
+    .optional(),
+  emergencyContactRelationship: z
+    .string()
+    .max(60, patientMessages.relationshipTooLong)
+    .optional(),
 })
 
 export type NewPatientInput = z.infer<typeof newPatientSchema>
@@ -91,6 +133,17 @@ export const createPatientMessages = {
   birthDateInFuture: 'A data de nascimento não pode estar no futuro.',
   birthDateTooOld: 'Confira a data de nascimento.',
   notesTooLong: 'A observação pode ter no máximo 2000 caracteres.',
+  genderIdentityTooLong: 'A identidade de gênero pode ter no máximo 80 caracteres.',
+  relationshipTooLong: 'O parentesco pode ter no máximo 60 caracteres.',
+  /**
+   * O contato de emergência precisa dos DOIS campos.
+   *
+   * Nome sem telefone não permite avisar ninguém, e é numa emergência que alguém
+   * vai procurar este campo.
+   */
+  emergencyPhoneRequired:
+    'Informe o telefone do contato de emergência — sem ele não há como avisar ninguém.',
+  emergencyNameRequired: 'Informe o nome do contato de emergência.',
   /** Resumo exibido no topo do formulário quando o servidor recusa a entrada. */
   invalidFields: 'Revise os campos destacados e tente novamente.',
   conflict: 'Já existe um paciente com esses dados nesta clínica.',
@@ -105,6 +158,122 @@ export const createPatientMessages = {
 } as const
 
 const emailFormat = z.email()
+
+/**
+ * Identificação e contato — P-01 completa.
+ *
+ * Os cinco campos que `PatientRepository` deixou anotados como dívida
+ * ("contato de emergencia ... fica para a fatia de edicao") e que o adapter
+ * preenchia com constante. Todos OPCIONAIS: um cadastro de recepção continua
+ * sendo nome e telefone, e exigir sexo biológico para marcar uma consulta
+ * inventaria dado clínico na pressa do balcão.
+ */
+const identityShape = {
+  socialName: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine((value) => value.length <= 160, createPatientMessages.nameTooLong)
+    .transform((value) => (value === '' ? null : value)),
+
+  /*
+   * Enum fechado do banco. `not_informed` é o padrão e é resposta de verdade:
+   * é o estado de toda linha criada antes desta fatia.
+   */
+  biologicalSex: z
+    .enum(BIOLOGICAL_SEX_VALUES)
+    .optional()
+    .transform((value) => value ?? 'not_informed'),
+
+  genderIdentity: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value.length <= 80,
+      createPatientMessages.genderIdentityTooLong,
+    )
+    .transform((value) => (value === '' ? null : value)),
+
+  phoneAlt: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || normalizePhone(value) !== null,
+      createPatientMessages.phoneInvalid,
+    )
+    .transform((value) => (value === '' ? null : normalizePhone(value))),
+
+  emergencyContactName: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine((value) => value.length <= 160, createPatientMessages.nameTooLong)
+    .transform((value) => (value === '' ? null : value)),
+
+  emergencyContactPhone: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || normalizePhone(value) !== null,
+      createPatientMessages.phoneInvalid,
+    )
+    .transform((value) => (value === '' ? null : normalizePhone(value))),
+
+  emergencyContactRelationship: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value.length <= 60,
+      createPatientMessages.relationshipTooLong,
+    )
+    .transform((value) => (value === '' ? null : value)),
+}
+
+/**
+ * Contato de emergência: os dois campos andam juntos.
+ *
+ * Nome sem telefone não permite avisar ninguém, e é numa emergência que alguém
+ * vai procurar este campo. Telefone sem nome é pior ainda — ninguém sabe quem
+ * está atendendo. O parentesco sozinho não sustenta contato nenhum.
+ */
+export function emergencyContactMustBeComplete(
+  value: {
+    emergencyContactName: string | null
+    emergencyContactPhone: string | null
+    emergencyContactRelationship: string | null
+  },
+  ctx: z.RefinementCtx,
+) {
+  const { emergencyContactName: name, emergencyContactPhone: phone } = value
+
+  if (name && !phone) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['emergencyContactPhone'],
+      message: createPatientMessages.emergencyPhoneRequired,
+    })
+  }
+
+  if (phone && !name) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['emergencyContactName'],
+      message: createPatientMessages.emergencyNameRequired,
+    })
+  }
+
+  if (!name && !phone && value.emergencyContactRelationship) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['emergencyContactName'],
+      message: createPatientMessages.emergencyNameRequired,
+    })
+  }
+}
 
 /** Data de calendario real em 'YYYY-MM-DD' — ou null. */
 function parseCalendarDate(value: string): Date | null {
@@ -131,7 +300,7 @@ function parseCalendarDate(value: string): Date | null {
  *  3. **Nao aceita `clinicId` nem `createdBy`.** Os dois saem do `ActionContext`.
  *     Nao ha campo por onde o cliente os mandar.
  */
-export const createPatientSchema = z.object({
+const createPatientObject = z.object({
   name: z
     .string()
     .trim()
@@ -191,7 +360,21 @@ export const createPatientSchema = z.object({
       createPatientMessages.notesTooLong,
     )
     .transform((value) => (value === '' ? null : value)),
+
+  ...identityShape,
 })
+
+/**
+ * O objeto cru fica separado do schema exportado.
+ *
+ * `superRefine` devolve um tipo que nao tem `.extend`, e `updatePatientSchema`
+ * precisa estender os mesmos campos. Refinar os dois a partir do objeto e o que
+ * mantem a regra do contato de emergencia valendo nas DUAS escritas — aplicar so
+ * na edicao deixaria o cadastro gravar meio contato.
+ */
+export const createPatientSchema = createPatientObject.superRefine(
+  emergencyContactMustBeComplete,
+)
 
 /** Entrada ja normalizada que o caso de uso recebe. */
 export type CreatePatientInput = z.infer<typeof createPatientSchema>
@@ -214,10 +397,12 @@ const editablePhoneSchema = z
   )
   .transform((value) => (value === '' ? null : normalizePhone(value)))
 
-export const updatePatientSchema = createPatientSchema.extend({
-  phone: editablePhoneSchema,
-  patientId: z.uuid(createPatientMessages.unexpected),
-})
+export const updatePatientSchema = createPatientObject
+  .extend({
+    phone: editablePhoneSchema,
+    patientId: z.uuid(createPatientMessages.unexpected),
+  })
+  .superRefine(emergencyContactMustBeComplete)
 
 export type UpdatePatientInput = z.infer<typeof updatePatientSchema>
 

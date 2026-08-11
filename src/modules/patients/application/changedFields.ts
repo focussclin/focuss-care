@@ -28,5 +28,46 @@ export function changedFields(
   if (toIsoDate(current.birthDate) !== next.birthDate) changed.push('birth_date')
   if ((current.adminNotes ?? null) !== next.adminNotes) changed.push('admin_notes')
 
+  // P-01 completa. Mesma regra: QUAIS campos, nunca os valores.
+  if ((current.socialName ?? null) !== next.socialName) changed.push('social_name')
+  if (toPhoneDigits(current.phoneAlt ?? '') !== (next.phoneAlt ?? '')) {
+    changed.push('phone_alt')
+  }
+  if ((current.biologicalSex ?? 'not_informed') !== next.biologicalSex) {
+    changed.push('biological_sex')
+  }
+  if ((current.genderIdentity ?? null) !== next.genderIdentity) {
+    changed.push('gender_identity')
+  }
+  if (emergencyContactChanged(current, next)) changed.push('emergency_contact')
+
   return changed
+}
+
+/**
+ * O contato mudou?
+ *
+ * Comparado campo a campo, e não por `JSON.stringify`: a ordem das chaves de um
+ * objeto vindo do `jsonb` não é garantida, e comparar o texto acusaria mudança a
+ * cada save só porque o banco devolveu as chaves em outra ordem.
+ *
+ * Um contato ILEGÍVEL conta como mudança: salvar por cima substitui o que está
+ * lá, e é exatamente isso que a auditoria precisa registrar.
+ */
+function emergencyContactChanged(
+  current: Patient,
+  next: NewPatientData,
+): boolean {
+  if (current.emergencyContactUnreadable) return true
+
+  const before = current.emergencyContact ?? null
+  const after = next.emergencyContact
+
+  if (before === null || after === null) return before !== after
+
+  return (
+    before.name !== after.name ||
+    (before.phone ?? null) !== (after.phone ?? null) ||
+    (before.relationship ?? null) !== (after.relationship ?? null)
+  )
 }

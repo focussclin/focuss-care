@@ -7,6 +7,7 @@ import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { changedFields } from '../application/changedFields'
 import { patientWriteRoles } from '../application/patientWriteRoles'
+import { toNewPatientData } from '../application/toNewPatientData'
 import { toPatientDto } from '../application/toPatientDto'
 import { toWriteFailure } from '../application/writeFailure'
 import { patientRepositoryFor } from '../infrastructure/repository'
@@ -91,13 +92,7 @@ const runUpdatePatient = createAction<
   handler: async (input, context) => {
     const repository = patientRepositoryFor(context.supabase)
 
-    const data = {
-      fullName: input.name,
-      birthDate: input.birthDate,
-      phone: input.phone,
-      email: input.email,
-      adminNotes: input.notes,
-    }
+    const data = toNewPatientData(input)
 
     try {
       // Leitura previa por dois motivos: responder 'not-found' antes de escrever,

@@ -7,9 +7,12 @@ import { useForm } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { SelectField } from '@/components/ui/select-field'
 import { TextField } from '@/components/ui/text-field'
 import { TextareaField } from '@/components/ui/textarea-field'
+import type { BiologicalSex } from '@/lib/supabase/database.types'
 
+import { BIOLOGICAL_SEX_OPTIONS } from '../domain/PatientIdentity'
 import { editPatientFormSchema } from '../schemas/patient.schema'
 
 /** Estado atual do cadastro, na forma que o formulario consome. */
@@ -23,6 +26,22 @@ export interface EditablePatient {
   birthDate: string | null
   adminNotes: string
   isActive: boolean
+
+  // Identificacao e contato — P-01 completa.
+  socialName: string
+  biologicalSex: BiologicalSex
+  genderIdentity: string
+  phoneAlt: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  emergencyContactRelationship: string
+  /**
+   * A coluna tem conteudo que a aplicacao nao entende.
+   *
+   * Salvar vai substitui-lo, e o formulario diz isso antes — mostrar os campos
+   * vazios sobre um contato que existe seria esconder a perda.
+   */
+  emergencyContactUnreadable: boolean
 }
 
 type EditPatientFormValues = {
@@ -31,6 +50,13 @@ type EditPatientFormValues = {
   email?: string
   birthDate?: string
   notes?: string
+  socialName?: string
+  biologicalSex?: BiologicalSex
+  genderIdentity?: string
+  phoneAlt?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  emergencyContactRelationship?: string
 }
 
 export interface EditPatientSubmitFailure {
@@ -66,6 +92,13 @@ export function EditPatientModal({
     email: patient.email,
     birthDate: patient.birthDate ?? '',
     notes: patient.adminNotes,
+    socialName: patient.socialName,
+    biologicalSex: patient.biologicalSex,
+    genderIdentity: patient.genderIdentity,
+    phoneAlt: patient.phoneAlt,
+    emergencyContactName: patient.emergencyContactName,
+    emergencyContactPhone: patient.emergencyContactPhone,
+    emergencyContactRelationship: patient.emergencyContactRelationship,
   }
 
   const {
@@ -213,6 +246,80 @@ export function EditPatientModal({
           error={errors.birthDate?.message}
           {...register('birthDate')}
         />
+
+        <TextField
+          label="Nome social (opcional)"
+          disabled={busy}
+          hint="Como a pessoa quer ser chamada. Prevalece sobre o nome de registro."
+          error={errors.socialName?.message}
+          {...register('socialName')}
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Telefone alternativo (opcional)"
+            type="tel"
+            disabled={busy}
+            error={errors.phoneAlt?.message}
+            {...register('phoneAlt')}
+          />
+          <SelectField
+            label="Sexo biológico"
+            disabled={busy}
+            hint="Usado em faixa de referência e dose. Diferente de identidade de gênero."
+            options={BIOLOGICAL_SEX_OPTIONS}
+            error={errors.biologicalSex?.message}
+            {...register('biologicalSex')}
+          />
+        </div>
+
+        <TextField
+          label="Identidade de gênero (opcional)"
+          disabled={busy}
+          hint="Autodeclarada. Deixe em branco se a pessoa não informou."
+          error={errors.genderIdentity?.message}
+          {...register('genderIdentity')}
+        />
+
+        <fieldset className="flex flex-col gap-4 rounded-field border border-border-card p-4">
+          <legend className="px-1 text-label font-semibold text-label">
+            Contato de emergência
+          </legend>
+
+          {patient.emergencyContactUnreadable ? (
+            <p
+              role="status"
+              className="rounded-field border border-danger/30 bg-danger-surface px-3 py-2 text-label text-danger"
+            >
+              Há um contato gravado num formato que o sistema não reconhece.
+              Salvar este formulário vai substituí-lo.
+            </p>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label="Nome do contato"
+              disabled={busy}
+              error={errors.emergencyContactName?.message}
+              {...register('emergencyContactName')}
+            />
+            <TextField
+              label="Telefone do contato"
+              type="tel"
+              disabled={busy}
+              error={errors.emergencyContactPhone?.message}
+              {...register('emergencyContactPhone')}
+            />
+          </div>
+
+          <TextField
+            label="Parentesco (opcional)"
+            disabled={busy}
+            hint="Mãe, cônjuge, vizinha."
+            error={errors.emergencyContactRelationship?.message}
+            {...register('emergencyContactRelationship')}
+          />
+        </fieldset>
 
         <TextareaField
           label="Observação administrativa (opcional)"

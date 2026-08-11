@@ -5,6 +5,7 @@ import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { patientWriteRoles } from '../application/patientWriteRoles'
+import { toNewPatientData } from '../application/toNewPatientData'
 import { toPatientDto } from '../application/toPatientDto'
 import { toWriteFailure } from '../application/writeFailure'
 import { patientRepositoryFor } from '../infrastructure/repository'
@@ -72,13 +73,7 @@ const runCreatePatient = createAction<
     try {
       const patient = await repository.create(
         context.clinicId,
-        {
-          fullName: input.name,
-          birthDate: input.birthDate,
-          phone: input.phone,
-          email: input.email,
-          adminNotes: input.notes,
-        },
+        toNewPatientData(input),
         context.userId,
       )
 

@@ -15,6 +15,7 @@ export function toPatientListItem(patient: Patient): PatientListItem {
   return {
     id: patient.id,
     name: patient.name,
+    socialName: patient.socialName ?? null,
     phone: patient.phone,
     email: patient.email,
     birthDate: patient.birthDate,

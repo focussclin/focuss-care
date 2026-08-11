@@ -1,4 +1,24 @@
 import type { StatusTone } from '@/components/ui/status-badge'
+import type { BiologicalSex } from '@/lib/supabase/database.types'
+
+/**
+ * Contato de emergência — a quem avisar.
+ *
+ * Mora aqui, e não no domínio de pacientes, por causa da direção da dependência:
+ * `Patient` é tipo compartilhado, e `_shared` não importa de módulo nenhum. As
+ * REGRAS sobre o contato (o que o torna utilizável, como validá-lo) ficam em
+ * `modules/patients/domain/PatientIdentity.ts`, que importa este tipo.
+ *
+ * `patients.emergency_contact` é `jsonb` sem forma declarada. A aplicação define
+ * a forma e a relê na leitura — mesma disciplina de `workflows.trigger_config`.
+ */
+export interface EmergencyContact {
+  name: string
+  /** Somente dígitos (DDD + número), ou null. Ver `lib/utils/phone`. */
+  phone: string | null
+  /** 'Mãe', 'Cônjuge', 'Vizinha'. Texto livre — parentesco não tem enum útil. */
+  relationship: string | null
+}
 
 /**
  * Tipos de leitura compartilhados entre dashboard, agenda e pacientes.
@@ -31,9 +51,35 @@ export interface Professional {
 
 export interface Patient {
   id: string
+  /** `patients.full_name` — o nome de registro, o do documento. */
   name: string
+  /**
+   * `patients.social_name` — como a pessoa é chamada.
+   *
+   * Não é apelido: quando existe, VENCE o nome de registro em toda exibição.
+   * Quem decide isso é `preferredName`, no domínio de pacientes — espalhar
+   * `socialName ?? name` pelas telas é como uma delas acaba chamando alguém pelo
+   * nome errado na sala de espera.
+   */
+  socialName?: string | null
   email: string
   phone: string
+  /** `patients.phone_alt` — segundo número, já formatado. */
+  phoneAlt?: string
+  /** `patients.biological_sex`. Uso clínico; distinto de `genderIdentity`. */
+  biologicalSex?: BiologicalSex
+  /** `patients.gender_identity` — autodeclarada, texto livre. */
+  genderIdentity?: string | null
+  /** `patients.emergency_contact`, já validado contra a forma fechada. */
+  emergencyContact?: EmergencyContact | null
+  /**
+   * A coluna tinha conteúdo que NÃO casou com a forma esperada.
+   *
+   * Só acontece com linha escrita fora do produto. Existe para a ficha poder
+   * avisar que salvar vai substituir o que está lá, em vez de mostrar "sem
+   * contato" sobre um dado que existe.
+   */
+  emergencyContactUnreadable?: boolean
   /** Null quando a data de nascimento nao foi informada no cadastro. */
   birthDate: Date | null
   /** CPF, quando informado. */

@@ -1,5 +1,6 @@
+import type { BiologicalSex } from '@/lib/supabase/database.types'
 import type { Paginated } from '@/modules/_shared/domain/Paginated'
-import type { Patient } from '@/modules/_shared/domain/types'
+import type { EmergencyContact, Patient } from '@/modules/_shared/domain/types'
 
 /**
  * Dados de um cadastro novo, ja normalizados pela camada de aplicacao.
@@ -10,20 +11,39 @@ import type { Patient } from '@/modules/_shared/domain/types'
  *    parametros proprios de `create`, vindos do `ActionContext` — P3 de
  *    docs/01-arquitetura.md. Se morassem neste objeto, um dia alguem os
  *    preencheria com o que o cliente mandou.
- *  - **`biological_sex` nao aparece.** O formulario atual nao coleta sexo
- *    biologico, e a coluna e obrigatoria no schema remoto; o adapter grava
- *    'not_informed'. Inventar um valor aqui seria inventar dado clinico.
- *  - **CPF, CNS, endereco, contato de emergencia e foto** ficam para a fatia de
- *    edicao (P-01 completa). O cadastro e o minimo que a recepcao precisa.
+ *  - **CPF, CNS, endereco e foto** continuam de fora. Os tres primeiros sao o
+ *    grupo DOCUMENTAL, que pertence ao faturamento: CPF pede validacao de
+ *    digito e uma decisao sobre duplicidade na clinica, e gravar identificador
+ *    fiscal sem as duas coisas acumula risco sem contrapartida. `photo_url`
+ *    depende de bucket de Storage, que nao existe.
+ *
+ * **`biological_sex` passou a ser coletado** (P-01 completa): a coluna e NOT
+ * NULL, o enum tem 'not_informed', e e esse o padrao quando ninguem perguntou —
+ * continua sendo proibido inventar valor.
  */
 export interface NewPatientData {
   fullName: string
+  /** `patients.social_name` — como a pessoa e chamada. Vence na exibicao. */
+  socialName: string | null
   /** ISO 'YYYY-MM-DD', ou null quando nao informada. */
   birthDate: string | null
   /** Somente digitos (DDD + numero), ou null. Ver `lib/utils/phone`. */
   phone: string | null
+  /** Segundo numero, mesma normalizacao do primeiro. */
+  phoneAlt: string | null
   /** Minusculo e sem espaco nas bordas, ou null. */
   email: string | null
+  /** Enum do banco. 'not_informed' quando ninguem perguntou. */
+  biologicalSex: BiologicalSex
+  /** Autodeclarada, texto livre, ou null. */
+  genderIdentity: string | null
+  /**
+   * Forma FECHADA, validada antes de chegar aqui.
+   *
+   * `null` apaga o contato gravado — apagar e edicao legitima, e um contato
+   * errado numa emergencia e pior que nenhum.
+   */
+  emergencyContact: EmergencyContact | null
   /** Observacao administrativa do cadastro. Nao e dado clinico. */
   adminNotes: string | null
 }

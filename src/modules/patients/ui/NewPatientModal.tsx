@@ -200,6 +200,25 @@ export function NewPatientModal({
           />
         </div>
 
+        {/*
+          Nome social no CADASTRO, e nao so na edicao: e na primeira vez que a
+          recepcao fala com a pessoa que ela diz como quer ser chamada, e deixar
+          para depois garante que a proxima chamada na sala de espera use o nome
+          errado.
+
+          O resto da identificacao — sexo biologico, identidade de genero,
+          contato de emergencia — fica na edicao de proposito: o cadastro de
+          balcao e nome e telefone, e um formulario de dez campos entre o
+          paciente e a consulta e como nascem cadastros preenchidos no chute.
+        */}
+        <TextField
+          label="Nome social (opcional)"
+          disabled={isSubmitting}
+          hint="Como a pessoa quer ser chamada."
+          error={errors.socialName?.message}
+          {...register('socialName')}
+        />
+
         <TextareaField
           label="Observação inicial (opcional)"
           rows={3}
