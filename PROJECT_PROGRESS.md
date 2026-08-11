@@ -3003,9 +3003,21 @@ descartam respostas atrasadas e não permitem enviar o vínculo anterior.
 
 ### Estado
 
-`records` passa a 132 testes e o projeto a 2484 testes em 194 arquivos.
-Typecheck, lint, build e suíte completa estão limpos. Teleatendimento continua
-fora do escopo.
+`records` passa a 155 testes em 12 arquivos, e o projeto a **2501 testes em 196
+arquivos** (+65 sobre os 2436 de `ee959f8`). Typecheck, lint, build e suíte
+completa estão limpos. Teleatendimento continua fora do escopo.
+
+Os números acima corrigem a contagem escrita antes de `042e36c`: os testes de
+tela (`ProntuariosScreen`, `RecordEditorModal`) entraram depois, e este arquivo
+segue a regra da §9 — quando ele discorda do código, o código está certo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Vínculo na ficha do paciente | `/pacientes/[id]` não tem painel de prontuário — só de prescrições. Criar um ali é fatia própria, e é onde a queixa passaria a valer como leitura clínica em uma segunda rota |
+| Trocar o atendimento ao corrigir | A correção herda paciente, tipo e atendimento da versão anterior. Mudar de qual consulta o registro saiu não é corrigir um texto |
+| Registros anteriores a esta fatia | Continuam sem vínculo, e não há como inferi-lo: adivinhar por proximidade de data diria que uma evolução saiu de uma consulta que talvez não a tenha originado |
 
 ---
 
