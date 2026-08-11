@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2943 testes em 228 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2945 testes em 229 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -4210,6 +4210,28 @@ CPF parcial não é oferecida.
 Validação: filtro unitário e testes de injeção cobrem CPF formatado, igualdade
 exata e ausência de CNS; suíte completa, typecheck, lint e build seguem como
 critério de fechamento da fatia.
+
+---
+
+## 8.58 Feature — Exportação CSV do financeiro (11/08/2026)
+
+O financeiro já carregava cobranças e contas a pagar reais, mas não oferecia
+uma saída para conferência ou trabalho contábil. A ação **Exportar CSV** agora
+usa exatamente os DTOs que a rota autorizou e baixa uma tabela única com:
+
+- período e tipo do lançamento;
+- referência, descrição e paciente/fornecedor;
+- status, criação e vencimento;
+- total, pago e restante em centavos;
+- formas de pagamento.
+
+O arquivo usa `;` e BOM para abrir corretamente no Excel em pt-BR. Não inclui
+CPF, notas ou campos clínicos. No modo demonstração e quando não há linhas, o
+botão fica desabilitado com explicação acessível; não existe toast fingindo
+exportação.
+
+Esta fatia não exige migration nem credencial externa: o escopo exportado é o
+mesmo escopo tenant-scoped já entregue à tela pelo servidor.
 
 ---
 

@@ -43,6 +43,7 @@ import { NewInvoiceModal, type InvoicePatientOption } from './NewInvoiceModal'
 import { PaymentModal } from './PaymentModal'
 import { ReceiptModal } from './ReceiptModal'
 import { PayablesPanel } from './PayablesPanel'
+import { ExportFinanceCsvButton } from './ExportFinanceCsvButton'
 
 export interface FinanceiroScreenProps {
   summary: FinanceSummaryDto
@@ -126,12 +127,20 @@ export function FinanceiroScreen({
         title="Financeiro"
         description="Cobranças, recebimentos e o caixa do dia."
         actions={
-          canWriteInvoice && isLive ? (
-            <Button onClick={() => setCreating(true)}>
-              <Plus aria-hidden className="size-4" />
-              Nova cobrança
-            </Button>
-          ) : undefined
+          <>
+            <ExportFinanceCsvButton
+              invoices={invoices}
+              payables={payables}
+              periodLabel={periodLabel}
+              isLive={isLive}
+            />
+            {canWriteInvoice && isLive ? (
+              <Button onClick={() => setCreating(true)}>
+                <Plus aria-hidden className="size-4" />
+                Nova cobrança
+              </Button>
+            ) : null}
+          </>
         }
       />
 
