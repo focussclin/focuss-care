@@ -9,6 +9,12 @@ import {
 } from '@/lib/clinic/business-hours'
 import type { Database } from '@/lib/supabase/database.types'
 
+import type { AppointmentOutcome } from '../domain/AppointmentLifecycle'
+import {
+  allowedSourcesFor,
+  isAppointmentOutcome,
+  outcomeIsDue,
+} from '../domain/AppointmentLifecycle'
 import type { AvailabilityException } from '../domain/AvailabilityException'
 import { describeBlock, findBlocking, findCovering } from '../domain/AvailabilityException'
 import { SupabaseAvailabilityExceptionRepository } from './SupabaseAvailabilityExceptionRepository'
@@ -487,6 +493,129 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       to: 'canceled',
       by: canceledBy,
       reason,
+    })
+
+    return appointment
+  }
+
+  async confirm(
+    clinicId: string,
+    appointmentId: string,
+    confirmedBy: string,
+  ): Promise<Appointment> {
+    return this.transition(clinicId, appointmentId, 'confirmed', confirmedBy, {
+      confirmed_at: new Date().toISOString(),
+    })
+  }
+
+  async recordOutcome(
+    clinicId: string,
+    appointmentId: string,
+    outcome: AppointmentOutcome,
+    recordedBy: string,
+  ): Promise<Appointment> {
+    return this.transition(clinicId, appointmentId, outcome, recordedBy)
+  }
+
+  /**
+   * Transição de status com compare-and-swap — feature **A-03**.
+   *
+   * # A condição de origem vai no `WHERE`
+   *
+   * `.in('status', allowedSourcesFor(to))` é o que fecha a corrida. Ler o status,
+   * decidir em memória e depois gravar deixaria duas recepcionistas passarem as
+   * duas pela leitura — e a segunda sobrescreveria o desfecho da primeira. Com a
+   * condição no banco, a segunda escrita alcança zero linhas e vira recusa
+   * explícita.
+   *
+   * # Zero linhas tem TRÊS causas, e elas pedem coisas diferentes
+   *
+   * Some, mudou de estado, ou a policy recusou. A releitura separa as três: o
+   * atendimento sumiu (`not-found`), continua lá com outro status
+   * (`stale-status`, com o status atual junto para a mensagem dizer qual), ou
+   * continua lá num status que era permitido — e aí quem recusou foi a RLS.
+   */
+  private async transition(
+    clinicId: string,
+    appointmentId: string,
+    to: AppointmentStatus,
+    changedBy: string,
+    extraPatch: Record<string, string> = {},
+  ): Promise<Appointment> {
+    const sources = allowedSourcesFor(to)
+
+    /*
+     * O status anterior e o horário são lidos ANTES, como no cancelamento: o
+     * primeiro some depois do update e é dele que o histórico precisa; o segundo
+     * decide se o desfecho já pode ser registrado.
+     */
+    const { data: current } = await this.client
+      .from('appointments')
+      .select('status, starts_at')
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .maybeSingle()
+
+    if (current && isAppointmentOutcome(to)) {
+      /*
+       * A regra é de domínio e é aplicada aqui, junto das outras verificações de
+       * escrita da agenda (`assertNoConflict`, expediente). Deixá-la na action
+       * exigiria carregar o atendimento duas vezes e ainda assim decidir sobre
+       * uma leitura velha.
+       */
+      if (!outcomeIsDue(new Date(current.starts_at), new Date())) {
+        throw new AppointmentRepositoryError(
+          'outcome-too-early',
+          'desfecho pedido antes do horário marcado',
+        )
+      }
+    }
+
+    const { data: row, error } = await this.client
+      .from('appointments')
+      .update({ status: to, updated_at: new Date().toISOString(), ...extraPatch })
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .in('status', [...sources])
+      .select(SELECT_WITH_NAMES)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+
+    if (!row) {
+      const { data: existing } = await this.client
+        .from('appointments')
+        .select('status')
+        .eq('clinic_id', clinicId)
+        .eq('id', appointmentId)
+        .maybeSingle()
+
+      if (!existing) throw notFound(appointmentId)
+
+      if (!sources.includes(existing.status)) {
+        throw new AppointmentRepositoryError(
+          'stale-status',
+          'o atendimento mudou de estado',
+          undefined,
+          undefined,
+          existing.status,
+        )
+      }
+
+      // Legível, e num estado permitido: a escrita é que não foi alcançada.
+      throw new AppointmentRepositoryError(
+        'forbidden',
+        'o atendimento é legível mas a escrita foi recusada',
+      )
+    }
+
+    const appointment = toAppointment(row as unknown as AppointmentJoinRow)
+
+    await this.recordStatusChange(clinicId, appointmentId, {
+      from: current?.status ?? null,
+      to,
+      by: changedBy,
+      reason: null,
     })
 
     return appointment

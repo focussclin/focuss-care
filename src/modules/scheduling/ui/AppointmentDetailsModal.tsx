@@ -1,6 +1,14 @@
 'use client'
 
-import { CalendarClock, DoorOpen, Stethoscope, User } from 'lucide-react'
+import {
+  CalendarClock,
+  CheckCheck,
+  DoorOpen,
+  Stethoscope,
+  User,
+  UserCheck,
+  UserX,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -10,6 +18,13 @@ import {
   appointmentStatusMeta,
   type Appointment,
 } from '@/modules/_shared/domain/types'
+
+import {
+  canConfirm,
+  canRecordOutcome,
+  outcomeIsDue,
+  type AppointmentOutcome,
+} from '../domain/AppointmentLifecycle'
 
 export interface AppointmentDetailsModalProps {
   appointment: Appointment | null
@@ -43,6 +58,29 @@ export interface AppointmentDetailsModalProps {
   onConfirmingCancelChange: (confirming: boolean) => void
   /** Cancelamento em voo: trava os botões e evita disparo duplicado. */
   isCanceling?: boolean
+
+  // ---------------------------------------------------------------------------
+  // Ciclo de vida — feature A-03
+  // ---------------------------------------------------------------------------
+
+  /** `scheduled` -> `confirmed`. Carimba `confirmed_at` no servidor. */
+  onConfirm: (appointment: Appointment) => void | Promise<void>
+  /** Veio (`completed`) ou não veio (`no_show`). */
+  onRecordOutcome: (
+    appointment: Appointment,
+    outcome: AppointmentOutcome,
+  ) => void | Promise<void>
+  /**
+   * Recusa do servidor nas transições de estado.
+   *
+   * Separada de `cancelError` porque as duas aparecem em lugares diferentes do
+   * diálogo: esta ao lado dos botões de situação, aquela junto da confirmação de
+   * cancelamento. Uma única prop faria a recusa de "registrar falta" surgir sob
+   * o texto que fala em cancelar.
+   */
+  lifecycleError?: string | null
+  /** Transição em voo: trava os botões e evita disparo duplicado. */
+  isUpdatingLifecycle?: boolean
 }
 
 /**
@@ -59,6 +97,10 @@ export function AppointmentDetailsModal({
   confirmingCancel,
   onConfirmingCancelChange,
   isCanceling = false,
+  onConfirm,
+  onRecordOutcome,
+  lifecycleError = null,
+  isUpdatingLifecycle = false,
 }: AppointmentDetailsModalProps) {
   if (!appointment) return null
 
@@ -66,6 +108,15 @@ export function AppointmentDetailsModal({
   const endsAt = new Date(
     appointment.startsAt.getTime() + appointment.durationMinutes * 60_000,
   )
+
+  /*
+   * `new Date()` no render é seguro AQUI: o modal só monta depois de um clique,
+   * já no cliente. Não há HTML de servidor para divergir.
+   */
+  const showConfirm = canConfirm(appointment.status)
+  const outcomeAllowed = canRecordOutcome(appointment.status)
+  const outcomeDue = outcomeIsDue(appointment.startsAt, new Date())
+  const showLifecycle = showConfirm || outcomeAllowed
 
   function handleOpenChange(open: boolean) {
     // Fechar no meio do cancelamento deixaria a recusa sem lugar para aparecer.
@@ -168,6 +219,80 @@ export function AppointmentDetailsModal({
             />
           ) : null}
         </dl>
+
+        {/*
+          Situação do atendimento — feature A-03.
+
+          Fica no CORPO, e não no rodapé: o rodapé já carrega cancelar e
+          reagendar, e cinco botões lado a lado numa faixa deixariam "Faltou" a
+          um pixel de "Cancelar atendimento" — dois atos irreversíveis e
+          diferentes. Aqui as transições ficam encostadas no selo de status, que
+          é o que elas mudam.
+        */}
+        {showLifecycle ? (
+          <section
+            aria-label="Situação do atendimento"
+            className="flex flex-col gap-2 rounded-field border border-border-card p-4"
+          >
+            <p className="text-label font-semibold text-label">Situação</p>
+
+            <div className="flex flex-wrap gap-2">
+              {showConfirm ? (
+                <Button
+                  variant="secondary"
+                  disabled={isUpdatingLifecycle || isCanceling}
+                  onClick={() => onConfirm(appointment)}
+                >
+                  <CheckCheck aria-hidden className="size-4" />
+                  Confirmar presença
+                </Button>
+              ) : null}
+
+              {outcomeAllowed && outcomeDue ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    disabled={isUpdatingLifecycle || isCanceling}
+                    onClick={() => onRecordOutcome(appointment, 'completed')}
+                  >
+                    <UserCheck aria-hidden className="size-4" />
+                    Compareceu
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={isUpdatingLifecycle || isCanceling}
+                    onClick={() => onRecordOutcome(appointment, 'no_show')}
+                  >
+                    <UserX aria-hidden className="size-4" />
+                    Faltou
+                  </Button>
+                </>
+              ) : null}
+            </div>
+
+            {/*
+              Diz por que os botões de desfecho não estão aqui, em vez de
+              mostrá-los desabilitados sem explicação. E a frase importa: quem
+              registra falta libera o horário, e é isso que a recepção quer
+              saber.
+            */}
+            {outcomeAllowed && !outcomeDue ? (
+              <p className="text-label text-muted">
+                O desfecho — compareceu ou faltou — pode ser registrado a partir do
+                horário marcado. Registrar falta devolve o horário à agenda.
+              </p>
+            ) : null}
+
+            {lifecycleError ? (
+              <p
+                role="alert"
+                className="rounded-field border border-danger/30 bg-danger-surface px-3 py-2 text-aux text-danger"
+              >
+                {lifecycleError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {appointment.notes ? (
           <div>

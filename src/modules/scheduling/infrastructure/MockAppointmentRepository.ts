@@ -90,6 +90,14 @@ export class MockAppointmentRepository implements AppointmentRepository {
     return this.refuseWrite('cancel')
   }
 
+  async confirm(): Promise<never> {
+    return this.refuseWrite('confirm')
+  }
+
+  async recordOutcome(): Promise<never> {
+    return this.refuseWrite('recordOutcome')
+  }
+
   private refuseWrite(operation: string): never {
     throw new AppointmentRepositoryError(
       'unavailable',

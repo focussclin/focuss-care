@@ -93,7 +93,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/onboarding` | **COMPLETO** | `create_clinic()` | Sessão sem clínica |
 | `/convite/[token]` | **COMPLETO** | `accept_invitation()` | Token na URL, `noindex` |
 | `/dashboard` | **COMPLETO** | Banco (reporting + scheduling) | Membro |
-| `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador | Membro; buscar paciente exige `patient.read` |
+| `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador · confirmação e desfecho (§8.34) | Membro; buscar paciente exige `patient.read`; confirmar exige `appointment.write` e desfecho exige `appointment.cancel` |
 | `/pacientes` e subrotas | **COMPLETO** | Banco (patients + `admin_notes` + patient_contacts + consents); tags administrativas preparadas e aguardando migration | `patient.read`; alterações exigem `patient.write` |
 | `/recepcao` | **COMPLETO** | Banco (scheduling + encounters) — quem falta chegar e quem está atrasado, derivado na rota | `encounter.read` |
 | `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
@@ -780,6 +780,7 @@ que não funciona:
 | Disponibilidade por profissional | `/agenda` | Convenção de `weekday` não verificável; adivinhar recusaria agendamento legítimo |
 | Escalas de trabalho | `/equipe` | Mesmo `weekday` de `work_schedules`: errar desloca a semana e põe alguém para trabalhar no dia errado |
 | Salário e CPF de funcionário | `/equipe` | Colunas existem; o produto não tem folha, e guardá-los agora seria acumular risco sem contrapartida |
+| Agenda seguir a fila de espera (`checked_in`, `in_progress`) | `/agenda`, `/atendimentos` | Quem move o paciente pela fila é `encounters`; carimbar `appointments.status` de lá exigiria um módulo compor o repositório de outro, e nenhum módulo do projeto faz isso hoje. Confirmação e desfecho existem (§8.34); os dois estados do meio, não |
 
 ---
 
@@ -2715,6 +2716,109 @@ schema). As nove siglas de `council_type` ficam alcançáveis.
 aplicação nunca apaga profissional, então o caso só aparece com linha removida
 por fora do produto — não toquei porque é outro módulo, mas é inconsistência
 real.
+
+---
+
+## 8.34 Feature — Ciclo de vida do atendimento (10/08/2026)
+
+Reauditei o que sobrou depois de `dc1c0e1`. As tabelas sem superfície nenhuma
+estão todas bloqueadas (IA, `clinical_attachments` sem bucket, `availability_rules`
+por P-WD, `professional_payouts` por P-RPC). A varredura de enums e a de colunas
+não usadas apontaram o mesmo lugar: `appointments.confirmed_at` e
+`checked_in_at` nunca escritas.
+
+Puxando o fio, o achado real: **a única transição de status que a aplicação
+sabia escrever era `canceled`.**
+
+### O que estava quebrado
+
+`appointment_status` tem sete valores. A linha nascia `scheduled` ou `confirmed`
+— escolhido no formulário de criação — e dali só podia ir para `canceled`. As
+consequências não eram cosméticas:
+
+| Sintoma | Causa |
+| --- | --- |
+| Taxa de comparecimento nula para sempre | `/indicadores` e `/relatorios` calculam `completed / (completed + no_show)` lendo `appointments.status`; nenhum dos dois era gravado |
+| Alerta de absenteísmo que nunca dispara | `operationalInsights` acende acima de 15% de falta, sobre a mesma conta |
+| Horário preso depois da falta | o banco já trata `no_show` como vaga livre (`RELEASES_SLOT`), mas não havia como registrar a falta |
+| Confirmação ao contrário | só dava para nascer confirmado; a clínica marca hoje e confirma na véspera |
+
+Era um indicador desenhado, consultado e estruturalmente vazio — a mesma classe
+de "verdadeiro como consulta, falso como informação" que §8 usa para justificar
+faturamento fora dos relatórios, com a diferença de que aqui ninguém tinha
+notado.
+
+### A máquina de estados é uma só
+
+`domain/AppointmentLifecycle.ts` declara as transições e nada mais as duplica. O
+mapa completo está escrito por extenso no teste, de propósito: uma linha nova ali
+obriga quem a acrescentar a olhar para o conjunto.
+
+- `scheduled → confirmed` — carimba `confirmed_at`
+- `scheduled | confirmed | checked_in | in_progress → completed | no_show`
+
+`scheduled` entra nas origens de desfecho porque nem toda clínica usa
+confirmação; exigi-la como degrau obrigatório zeraria a métrica justamente
+nessas. Os três terminais (`completed`, `canceled`, `no_show`) não voltam:
+reabrir reescreveria o que a clínica afirmou ter acontecido.
+
+### A condição de origem vai no `WHERE`
+
+`.in('status', allowedSourcesFor(to))`. Ler o status, decidir em memória e depois
+gravar deixaria duas recepcionistas passarem as duas pela leitura, e a segunda
+sobrescreveria o desfecho da primeira. Com a condição no banco, a segunda escrita
+alcança zero linhas.
+
+Zero linhas tem três causas e a releitura as separa: sumiu (`not-found`), está lá
+em outro estado (`stale-status`, **com o status atual junto** — "já está como
+Cancelado" resolve, "não foi possível" faz clicar de novo), ou está lá num estado
+permitido e aí quem recusou foi a policy (`forbidden`).
+
+### Desfecho só a partir do horário marcado
+
+Falta anotada na véspera entraria na taxa de comparecimento como fato observado.
+O corte é o **início**, não o fim: quem não chegou na hora já faltou, e esperar o
+horário terminar só atrasaria a liberação da vaga. A recusa acontece antes do
+`UPDATE`, e a tela some com os botões explicando por quê em vez de mostrá-los
+desabilitados.
+
+### Permissões
+
+Confirmar pede `appointment.write`; registrar desfecho pede `appointment.cancel`.
+**Hoje as duas resolvem para os mesmos quatro papéis** — só `finance` fica de
+fora das duas —, e os testes travam esse fato para que a separação apareça aqui,
+e não numa tela, quando a matriz de I-05 for ajustada. A permissão pedida é a que
+descreve a decisão: desfecho encerra o atendimento e mexe em indicador, como
+cancelar; confirmar é operar a agenda, como marcar.
+
+O contrato do desfecho é um enum de **dois** valores, e não `AppointmentStatus`:
+aceitar `canceled` daria um caminho para cancelar sem gravar motivo e sem
+notificar, pulando a action que faz as duas coisas.
+
+### Uma armadilha do próprio guard
+
+Extraí os caminhos de revalidação para uma função auxiliar, e
+`revalidateTargets.test.ts` **passou** — porque ele varre o literal
+`revalidatePaths: [...]` e uma chamada de função é invisível para a varredura. Os
+caminhos deixariam de ser conferidos contra `src/app` e contra o mapa por módulo.
+Voltei ao array escrito em cada action; repetir cinco linhas é o preço de
+continuar auditável. `/indicadores` entrou no mapa do módulo `scheduling`, com o
+motivo registrado lá.
+
+### Estado
+
+`scheduling` passa a 156 testes (+49: 36 de domínio, 11 de adapter, 23 de action,
+10 de UI — os últimos com relógio fixado, porque o desfecho depende dele).
+
+**Fica pendente, e é o limite honesto desta fatia:** `checked_in` e `in_progress`
+continuam inalcançáveis. Quem move o paciente pela fila é o módulo `encounters`
+(check-in, chamada, início, encerramento), e carimbar `appointments.status` de lá
+exigiria um módulo compor o repositório de outro — coisa que **nenhum módulo do
+projeto faz hoje** (só `_shared` é importado entre eles). Inventar esse padrão de
+dentro de uma fatia de agenda seria decidir arquitetura por conveniência. O efeito
+prático: a agenda e a fila de espera continuam podendo discordar sobre o mesmo
+paciente, e `completed` é registrado pela agenda, não pelo encerramento do
+atendimento.
 
 ---
 

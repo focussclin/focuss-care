@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+import { appointmentStatusMeta } from '@/modules/_shared/domain/types'
+
+import { APPOINTMENT_OUTCOMES } from '../domain/AppointmentLifecycle'
+
 export const appointmentMessages = {
   patientRequired: 'Selecione um paciente.',
   professionalRequired: 'Selecione um profissional.',
@@ -85,6 +89,37 @@ export const scheduleMessages = {
   unexpectedCancel:
     'Não foi possível cancelar o atendimento agora. Tente novamente.',
   cancelReasonTooLong: 'O motivo pode ter no máximo 500 caracteres.',
+
+  // -------------------------------------------------------------------------
+  // Ciclo de vida do atendimento — feature A-03
+  // -------------------------------------------------------------------------
+
+  unexpectedConfirm:
+    'Não foi possível confirmar o atendimento agora. Tente novamente.',
+  unexpectedOutcome:
+    'Não foi possível registrar o desfecho agora. Tente novamente.',
+  /**
+   * Recusa de desfecho antecipado.
+   *
+   * Não é permissão: é a diferença entre registrar e prever. Uma falta anotada
+   * na véspera entraria na taxa de comparecimento como fato observado.
+   */
+  outcomeTooEarly:
+    'Este atendimento ainda não começou. O desfecho só pode ser registrado a partir do horário marcado.',
+  /**
+   * Alguém mudou o atendimento antes deste clique.
+   *
+   * Diz QUAL é o estado atual: "já está confirmado" resolve, "não foi possível"
+   * faz clicar de novo. A tradução do enum para o rótulo em pt-BR acontece
+   * AQUI, e não em cada action: quatro cópias do mesmo `Record` lookup é como
+   * uma delas passa a mostrar `no_show` cru para o usuário.
+   */
+  staleStatus: (status: string) => {
+    const label =
+      appointmentStatusMeta[status as keyof typeof appointmentStatusMeta]?.label ??
+      status
+    return `Este atendimento já está como "${label}". Recarregue a agenda para ver o estado atual.`
+  },
 } as const
 
 /** Duração mínima e máxima aceitas — o resto é engano de digitação. */
@@ -282,6 +317,36 @@ export const cancelAppointmentSchema = z.object({
 })
 
 export type CancelAppointmentInput = z.infer<typeof cancelAppointmentSchema>
+
+/**
+ * Confirmação — feature **A-03**.
+ *
+ * Só o id: o status de destino não vem do cliente. Aceitá-lo transformaria uma
+ * action de confirmar numa de escrever qualquer status, e a máquina de estados
+ * passaria a depender do que o navegador mandou.
+ */
+export const confirmAppointmentSchema = z.object({
+  appointmentId: z.uuid(scheduleMessages.unexpected),
+})
+
+export type ConfirmAppointmentInput = z.infer<typeof confirmAppointmentSchema>
+
+/**
+ * Desfecho — feature **A-03**.
+ *
+ * `outcome` é um enum fechado de DOIS valores, e não `AppointmentStatus`: os
+ * outros cinco não são desfecho, e aceitá-los aqui deixaria o cliente escrever
+ * `canceled` sem passar pelo cancelamento (que grava motivo e notifica) ou
+ * `in_progress` sem ninguém ter chegado.
+ */
+export const recordAppointmentOutcomeSchema = z.object({
+  appointmentId: z.uuid(scheduleMessages.unexpected),
+  outcome: z.enum(APPOINTMENT_OUTCOMES),
+})
+
+export type RecordAppointmentOutcomeInput = z.infer<
+  typeof recordAppointmentOutcomeSchema
+>
 
 /**
  * O que as Server Actions de agenda devolvem ao cliente.

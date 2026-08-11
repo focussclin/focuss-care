@@ -40,6 +40,15 @@ export interface ScheduleFailureMessages {
    * faltar.
    */
   blockedWindow: string
+  /**
+   * O atendimento mudou de estado entre a tela carregar e o clique chegar.
+   *
+   * Recebe o status encontrado para poder dizer QUAL — "já está confirmado" faz
+   * a pessoa entender; "não foi possível" faz clicar de novo. Feature **A-03**.
+   */
+  staleStatus: (currentStatus: string) => string
+  /** Desfecho pedido antes da hora marcada. Feature **A-03**. */
+  outcomeTooEarly: string
   forbidden: string
   notFound: string
   unavailable: string
@@ -92,6 +101,17 @@ export function toScheduleFailure<F extends string>(
        */
       case 'blocked-window':
         return err<F>('conflict', cause.userDetail ?? messages.blockedWindow)
+      /*
+       * 'conflict', e nao 'not-found': a linha esta la. Quem recebe isto precisa
+       * recarregar a agenda, nao procurar um atendimento que sumiu.
+       */
+      case 'stale-status':
+        return err<F>(
+          'conflict',
+          messages.staleStatus(cause.currentStatus ?? 'desconhecido'),
+        )
+      case 'outcome-too-early':
+        return err<F>('conflict', messages.outcomeTooEarly)
       case 'not-found':
         return err<F>('not-found', messages.notFound)
       case 'forbidden':

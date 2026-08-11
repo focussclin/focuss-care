@@ -585,9 +585,18 @@ O painel e os relatórios passaram a contar linhas do banco. `dashboardMetrics`
 | Pacientes aguardando | `waiting_queue` com `status = 'waiting'`, chegados hoje | E-01 |
 | Novos pacientes (mês e período) | `patients.created_at` | P-01 |
 | Base ativa | `patients.is_active` | P-01 |
-| Comparecimento | `completed` sobre `completed + no_show` | A-01 |
+| Comparecimento | `completed` sobre `completed + no_show` | A-01 · **A-03** |
 | Volume por profissional | `appointments` agrupados, sem cancelados | A-01 |
 | Atividade recente | `appointments`, `patients` e `encounters` recentes | A-01, P-01, E-01 |
+
+**Duas linhas desta tabela liam colunas que nada escrevia.** Até A-03, a
+aplicação só sabia levar um atendimento a `canceled`: `completed` e `no_show`
+nunca eram gravados, então "Comparecimento" ficava nulo para sempre e
+"Desfechos" só contava cancelamento. A leitura estava certa desde A-01 — faltava
+a escrita, e a ausência não aparecia porque um indicador vazio se parece com uma
+clínica sem movimento. Confirmação e desfecho passaram a existir em §8.34 do
+`PROJECT_PROGRESS.md`; `checked_in` e `in_progress` continuam inalcançáveis, com
+o motivo registrado lá.
 
 **Faturamento, recebimentos e glosas não entram.** `invoices`, `payments` e
 `cash_entries` existem no schema, e **nenhuma tela do produto grava neles**. Ler

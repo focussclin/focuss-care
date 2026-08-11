@@ -108,6 +108,11 @@ const runRescheduleAppointment = createAction<
         roomConflict: scheduleMessages.roomConflict,
         outsideBusinessHours: scheduleMessages.outsideBusinessHours,
     blockedWindow: scheduleMessages.blockedWindow,
+        // A-03 acrescentou estes dois a `ScheduleFailureMessages`. Nao ocorrem
+        // aqui — esta action nao faz transicao de status —, e existem porque o
+        // tradutor e um so para o modulo.
+        staleStatus: scheduleMessages.staleStatus,
+        outcomeTooEarly: scheduleMessages.outcomeTooEarly,
         forbidden: scheduleMessages.forbidden,
         notFound: scheduleMessages.notFound,
         unavailable: scheduleMessages.unavailable,

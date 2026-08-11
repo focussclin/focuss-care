@@ -22,6 +22,11 @@ import type {
   Professional,
 } from '@/modules/_shared/domain/types'
 
+import {
+  confirmAppointmentAction,
+  recordAppointmentOutcomeAction,
+} from '../actions/appointmentLifecycle.action'
+import type { AppointmentOutcome } from '../domain/AppointmentLifecycle'
 import { cancelAppointmentAction } from '../actions/cancelAppointment.action'
 import { createAppointmentAction } from '../actions/createAppointment.action'
 import { rescheduleAppointmentAction } from '../actions/rescheduleAppointment.action'
@@ -120,6 +125,9 @@ export function AgendaScreen({
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [isCanceling, setCanceling] = useState(false)
+  /** Recusa das transições de estado (A-03) — separada da do cancelamento. */
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null)
+  const [isUpdatingLifecycle, setUpdatingLifecycle] = useState(false)
   /**
    * Atendimento sendo REMARCADO, ou null quando o formulário está criando.
    *
@@ -365,6 +373,94 @@ export function AgendaScreen({
     setSelected(null)
     setConfirmingCancel(false)
     setCancelError(null)
+    setLifecycleError(null)
+  }
+
+  /**
+   * Confirmação e desfecho — feature **A-03**.
+   *
+   * As duas transições passam pelo mesmo caminho porque falham igual: a recusa
+   * fica no modal ABERTO, com o atendimento na tela, em vez de fechar em
+   * silêncio e deixar a agenda dizendo o contrário do que o banco guarda.
+   *
+   * O modal **não** fecha no sucesso, ao contrário do cancelamento: confirmar e
+   * marcar comparecimento são passos de rotina, e quem acabou de confirmar
+   * costuma querer ver o selo mudar antes de sair.
+   */
+  async function runLifecycle(
+    appointment: Appointment,
+    call: () => Promise<{ ok: boolean; data?: AppointmentDto; message?: string }>,
+    demoStatus: Appointment['status'],
+  ) {
+    if (!isLive) {
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointment.id ? { ...item, status: demoStatus } : item,
+        ),
+      )
+      setSelected((current) =>
+        current && current.id === appointment.id
+          ? { ...current, status: demoStatus }
+          : current,
+      )
+      return
+    }
+
+    setLifecycleError(null)
+    setUpdatingLifecycle(true)
+
+    try {
+      const result = await call()
+
+      if (!result.ok || !result.data) {
+        setLifecycleError(result.message ?? scheduleMessages.unexpected)
+        return
+      }
+
+      const updated = fromDto(result.data)
+      setAppointments((current) =>
+        current.map((item) => (item.id === appointment.id ? updated : item)),
+      )
+      // O modal continua aberto: o selo de status precisa refletir o novo estado.
+      setSelected(updated)
+      router.refresh()
+    } finally {
+      setUpdatingLifecycle(false)
+    }
+  }
+
+  async function handleConfirmAppointment(appointment: Appointment) {
+    await runLifecycle(
+      appointment,
+      async () => {
+        const result = await confirmAppointmentAction({
+          appointmentId: appointment.id,
+        })
+        return result.ok
+          ? { ok: true, data: result.data }
+          : { ok: false, message: result.error.message }
+      },
+      'confirmed',
+    )
+  }
+
+  async function handleRecordOutcome(
+    appointment: Appointment,
+    outcome: AppointmentOutcome,
+  ) {
+    await runLifecycle(
+      appointment,
+      async () => {
+        const result = await recordAppointmentOutcomeAction({
+          appointmentId: appointment.id,
+          outcome,
+        })
+        return result.ok
+          ? { ok: true, data: result.data }
+          : { ok: false, message: result.error.message }
+      },
+      outcome,
+    )
   }
 
   /*
@@ -590,6 +686,10 @@ export function AgendaScreen({
         confirmingCancel={confirmingCancel}
         onConfirmingCancelChange={setConfirmingCancel}
         isCanceling={isCanceling}
+        onConfirm={handleConfirmAppointment}
+        onRecordOutcome={handleRecordOutcome}
+        lifecycleError={lifecycleError}
+        isUpdatingLifecycle={isUpdatingLifecycle}
       />
     </div>
   )

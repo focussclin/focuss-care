@@ -382,6 +382,18 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/agenda',
         '/dashboard',
         '/relatorios',
+        /*
+         * `/indicadores` entra com o DESFECHO do atendimento (A-03).
+         *
+         * A taxa de comparecimento e a série mensal daquela tela são contadas
+         * de `appointments.status` — `completed` sobre `completed + no_show`.
+         * Registrar uma falta sem revalidar deixaria o indicador mostrando o
+         * número anterior à falta que acabou de ser registrada.
+         *
+         * Só as duas actions de ciclo de vida a usam: criar e remarcar não
+         * mudam desfecho, e cancelar não entra na conta.
+         */
+        '/indicadores',
         '/pacientes/:seg',
         '/pacientes/:seg/historico',
         /*

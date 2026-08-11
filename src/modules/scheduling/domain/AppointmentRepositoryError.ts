@@ -11,6 +11,8 @@
  * SERVIDOR. Nunca para a tela: mensagem de banco cita coluna e constraint.
  */
 
+import type { AppointmentStatus } from '@/modules/_shared/domain/types'
+
 export type AppointmentWriteFailure =
   /**
    * Já existe atendimento do mesmo profissional no intervalo.
@@ -56,6 +58,25 @@ export type AppointmentWriteFailure =
    * remova o bloqueio.
    */
   | 'blocked-window'
+  /**
+   * O atendimento existe, mas não está mais no estado que a transição exige.
+   *
+   * Feature **A-03**. Não é `not-found` e não é `conflict`: a linha está lá e o
+   * horário não é o problema — alguém mudou o status entre a tela carregar e o
+   * clique chegar. Confundi-lo com `not-found` faria a recepção procurar um
+   * atendimento que não sumiu.
+   *
+   * `currentStatus` viaja junto porque a mensagem útil é "já está confirmado",
+   * e não "não deu certo".
+   */
+  | 'stale-status'
+  /**
+   * Desfecho pedido antes da hora marcada.
+   *
+   * Registrar falta para amanhã entraria na taxa de comparecimento como fato
+   * observado. É recusa de regra, não de permissão.
+   */
+  | 'outcome-too-early'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
   | 'not-found'
   /** A policy de RLS recusou. Sessão sem direito sobre esta clínica. */
@@ -79,18 +100,28 @@ export class AppointmentRepositoryError extends Error {
    * nunca passou perto do banco.
    */
   readonly userDetail?: string
+  /**
+   * Status encontrado no banco quando `reason` é `'stale-status'`.
+   *
+   * É o que transforma "não foi possível" em "este atendimento já foi
+   * cancelado". Sai do enum do banco, não de texto livre — não há valor de
+   * usuário aqui para vazar.
+   */
+  readonly currentStatus?: AppointmentStatus
 
   constructor(
     reason: AppointmentWriteFailure,
     message: string,
     code?: string,
     userDetail?: string,
+    currentStatus?: AppointmentStatus,
   ) {
     super(message)
     this.name = 'AppointmentRepositoryError'
     this.reason = reason
     this.code = code
     this.userDetail = userDetail
+    this.currentStatus = currentStatus
   }
 }
 

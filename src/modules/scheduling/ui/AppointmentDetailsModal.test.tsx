@@ -54,6 +54,10 @@ function renderModal(overrides: Partial<AppointmentDetailsModalProps> = {}) {
     onCancel: vi.fn(),
     confirmingCancel: false,
     onConfirmingCancelChange: vi.fn(),
+    // A-03: obrigatórias de propósito. Um modal que perde as transições porque
+    // o chamador esqueceu é o defeito que este arquivo inteiro existe para pegar.
+    onConfirm: vi.fn(),
+    onRecordOutcome: vi.fn(),
     ...overrides,
   } satisfies AppointmentDetailsModalProps
 
@@ -184,5 +188,118 @@ describe('AppointmentDetailsModal', () => {
     renderModal()
 
     expect(screen.queryByText('Sala')).toBeNull()
+  })
+})
+
+/**
+ * Ciclo de vida — feature **A-03**.
+ *
+ * O módulo sabia escrever UM status depois da criação: `canceled`. As transições
+ * abaixo são o que faz `completed` e `no_show` existirem — e sem elas a taxa de
+ * comparecimento de `/indicadores` fica nula para sempre.
+ *
+ * O relógio é fixado porque o desfecho depende dele: `outcomeIsDue` compara o
+ * horário marcado com `new Date()`, e um teste que passasse hoje e falhasse em
+ * 2027 seria pior que teste nenhum.
+ */
+describe('situação do atendimento (A-03)', () => {
+  const DEPOIS = new Date('2026-08-12T14:00:00.000Z')
+  const ANTES = new Date('2026-08-12T09:00:00.000Z')
+
+  afterEach(() => vi.useRealTimers())
+
+  function at(instant: Date) {
+    vi.useFakeTimers()
+    vi.setSystemTime(instant)
+  }
+
+  it('agendado oferece confirmar', () => {
+    at(ANTES)
+    const props = renderModal()
+
+    fireEvent.click(screen.getByRole('button', { name: /confirmar presença/i }))
+
+    expect(props.onConfirm).toHaveBeenCalledWith(appointment)
+  })
+
+  it('já confirmado não oferece confirmar de novo', () => {
+    // Não é erro do usuário: é clique sem efeito.
+    at(ANTES)
+    renderModal({ appointment: { ...appointment, status: 'confirmed' } })
+
+    expect(screen.queryByRole('button', { name: /confirmar presença/i })).toBeNull()
+  })
+
+  it('antes do horário, o desfecho não aparece — e a tela diz por quê', () => {
+    /*
+     * Botão desabilitado sem explicação faz a pessoa clicar de novo. A frase
+     * também conta o que a recepção quer saber: falta devolve o horário.
+     */
+    at(ANTES)
+    renderModal({ appointment: { ...appointment, status: 'confirmed' } })
+
+    expect(screen.queryByRole('button', { name: 'Compareceu' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Faltou' })).toBeNull()
+    expect(screen.getByText(/a partir do horário marcado/i)).toBeTruthy()
+  })
+
+  it('depois do horário, os dois desfechos aparecem', () => {
+    at(DEPOIS)
+    const props = renderModal({ appointment: { ...appointment, status: 'confirmed' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Faltou' }))
+
+    expect(props.onRecordOutcome).toHaveBeenCalledWith(
+      { ...appointment, status: 'confirmed' },
+      'no_show',
+    )
+  })
+
+  it('comparecimento manda `completed`', () => {
+    at(DEPOIS)
+    const props = renderModal({ appointment: { ...appointment, status: 'confirmed' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compareceu' }))
+
+    expect(props.onRecordOutcome).toHaveBeenCalledWith(
+      { ...appointment, status: 'confirmed' },
+      'completed',
+    )
+  })
+
+  it.each(['completed', 'canceled', 'no_show'] as const)(
+    '%s é terminal: a seção de situação some',
+    (status) => {
+      // Reabrir um terminal reescreveria o que a clínica afirmou ter acontecido.
+      at(DEPOIS)
+      renderModal({ appointment: { ...appointment, status } })
+
+      expect(screen.queryByLabelText('Situação do atendimento')).toBeNull()
+    },
+  )
+
+  it('a recusa do servidor fica ao lado dos botões de situação', () => {
+    /*
+     * Prop separada de `cancelError` de propósito: uma só faria a recusa de
+     * "registrar falta" surgir sob o texto que fala em cancelar.
+     */
+    at(DEPOIS)
+    renderModal({
+      appointment: { ...appointment, status: 'confirmed' },
+      lifecycleError: 'Este atendimento já está como "Cancelado".',
+    })
+
+    expect(screen.getByRole('alert').textContent).toContain('Cancelado')
+  })
+
+  it('transição em voo trava os botões', () => {
+    at(DEPOIS)
+    renderModal({
+      appointment: { ...appointment, status: 'confirmed' },
+      isUpdatingLifecycle: true,
+    })
+
+    const faltou = screen.getByRole('button', { name: 'Faltou' }) as HTMLButtonElement
+    expect(faltou.disabled).toBe(true)
   })
 })

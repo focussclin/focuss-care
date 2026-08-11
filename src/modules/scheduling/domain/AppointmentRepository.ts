@@ -1,5 +1,7 @@
 import type { Appointment, Professional } from '@/modules/_shared/domain/types'
 
+import type { AppointmentOutcome } from './AppointmentLifecycle'
+
 /**
  * Dados de um agendamento novo, já normalizados pela camada de aplicação.
  *
@@ -154,5 +156,40 @@ export interface AppointmentRepository {
     appointmentId: string,
     reason: string | null,
     canceledBy: string,
+  ): Promise<Appointment>
+
+  /**
+   * Confirma o atendimento — feature **A-03**.
+   *
+   * Sai de `scheduled` e carimba `confirmed_at`. A coluna existia desde o
+   * princípio e nunca era escrita: dava para nascer confirmado, nunca para
+   * confirmar depois — o avesso da rotina, em que se marca hoje e confirma na
+   * véspera.
+   *
+   * A condição de origem vai no `WHERE`, não numa leitura anterior: entre ler o
+   * status e gravar o novo cabe o clique de outra pessoa.
+   */
+  confirm(
+    clinicId: string,
+    appointmentId: string,
+    confirmedBy: string,
+  ): Promise<Appointment>
+
+  /**
+   * Registra o desfecho: veio (`completed`) ou não veio (`no_show`).
+   *
+   * É o par que alimenta a taxa de comparecimento de `/indicadores` e
+   * `/relatorios` — que era nula porque nenhum dos dois valores tinha caminho
+   * de escrita. `no_show` também devolve o horário à agenda: o banco já conta
+   * falta como vaga livre.
+   *
+   * Recusa desfecho antes de `starts_at`: registro de falta é observação, e
+   * antes da hora não há o que observar.
+   */
+  recordOutcome(
+    clinicId: string,
+    appointmentId: string,
+    outcome: AppointmentOutcome,
+    recordedBy: string,
   ): Promise<Appointment>
 }
