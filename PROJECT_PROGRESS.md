@@ -3021,6 +3021,112 @@ segue a regra da §9 — quando ele discorda do código, o código está certo.
 
 ---
 
+## 8.38 Feature — Prontuário na ficha do paciente (11/08/2026)
+
+A fatia anterior fechou o vínculo `medical_records.encounter_id` e deixou escrito
+o que faltava: a ficha não tinha painel de prontuário. Ela reunia alergias,
+sinais vitais, prescrições, consentimentos e agenda — e parava exatamente no
+registro que explica os três primeiros. Quem precisasse ler a evolução de uma
+pessoa ia a `/prontuarios`, que lista os registros recentes da **clínica**: a
+fila de quem escreve, não a história de quem é atendido.
+
+Esta fatia entrega a leitura clínica na segunda rota, e é onde a queixa
+principal registrada em `/atendimentos` passa a valer como contexto ao lado da
+conduta que ela originou.
+
+### A leitura passa a ter dono
+
+`logAccess(clinicId, patientId)` existia na porta desde R-01 e **nunca havia sido
+chamada com um paciente**: `/prontuarios` passa `null`, porque ali não há alvo.
+Enquanto essa foi a única superfície, a trilha sabia responder "alguém abriu a
+lista" e não sabia responder a pergunta para a qual ela existe — "quem leu o
+prontuário desta paciente?".
+
+A ficha registra o acesso **antes** de entregar o conteúdo, e descarta pré-busca
+pelo mesmo motivo medido em 09/08/2026: o corpo da rota roda quando o navegador
+se adianta, e passar o mouse sobre um nome na listagem gravaria uma leitura que
+ninguém fez.
+
+**Caveat que continua valendo:** nenhum evento persiste hoje. A policy de
+`INSERT` de `audit_log` recusa o membro autenticado (P-P6), e a migration está
+proposta. O que esta fatia muda é que o evento passa a **nomear o paciente**
+quando ele puder ser gravado — sem isso, aplicar a policy depois traria uma
+trilha que continuaria sem responder a pergunta.
+
+### Uma consulta clínica recusada não derruba a ficha
+
+`readFailure` devolvia um `Error` genérico, e isso bastava enquanto o único
+chamador era uma rota inteira dedicada ao prontuário: lá, derrubar o render é a
+resposta certa. Na ficha o prontuário é **um painel entre dez**, e um `throw`
+levaria junto cadastro, contatos, consentimentos e agenda por causa de uma
+consulta que a RLS recusou.
+
+A falha de leitura passou a ser tipada — `forbidden`, `unavailable`,
+`unexpected` —, e só a classe viaja. A mensagem do Postgres continua parando no
+log do servidor pela regra mais dura do módulo: em `medical_records` o texto do
+erro pode ecoar o valor consultado, e o valor consultado é conteúdo clínico.
+
+### O paciente não é escolhido de novo
+
+O editor de registro é o mesmo de `/prontuarios`, com o paciente **fixo** por
+prop: no lugar do `<select>` entra uma linha de confirmação com o nome. Não é
+conveniência de tela — enquanto houver seletor existe um caminho para pendurar a
+evolução na pessoa errada, e na ficha o id vem da rota já validada. Oferecer os
+outros pacientes ali criaria justamente o erro que a fatia anterior gastou uma
+conferência de servidor para impedir.
+
+Reusar em vez de duplicar foi decisão de custo real: uma cópia do editor
+duplicaria junto o seletor de vínculo inteiro — a corrida de resposta atrasada, o
+padrão do atendimento aberto e o bloco da queixa —, e a cópia que envelhecesse
+primeiro passaria a vincular diferente da outra.
+
+### A demonstração não empresta as notas administrativas
+
+`MockMedicalRecordRepository` deriva as evoluções de exemplo das notas de
+paciente de `clinic-data`, e para `/prontuarios` isso está certo: não inventa
+prontuário fictício novo. Na ficha, os mesmos três textos apareceriam **duas
+vezes na mesma página** — como prontuário e, logo abaixo, como "Observações", sob
+um cabeçalho que afirma serem "notas administrativas da equipe, separadas do
+prontuário clínico".
+
+Uma tela não pode dizer as duas coisas sobre o mesmo texto. A rota não lê
+prontuário em demonstração, e o painel diz isso — mesmo desenho do painel de
+prescrições, que também não exibe receita fictícia.
+
+### O corte é declarado
+
+Vinte registros vigentes, contra os trinta de `/prontuarios`: ali a lista é a
+tela, aqui ela divide espaço com nove painéis. Quando o teto é atingido, a tela
+**avisa que há registro mais antigo**. Uma lista que para de crescer sem dizer
+nada afirma, em silêncio, que aquilo é o prontuário inteiro — e é o tipo de
+omissão que faz alguém concluir que não houve registro anterior.
+
+### Duas telas leem, duas telas revalidam
+
+Registrar e corrigir passaram a revalidar também a ficha, por caminho literal
+montado a partir do `output` — nunca da entrada. Sem isso, quem registrasse pela
+ficha veria, na leitura seguinte, a lista anterior ao próprio registro, e
+concluiria que não salvou. O mapa por módulo do guard foi atualizado junto: até
+esta fatia, `records` alcançar `/pacientes/:seg` seria jogar fora cache de uma
+tela que não lia nada disso.
+
+### Estado
+
+`records` passa a **195 testes em 15 arquivos** (+40), e o projeto a **2541
+testes em 199 arquivos**. Typecheck, lint, build e suíte completa estão limpos.
+Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Histórico de versões na tela | `listVersions` existe na porta e no adapter, e **nenhuma tela o mostra** — nem a de prontuários. O selo diz "Versão 3"; ver as três é fatia própria, e é ela que torna o append-only visível para quem audita |
+| Auditar a leitura dos outros painéis clínicos | Prescrição, alergia e sinais vitais também são dado de saúde e não registram acesso. `logAccess` é a porta do prontuário, com escopo `medical_records`; estendê-la aos demais é decisão de produto sobre o que conta como acesso clínico, não efeito colateral deste painel |
+| Anexos clínicos | `clinical_attachments` está no schema e **não há bucket** de Storage. Bloqueio externo |
+| Registros anteriores a esta fatia | Continuam sem vínculo com atendimento, e não há como inferi-lo |
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

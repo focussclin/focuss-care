@@ -20,7 +20,11 @@ const PATIENT = '22222222-2222-4222-8222-222222222222'
 const ENCOUNTER = '44444444-4444-4444-8444-444444444444'
 const RECORD = '11111111-1111-4111-8111-111111111111'
 
-vi.mock('next/cache', () => ({ updateTag: () => {}, revalidatePath: () => {} }))
+const revalidatePath = vi.fn()
+vi.mock('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (...args: unknown[]) => revalidatePath(...args),
+}))
 vi.mock('next/server', () => ({
   after: (callback: () => unknown) => {
     void callback()
@@ -201,6 +205,36 @@ describe('o autor e a clínica nunca vêm do cliente', () => {
     await createRecordAction({ ...input, clinicId: 'outra-clinica' })
 
     expect(create).toHaveBeenCalledWith(CLINIC, expect.anything(), AUTHOR, USER)
+  })
+})
+
+describe('as duas telas que leem o registro', () => {
+  it('revalida a lista da clínica E a ficha do paciente', async () => {
+    /*
+     * A ficha passou a mostrar o prontuário. Revalidar só `/prontuarios`
+     * deixaria quem registrou pela ficha olhando para a lista anterior ao
+     * próprio registro — e a leitura seguinte pareceria não ter salvo nada.
+     */
+    await createRecordAction(input)
+
+    const paths = revalidatePath.mock.calls.map((call) => call[0])
+
+    expect(paths).toContain('/prontuarios')
+    expect(paths).toContain(`/pacientes/${PATIENT}`)
+  })
+
+  it('a ficha revalidada é a que o BANCO devolveu, não a que o formulário pediu', async () => {
+    // `output` é a linha depois da RLS. Montar a URL a partir da entrada
+    // deixaria o navegador escolher qual rota expirar.
+    const other = '99999999-9999-4999-8999-999999999999'
+    create.mockResolvedValue(medicalRecord({ patientId: other }))
+
+    await createRecordAction(input)
+
+    const paths = revalidatePath.mock.calls.map((call) => call[0])
+
+    expect(paths).toContain(`/pacientes/${other}`)
+    expect(paths).not.toContain(`/pacientes/${PATIENT}`)
   })
 })
 

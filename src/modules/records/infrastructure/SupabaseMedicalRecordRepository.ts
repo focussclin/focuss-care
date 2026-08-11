@@ -519,16 +519,53 @@ function unexpectedShape(): MedicalRecordRepositoryError {
   )
 }
 
+/**
+ * Traduz a recusa de uma LEITURA.
+ *
+ * Antes devolvia um `Error` genérico, e isso bastava enquanto o único chamador
+ * era `/prontuarios` — uma rota inteira dedicada ao prontuário pode simplesmente
+ * derrubar o render e mostrar a tela de erro. A ficha do paciente não pode: o
+ * prontuário é **um painel entre dez**, e um `throw` ali levaria embora cadastro,
+ * contatos, agenda e consentimentos por causa de uma consulta clínica recusada.
+ *
+ * Para o painel decidir entre "você não tem acesso" e "o servidor não respondeu"
+ * sem adivinhar, a falha precisa carregar a CLASSE. Só ela: a mensagem do
+ * Postgres continua parando no log do servidor, pela mesma razão de
+ * `toWriteError` — o texto pode ecoar o valor consultado, e aqui o valor inclui
+ * conteúdo clínico.
+ */
 function readFailure(
   context: string,
   error: { code?: string | null; message?: string | null },
-): Error {
+): MedicalRecordRepositoryError {
+  const code = error.code ?? undefined
+  const message = error.message ?? 'sem mensagem'
+
   console.error(`[records] ${context}`, {
-    code: error.code ?? null,
-    message: error.message ?? null,
+    code: code ?? null,
+    message,
   })
 
-  return new Error('Falha ao carregar o prontuário.')
+  if (code === '42501' || code === 'PGRST301') {
+    return new MedicalRecordRepositoryError(
+      'forbidden',
+      `leitura recusada em ${context}`,
+      code,
+    )
+  }
+
+  if (!code && /fetch|network|timeout|econnre/i.test(message)) {
+    return new MedicalRecordRepositoryError(
+      'unavailable',
+      `sem resposta em ${context}`,
+    )
+  }
+
+  return new MedicalRecordRepositoryError(
+    'unexpected',
+    `falha de leitura em ${context}`,
+    code,
+  )
 }
 
 /**

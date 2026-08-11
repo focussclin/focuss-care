@@ -356,7 +356,13 @@ describe('nenhuma action revalida rota que não alimenta', () => {
         '/pacientes/:seg',
         '/pacientes/:seg/historico',
       ],
-      records: ['/prontuarios'],
+      /*
+       * `/pacientes/:seg` entra porque a FICHA passou a mostrar o prontuário
+       * do paciente. Antes desta fatia o registro só era legível na lista da
+       * clínica, e revalidar a ficha seria jogar fora cache de uma tela que não
+       * lia nada disso.
+       */
+      records: ['/prontuarios', '/pacientes/:seg', '/pacientes/:seg/historico'],
       rooms: ['/salas-e-recursos', '/agenda'],
       /*
        * `/pacientes/:seg` entra porque a CONVERSÃO cria uma ficha de paciente.

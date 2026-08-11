@@ -2,6 +2,7 @@
 
 import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { rolesWith } from '@/lib/auth/permissions'
+import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -46,7 +47,18 @@ const runAmendRecord = createAction<
     unavailable: recordMessages.unavailable,
     unexpected: recordMessages.unexpected,
   },
-  revalidatePaths: ['/prontuarios'],
+  /**
+   * O paciente sai do OUTPUT, e é a única fonte possível aqui.
+   *
+   * A entrada da correção é `recordId` e `content` — o paciente nem chega ao
+   * servidor. Quem o informa é a linha que o repositório devolveu, herdada da
+   * versão anterior: a mesma decisão que impede corrigir um texto e mudar de
+   * quem é o registro serve, aqui, para saber qual ficha invalidar.
+   */
+  revalidatePaths: (_scope, output) => [
+    '/prontuarios',
+    ...patientPaths(output.patientId),
+  ],
 
   handler: async (input, context) => {
     const authorId = await getCurrentProfessionalId()

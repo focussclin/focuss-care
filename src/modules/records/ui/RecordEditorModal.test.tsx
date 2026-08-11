@@ -313,6 +313,46 @@ describe('quando a lista não carrega', () => {
   })
 })
 
+describe('aberto da ficha, o paciente já está decidido', () => {
+  it('não há seletor de paciente — nem com a lista da clínica junto', async () => {
+    /*
+     * Enquanto houver `<select>` existe um caminho para pendurar a evolução na
+     * pessoa errada. Na ficha o id vem da rota já validada, e a lista continua
+     * chegando por prop porque o mesmo componente serve às duas superfícies.
+     */
+    renderModal({ patient: { id: PATIENT, name: 'João da Silva' } })
+
+    expect(screen.queryByLabelText(/^paciente$/i)).toBeNull()
+    expect(screen.getByText(/Registro de/)).toBeTruthy()
+
+    await waitFor(() =>
+      expect(listPatientEncountersAction).toHaveBeenCalledWith({
+        patientId: PATIENT,
+      }),
+    )
+  })
+
+  it('o vínculo é buscado sem ninguém escolher, e o registro sai com o paciente da ficha', async () => {
+    renderModal({ patient: { id: PATIENT, name: 'João da Silva' } })
+
+    await waitFor(() => expect(encounterSelect().value).toBe(OPEN_ENCOUNTER))
+
+    fireEvent.change(screen.getByLabelText(/^registro$/i), {
+      target: { value: 'Evolução da consulta de hoje.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /salvar registro/i }))
+
+    await waitFor(() =>
+      expect(createRecordAction).toHaveBeenCalledWith({
+        patientId: PATIENT,
+        encounterId: OPEN_ENCOUNTER,
+        recordType: 'evolution',
+        content: 'Evolução da consulta de hoje.',
+      }),
+    )
+  })
+})
+
 describe('a correção não escolhe atendimento', () => {
   it('não há seletor de vínculo no modo corrigir', () => {
     /*

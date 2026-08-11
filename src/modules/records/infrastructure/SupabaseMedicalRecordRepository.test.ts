@@ -487,6 +487,58 @@ describe('leitura', () => {
     expect(fake.ofTable('medical_records').length).toBe(0)
   })
 
+  it('o prontuário da ficha vem filtrado por paciente, clínica e teto', async () => {
+    const fake = createFakeClient({ rows: [] })
+
+    await new SupabaseMedicalRecordRepository(fake.client).listCurrentByPatient(
+      CLINIC,
+      PATIENT,
+      20,
+    )
+
+    const view = fake.ofTable('v_medical_records_current')
+
+    expect(view).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(view).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['patient_id', PATIENT] }),
+    )
+    // O teto vai ao BANCO: cortar em memoria transferiria o prontuario inteiro
+    // do paciente para mostrar vinte linhas.
+    expect(view).toContainEqual(
+      expect.objectContaining({ method: 'limit', args: [20] }),
+    )
+  })
+
+  it('leitura recusada vira falha TIPADA, sem repassar a mensagem do banco', async () => {
+    /*
+     * A ficha precisa distinguir "voce nao tem acesso" de "o servidor nao
+     * respondeu" para dizer a coisa certa num painel entre dez — e nao pode
+     * derrubar a pagina inteira por causa de uma consulta clinica.
+     *
+     * O texto do Postgres continua parando no log: ele pode ecoar o valor
+     * consultado, e aqui o valor inclui conteudo clinico.
+     */
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fake = createFakeClient({
+      rows: [],
+      failingTable: 'v_medical_records_current',
+    })
+
+    const failure = await new SupabaseMedicalRecordRepository(fake.client)
+      .listCurrentByPatient(CLINIC, PATIENT, 20)
+      .catch((cause: unknown) => cause)
+
+    expect(failure).toMatchObject({
+      name: 'MedicalRecordRepositoryError',
+      reason: 'forbidden',
+    })
+    expect((failure as Error).message).not.toContain('recusado')
+
+    spy.mockRestore()
+  })
+
   it('filtra sempre pela clínica ativa', async () => {
     const fake = createFakeClient({ rows: [] })
 

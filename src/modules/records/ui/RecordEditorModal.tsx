@@ -23,7 +23,24 @@ export interface RecordEditorModalProps {
   mode: 'create' | 'amend'
   open: boolean
   onOpenChange: (open: boolean) => void
-  patients: readonly RecordPatientOption[]
+  /**
+   * Os pacientes que o seletor oferece.
+   *
+   * Opcional porque nem toda superfície escolhe: aberto da FICHA, o paciente já
+   * está decidido pela rota, e a lista da clínica inteira não teria uso — ver
+   * `patient`.
+   */
+  patients?: readonly RecordPatientOption[]
+  /**
+   * O paciente FIXO desta abertura, quando a superfície já sabe de quem é.
+   *
+   * Substitui o seletor por uma linha de confirmação. Não é conveniência de
+   * tela: enquanto houver `<select>`, existe um caminho para escolher a pessoa
+   * errada, e o registro que sai daqui é prontuário. Na ficha o id vem da rota
+   * já validada, e oferecer os outros pacientes seria criar o erro que a fatia
+   * anterior gastou uma conferência de servidor para impedir.
+   */
+  patient?: RecordPatientOption | null
   /** Registro sendo corrigido. Obrigatório no modo `amend`. */
   record?: MedicalRecordDto | null
   /**
@@ -50,21 +67,38 @@ export interface RecordEditorModalProps {
  * é correção, é outro registro. **O atendimento vinculado também não aparece na
  * correção**: ele é herdado da versão anterior, e trocá-lo mudaria de qual
  * consulta o registro saiu — o que não é corrigir um texto.
+ *
+ * O mesmo componente atende as duas superfícies que escrevem prontuário:
+ * `/prontuarios`, onde o paciente é escolhido, e a ficha, onde ele vem fixo por
+ * `patient`. Duplicá-lo para a segunda duplicaria junto o seletor de vínculo —
+ * a corrida de resposta atrasada, o padrão do atendimento aberto e o bloco da
+ * queixa —, e a cópia que envelhecesse primeiro passaria a vincular diferente da
+ * outra.
  */
 export function RecordEditorModal({
   mode,
   open,
   onOpenChange,
-  patients,
+  patients = [],
+  patient = null,
   record = null,
   isLive = false,
   onDone,
 }: RecordEditorModalProps) {
-  const [patientId, setPatientId] = useState('')
+  const [chosenPatientId, setPatientId] = useState('')
   const [recordType, setRecordType] = useState<string>('evolution')
   const [content, setContent] = useState('')
   const [isSubmitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /**
+   * O paciente do registro — o fixo vence a escolha, quando existe.
+   *
+   * Derivado, e não copiado para o estado por um efeito: um estado espelho
+   * ficaria vazio no primeiro render, e o efeito que busca os atendimentos
+   * rodaria uma vez sem paciente antes de rodar com ele.
+   */
+  const patientId = patient ? patient.id : chosenPatientId
 
   /**
    * Os atendimentos JÁ CARREGADOS, com o paciente que os produziu.
@@ -258,24 +292,36 @@ export function RecordEditorModal({
           </p>
         ) : (
           <>
-            <SelectField
-              label="Paciente"
-              value={patientId}
-              onChange={(event) => {
-                setPatientId(event.target.value)
-                // Trocar de paciente invalida a escolha do atendimento: sem
-                // isto, o vínculo do paciente anterior continuaria no
-                // formulário e seria enviado com o registro de outra pessoa.
-                setEncounterChoice(null)
-              }}
-              options={[
-                { value: '', label: 'Selecione o paciente' },
-                ...patients.map((patient) => ({
-                  value: patient.id,
-                  label: patient.name,
-                })),
-              ]}
-            />
+            {patient ? (
+              // Confirmação, não campo: a ficha já decidiu de quem é o registro,
+              // e o que falta é a pessoa que assina ver o nome antes de escrever.
+              <p className="rounded-field border border-border-card bg-background px-3.5 py-2.5 text-label text-muted">
+                Registro de{' '}
+                <span className="font-semibold text-foreground">
+                  {patient.name}
+                </span>
+                .
+              </p>
+            ) : (
+              <SelectField
+                label="Paciente"
+                value={patientId}
+                onChange={(event) => {
+                  setPatientId(event.target.value)
+                  // Trocar de paciente invalida a escolha do atendimento: sem
+                  // isto, o vínculo do paciente anterior continuaria no
+                  // formulário e seria enviado com o registro de outra pessoa.
+                  setEncounterChoice(null)
+                }}
+                options={[
+                  { value: '', label: 'Selecione o paciente' },
+                  ...patients.map((option) => ({
+                    value: option.id,
+                    label: option.name,
+                  })),
+                ]}
+              />
+            )}
 
             {isLive && patientId ? (
               <div className="flex flex-col gap-2">

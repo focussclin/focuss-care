@@ -2,6 +2,7 @@
 
 import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { rolesWith } from '@/lib/auth/permissions'
+import { patientPaths } from '@/lib/routes/patientRoutes'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -61,7 +62,22 @@ const runCreateRecord = createAction<
     unavailable: recordMessages.unavailable,
     unexpected: recordMessages.unexpected,
   },
-  revalidatePaths: ['/prontuarios'],
+  /**
+   * Duas telas leem o que esta action escreve.
+   *
+   * `/prontuarios` lista os registros recentes da clínica; a FICHA do paciente
+   * mostra o prontuário dele. Revalidar só a primeira deixaria quem registrou
+   * pela ficha olhando para a lista anterior ao próprio registro — e a leitura
+   * seguinte pareceria não ter salvo nada.
+   *
+   * O caminho é literal, montado pelo helper a partir do `output`: o padrão
+   * `'/pacientes/[patientId]'` invalidaria a ficha de todos os pacientes da
+   * instalação a cada evolução escrita.
+   */
+  revalidatePaths: (_scope, output) => [
+    '/prontuarios',
+    ...patientPaths(output.patientId),
+  ],
 
   handler: async (input, context) => {
     const authorId = await getCurrentProfessionalId()

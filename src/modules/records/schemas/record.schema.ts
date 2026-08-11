@@ -114,6 +114,20 @@ export type AmendRecordInput = z.infer<typeof amendRecordSchema>
  */
 export const RECORD_ENCOUNTER_LIMIT = 10
 
+/**
+ * Quantos registros vigentes a FICHA do paciente carrega.
+ *
+ * Menor que o teto de `/prontuarios` (30) porque ali a lista é a tela inteira e
+ * aqui ela divide espaço com nove outros painéis. Vinte cobre o histórico
+ * clínico recente de quase todo paciente sem transformar a ficha em rolagem de
+ * prontuário.
+ *
+ * O corte é **declarado na tela** quando é atingido: uma lista que para de
+ * crescer sem avisar afirma, em silêncio, que aquilo é o prontuário inteiro — e
+ * é o tipo de omissão que faz alguém concluir que não houve registro anterior.
+ */
+export const PATIENT_RECORD_LIMIT = 20
+
 export const listRecordEncountersSchema = z.object({
   patientId: z.uuid(recordMessages.patientRequired),
 })

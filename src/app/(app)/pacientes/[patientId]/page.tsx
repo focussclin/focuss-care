@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { isPrefetchRender } from '@/lib/audit/access-context'
 import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
@@ -46,11 +47,20 @@ import { isAllergyRepositoryError } from '@/modules/patients/domain/AllergyRepos
 import { allergyMessages } from '@/modules/patients/schemas/allergy.schema'
 import { createPrescriptionFromPanel } from '@/modules/records/actions/createPrescription.action'
 import { toPrescriptionDto } from '@/modules/records/application/toPrescriptionDto'
+import { toMedicalRecordDto } from '@/modules/records/application/toRecordDto'
+import type { MedicalRecord } from '@/modules/records/domain/MedicalRecord'
+import { isMedicalRecordRepositoryError } from '@/modules/records/domain/MedicalRecordRepositoryError'
 import type { Prescription } from '@/modules/records/domain/Prescription'
 import { isPrescriptionRepositoryError } from '@/modules/records/domain/PrescriptionRepository'
 import { getPrescriptionSource } from '@/modules/records/infrastructure/prescription-repository'
+import { getMedicalRecordRepository } from '@/modules/records/infrastructure/repository'
 import { prescriptionMessages } from '@/modules/records/schemas/prescription.schema'
+import {
+  PATIENT_RECORD_LIMIT,
+  recordMessages,
+} from '@/modules/records/schemas/record.schema'
 import { PatientPrescriptionsPanel } from '@/modules/records/ui/PatientPrescriptionsPanel'
+import { PatientRecordsPanel } from '@/modules/records/ui/PatientRecordsPanel'
 import { recordVitalsFromPanel } from '@/modules/encounters/actions/recordVitals.action'
 import { toVitalsDto } from '@/modules/encounters/application/toVitalsDto'
 import type { VitalsEntry } from '@/modules/encounters/domain/Vitals'
@@ -283,6 +293,83 @@ export default async function PatientProfilePage({
     }
   }
 
+  /*
+   * Prontuário — o registro clínico do paciente, na ficha dele.
+   *
+   * A permissão é a mesma das prescrições (`record.read` / `record.write`), e
+   * está declarada de novo em vez de reaproveitar as constantes acima: são duas
+   * decisões independentes que hoje coincidem, e amarrá-las faria a próxima
+   * mudança na matriz de I-05 mexer nas duas sem querer. `professionalId` é
+   * reusado de propósito — `getCurrentProfessionalId()` é a mesma consulta, e o
+   * portão que o resolve é `record.write` nos dois casos.
+   *
+   * `admin` e `finance` alcançam a ficha por `patient.read` e param aqui: a
+   * matriz diz, com todas as letras, que o que eles não alcançam é "agenda,
+   * atendimento e prontuário".
+   */
+  const canReadRecords = isMember && can(session.role, 'record.read')
+  const canWriteRecords = isMember && can(session.role, 'record.write')
+  const recordSource = canReadRecords
+    ? await getMedicalRecordRepository(today)
+    : null
+
+  let records: MedicalRecord[] = []
+  let recordsError: string | null = null
+
+  /*
+   * Em demonstração a ficha NÃO lista prontuário, e isso é decisão desta rota.
+   *
+   * `MockMedicalRecordRepository` deriva as evoluções de exemplo das notas de
+   * paciente de `clinic-data` — escolha correta para `/prontuarios`, que é uma
+   * vitrine da tela inteira. Aqui os mesmos três textos apareceriam duas vezes
+   * na mesma página: como prontuário, e como "Observações", logo abaixo, sob um
+   * cabeçalho que afirma serem "notas administrativas da equipe, separadas do
+   * prontuário clínico".
+   *
+   * Uma tela não pode dizer as duas coisas sobre o mesmo texto. É também o que
+   * o painel de prescrições já faz na ficha: em demonstração não exibe receita
+   * fictícia nenhuma.
+   */
+  if (recordSource?.isLive) {
+    /*
+     * Auditoria de LEITURA, antes de entregar o conteúdo.
+     *
+     * Nos outros módulos audita-se a escrita; no prontuário, abrir também é um
+     * ato. Esta é a **primeira chamada do produto que informa um paciente**:
+     * `/prontuarios` passa `null` porque é a listagem da clínica, e enquanto
+     * fosse a única superfície a trilha não sabia responder "quem leu o
+     * prontuário desta paciente?" — só "alguém abriu a lista".
+     *
+     * Pré-busca não é acesso: o corpo desta rota roda quando o navegador se
+     * adianta, e passar o mouse sobre o nome na listagem gravaria uma leitura de
+     * prontuário que ninguém fez. Ver `lib/audit/access-context.ts`, onde a
+     * medição está registrada.
+     */
+    if (!(await isPrefetchRender())) {
+      await recordSource.repository.logAccess(recordSource.clinicId, patient.id)
+    }
+
+    try {
+      records = await recordSource.repository.listCurrentByPatient(
+        recordSource.clinicId,
+        patient.id,
+        PATIENT_RECORD_LIMIT,
+      )
+    } catch (cause) {
+      /*
+       * O painel diz o que houve; a ficha continua de pé.
+       *
+       * Deixar propagar levaria junto cadastro, contatos, consentimentos e
+       * agenda — dez painéis apagados porque uma consulta clínica foi recusada.
+       */
+      if (!isMedicalRecordRepositoryError(cause)) throw cause
+      recordsError =
+        cause.reason === 'forbidden'
+          ? recordMessages.forbidden
+          : recordMessages.unavailable
+    }
+  }
+
   const consents = consentSource.isLive
     ? await consentSource.repository.listByPatient(
         consentSource.clinicId,
@@ -486,6 +573,23 @@ export default async function PatientProfilePage({
               </p>
             )}
           </Card>
+
+          {/*
+            O prontuário abre os painéis clínicos, e a ordem é a da leitura:
+            a evolução explica a prescrição e a alergia que vêm depois dela.
+          */}
+          {recordSource ? (
+            <PatientRecordsPanel
+              patientId={patient.id}
+              patientName={preferredName(patient)}
+              records={records.map(toMedicalRecordDto)}
+              canWrite={canWriteRecords}
+              isProfessional={professionalId !== null}
+              isLive={recordSource.isLive}
+              limit={PATIENT_RECORD_LIMIT}
+              loadError={recordsError}
+            />
+          ) : null}
 
           {prescriptionSource ? (
             <PatientPrescriptionsPanel

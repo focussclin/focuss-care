@@ -19,15 +19,13 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { formatShortDate, formatTime } from '@/lib/utils/date'
 
-import {
-  recordTypeOptions,
-  type MedicalRecordDto,
-} from '../schemas/record.schema'
+import type { MedicalRecordDto } from '../schemas/record.schema'
 import { RecordEditorModal } from './RecordEditorModal'
 import {
   encounterStatusLabel,
   formatEncounterMoment,
 } from './recordEncounterLabel'
+import { recordTypeLabel } from './recordTypeLabel'
 
 export interface RecordPatientOption {
   id: string
@@ -48,19 +46,6 @@ export interface ProntuariosScreenProps {
   canWrite: boolean
   isLive?: boolean
 }
-
-/**
- * Rótulo do tipo de registro.
- *
- * `Map<string, string>` de propósito: o DTO traz `recordType` como string
- * porque o enum do banco tem mais valores do que o formulário oferece
- * (`exam_request`, `referral`, `certificate`). Um registro importado ou criado
- * por outra via precisa aparecer na lista, não quebrar a tela — por isso o
- * fallback exibe o valor cru em vez de sumir com a linha.
- */
-const recordTypeLabels = new Map<string, string>(
-  recordTypeOptions.map((option) => [option.value, option.label]),
-)
 
 /**
  * Prontuários — feature **R-01**.
@@ -155,9 +140,8 @@ export function ProntuariosScreen({
                       {patientNames[record.patientId] ?? 'Paciente'}
                     </Link>
                     <p className="mt-0.5 text-label text-muted">
-                      {recordTypeLabels.get(record.recordType) ??
-                        record.recordType}{' '}
-                      · {record.authorName} ·{' '}
+                      {recordTypeLabel(record.recordType)} · {record.authorName}{' '}
+                      ·{' '}
                       {formatShortDate(new Date(record.createdAt))} às{' '}
                       {formatTime(new Date(record.createdAt))}
                     </p>
