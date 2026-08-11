@@ -34,13 +34,18 @@ describe('buildPatientSearchFilter', () => {
     )
   })
 
-  it('nunca busca cpf nem cns', () => {
-    // Buscar por CPF transformaria a listagem em oraculo de existencia de CPF
-    // por tentativa e erro. Fica para P-03, junto do consentimento.
+  it('busca CPF somente por igualdade exata dos onze digitos', () => {
     const filter = buildPatientSearchFilter('12345678901')
 
-    expect(filter).not.toContain('cpf')
+    expect(filter).toContain('cpf.eq."12345678901"')
+    expect(filter).not.toContain('cpf.like')
     expect(filter).not.toContain('cns')
+  })
+
+  it('aceita CPF formatado sem transformar documento parcial em filtro', () => {
+    const filter = buildPatientSearchFilter('123.456.789-01')
+
+    expect(filter).toContain('cpf.eq."12345678901"')
   })
 
   describe('injecao na gramatica do PostgREST', () => {
@@ -62,14 +67,15 @@ describe('buildPatientSearchFilter', () => {
 
       if (filter === null) return
 
-      // O filtro so pode ter as clausulas previstas: nome, e-mail e telefone.
+      // O filtro so pode ter as clausulas previstas: nome, e-mail, telefone e
+      // igualdade exata de CPF.
       // Qualquer virgula a mais e uma condicao a mais dentro do `or`.
       const clauses = filter.split(',')
 
-      expect(clauses.length).toBeLessThanOrEqual(3)
+      expect(clauses.length).toBeLessThanOrEqual(4)
       for (const clause of clauses) {
         expect(clause).toMatch(
-          /^(full_name\.ilike\."%.*%"|email\.ilike\."%.*%"|phone\.like\."[0-9]+%")$/,
+          /^(full_name\.ilike\."%.*%"|email\.ilike\."%.*%"|phone\.like\."[0-9]+%"|cpf\.eq\."[0-9]{11}")$/,
         )
       }
 

@@ -34,7 +34,7 @@ export interface CommandPaletteProps {
  * # O que ela faz, e o que ela declara não fazer
  *
  * Navega entre telas, abre os dois formulários que abrem por URL e busca
- * pacientes, agendamentos, cobranças e guias de convênio reais a partir de dois
+ * pacientes (nome, telefone ou CPF exato), agendamentos, cobranças e guias de convênio reais a partir de dois
  * caracteres.
  *
  * As buscas usam Server Actions com debounce e RLS no caminho, cada uma atrás da
@@ -327,7 +327,8 @@ export function CommandPalette({
                 O estado vazio precisa dizer o que É pesquisável e o que não é.
 
                 Paciente, agendamento e cobrança são achados pelo nome de quem
-                é atendido; a guia, também pelo número que a operadora devolveu.
+                é atendido; paciente também pode ser localizado pelo CPF exato;
+                a guia, pelo número que a operadora devolveu.
                 O prontuário continua fora: uma busca por termo nele seria
                 consulta a conteúdo clínico, e ela pede contrato próprio — quem
                 pode ler, o que a resposta pode mostrar e como o acesso é
@@ -335,7 +336,7 @@ export function CommandPalette({
               */}
               <p className="mt-1 text-label text-muted">
                 {query.trim().length < MIN_SEARCH_LENGTH
-                  ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome.'
+                  ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome ou CPF.'
                   : 'Pacientes, agendamentos, cobranças e guias (pelo número ou pelo paciente) são pesquisados por aqui. O prontuário não é pesquisado por termo.'}
               </p>
             </div>

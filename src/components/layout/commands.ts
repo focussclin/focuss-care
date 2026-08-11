@@ -10,10 +10,10 @@ import { navItems } from './navigation'
  * # O que entra aqui, e o que não entra
  *
  * Quatro coisas, e nada além delas: **navegação para rota que existe**,
- * **criação que abre um formulário de verdade**, busca real de pacientes,
- * agendamentos e cobranças por paciente.
+ * **criação que abre um formulário de verdade**, busca real de pacientes (nome,
+ * telefone ou CPF exato), agendamentos e cobranças por paciente.
  *
- * A busca por nome tem dois caminhos seguros: a paleta consulta a Server Action
+ * A busca por nome, telefone ou CPF exato tem dois caminhos seguros: a paleta consulta a Server Action
  * para mostrar resultados inline, e o comando `patientSearchCommand` leva a
  * `/pacientes?q=…` quando a pessoa prefere abrir a lista completa. Em ambos os
  * casos a consulta passa pelo servidor e pela RLS.

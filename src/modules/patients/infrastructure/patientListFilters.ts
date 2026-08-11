@@ -41,8 +41,11 @@ function quoteFilterValue(value: string): string {
  *    (ver `patientMapper`), e prefixo e a unica forma que um btree comum atende.
  *    Consequencia honesta: buscar pelos 4 ultimos digitos nao acha; buscar com
  *    DDD acha.
- *  - **`cpf` e `cns` ficam de fora, de proposito.** Buscar por CPF transformaria
- *    a listagem em oraculo de existencia de CPF por tentativa e erro. P-03.
+ *  - **`cpf` so entra por igualdade exata.** A recepcao frequentemente tem a
+ *    carteirinha em maos e precisa localizar o cadastro sem saber o nome. Um
+ *    prefixo ou infixo de CPF continuaria sendo um oraculo de existencia por
+ *    tentativa e erro, por isso somente os onze digitos completos viram
+ *    `cpf.eq`. `cns` permanece fora: a busca por CNS ainda pede contrato proprio.
  *
  * O termo e sanitizado DE NOVO aqui, mesmo ja tendo passado pelo schema da rota:
  * esta funcao e a ultima borda antes da string de query, e nao pode depender de
@@ -58,6 +61,12 @@ export function buildPatientSearchFilter(search: string | null): string | null {
   const digits = term.replace(/[^0-9]/g, '')
   if (digits.length >= MIN_PHONE_DIGITS) {
     clauses.push(`phone.like."${digits}%"`)
+  }
+
+  // CPF: somente igualdade completa. Nao usar `like` aqui: documento parcial
+  // nao e uma intencao de busca segura e poderia enumerar a base.
+  if (digits.length === 11) {
+    clauses.push(`cpf.eq."${digits}"`)
   }
 
   return clauses.join(',')

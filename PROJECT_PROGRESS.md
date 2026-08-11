@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2942 testes em 228 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2943 testes em 228 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -3538,7 +3538,7 @@ Teleatendimento continua fora do escopo.
 | --- | --- |
 | `unique (clinic_id, cpf)` no banco | Migration — bloqueio B1. Enquanto não existir, duas gravações simultâneas do mesmo CPF passam pela conferência da aplicação |
 | Fundir cadastros duplicados | A mensagem manda abrir a ficha que já existe, e é o certo hoje: fundir prontuário, agenda, cobrança e guia de duas fichas é fatia própria, e das grandes |
-| Busca por CPF | A listagem procura por nome e telefone. Achar pelo documento é o que a recepção faz com a carteirinha na mão, e cabe na paleta — mas é contrato de busca próprio |
+| Busca por CPF | **Resolvido em §8.57:** a busca global e a listagem aceitam os onze dígitos completos (formatados ou não) por igualdade exata; prefixo de CPF continua fora |
 | Consulta de CEP | Depende de serviço externo. O formulário declara que os campos são digitados |
 | `photo_url` | Segue de §8.35: depende de bucket de Storage, que não existe |
 
@@ -4186,6 +4186,30 @@ bloqueados**. Registro para a próxima auditoria não reabrir o que já foi deci
 
 **O que destrava mais produto de uma vez continua sendo aplicar as 18 migrations
 pendentes** — nenhuma linha de código as substitui.
+
+---
+
+## 8.57 Feature — Busca global de pacientes por CPF exato (11/08/2026)
+
+A recepção frequentemente recebe a carteirinha antes de saber o nome pelo qual
+o paciente foi cadastrado. A paleta e a listagem já consultavam nome, e-mail e
+telefone; tratar CPF como texto livre faria `123` e `123456` virarem um oráculo
+de existência de documento.
+
+Agora, quando os dígitos extraídos do termo somam exatamente onze, o filtro
+acrescenta `cpf.eq` com o valor normalizado. Pontuação de CPF é aceita, mas
+nunca participa da consulta. CNS continua fora até existir um contrato de busca
+próprio. O caminho permanece o mesmo e seguro:
+
+`Command Palette (Ctrl/Cmd+K) → searchPatientsAction → patientRepository.listPage → RLS`
+
+Não houve endpoint novo, migration ou dado pessoal adicional no DTO: o retorno
+continua limitado a `id` e nome, e a permissão segue `patient.read`. A busca por
+CPF parcial não é oferecida.
+
+Validação: filtro unitário e testes de injeção cobrem CPF formatado, igualdade
+exata e ausência de CNS; suíte completa, typecheck, lint e build seguem como
+critério de fechamento da fatia.
 
 ---
 
