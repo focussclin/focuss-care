@@ -26,6 +26,7 @@ import {
   formatEncounterMoment,
 } from './recordEncounterLabel'
 import { recordTypeLabel } from './recordTypeLabel'
+import { RecordVersionsModal } from './RecordVersionsModal'
 
 export interface RecordPatientOption {
   id: string
@@ -67,6 +68,8 @@ export function ProntuariosScreen({
   const router = useRouter()
   const [creating, setCreating] = useState(false)
   const [amending, setAmending] = useState<MedicalRecordDto | null>(null)
+  const [viewingVersions, setViewingVersions] =
+    useState<MedicalRecordDto | null>(null)
 
   return (
     <div className="flex flex-col gap-6">
@@ -156,11 +159,20 @@ export function ProntuariosScreen({
                     <StatusBadge tone={record.version > 1 ? 'pending' : 'neutral'}>
                       {`Versão ${record.version}`}
                     </StatusBadge>
-                    {record.version > 1 ? (
-                      <History
-                        aria-label={`Este registro foi corrigido ${record.version - 1} vez(es)`}
-                        className="size-4 text-muted"
-                      />
+
+                    {/*
+                      Ver as versões anteriores é `record.read` — a mesma
+                      permissão que abre esta tela. Não depende de `canWrite`:
+                      quem audita o prontuário raramente é quem o assina.
+                    */}
+                    {record.version > 1 && isLive ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setViewingVersions(record)}
+                      >
+                        <History aria-hidden className="size-4" />
+                        Ver histórico
+                      </Button>
                     ) : null}
                   </div>
                 </div>
@@ -230,6 +242,15 @@ export function ProntuariosScreen({
         patients={patients}
         isLive={isLive}
         onDone={() => router.refresh()}
+      />
+
+      <RecordVersionsModal
+        open={viewingVersions !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingVersions(null)
+        }}
+        record={viewingVersions}
+        isLive={isLive}
       />
 
       <RecordEditorModal

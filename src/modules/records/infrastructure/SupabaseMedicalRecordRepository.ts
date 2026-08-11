@@ -15,6 +15,7 @@ import type {
 import type {
   MedicalRecordRepository,
   NewRecordData,
+  RecordAccess,
 } from '../domain/MedicalRecordRepository'
 import { MedicalRecordRepositoryError } from '../domain/MedicalRecordRepositoryError'
 
@@ -380,25 +381,20 @@ export class SupabaseMedicalRecordRepository
    * Vale lembrar que hoje NENHUM evento persiste: a policy de `INSERT` de
    * `audit_log` recusa o membro autenticado (P-P6). A migration está proposta.
    */
-  async logAccess(
-    clinicId: string,
-    patientId: string | null,
-  ): Promise<void> {
+  async logAccess(clinicId: string, access: RecordAccess): Promise<void> {
     const { recordAuditEvent } = await import('@/lib/audit/audit-log')
 
     await recordAuditEvent(
       {
         action: 'record.read',
         entityType: 'patient',
-        entityId: patientId,
+        entityId: access.target === 'list' ? null : access.patientId,
         // Nenhum conteúdo clínico entra no evento — só o fato de ter havido
         // acesso. O "o quê" está no prontuário; aqui fica o "quem, quando".
-        // `target` distingue a leitura da lista da de um paciente — o
-        // `entity_id` nulo sozinho nao diria qual das duas foi.
-        after: {
-          scope: 'medical_records',
-          target: patientId ? 'patient' : 'list',
-        },
+        // `target` distingue as três leituras: a lista da clínica, a ficha de um
+        // paciente e a cadeia de versões de um registro corrigido. O `entity_id`
+        // sozinho não separaria as duas últimas.
+        after: { scope: 'medical_records', target: access.target },
       },
       { client: this.client },
     )

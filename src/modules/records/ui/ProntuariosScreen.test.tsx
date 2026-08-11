@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { MedicalRecordDto } from '../schemas/record.schema'
 import { ProntuariosScreen } from './ProntuariosScreen'
@@ -16,10 +22,21 @@ import { ProntuariosScreen } from './ProntuariosScreen'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
 
+const listRecordVersionsAction = vi.fn()
+vi.mock('../actions/listRecordVersions.action', () => ({
+  listRecordVersionsAction: (input: unknown) =>
+    listRecordVersionsAction(input),
+}))
+
 const PATIENT = '22222222-2222-4222-8222-222222222222'
 const ENCOUNTER = '44444444-4444-4444-8444-444444444444'
 
 afterEach(cleanup)
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  listRecordVersionsAction.mockResolvedValue({ ok: true, data: [] })
+})
 
 function record(overrides: Partial<MedicalRecordDto> = {}): MedicalRecordDto {
   return {
@@ -39,7 +56,10 @@ function record(overrides: Partial<MedicalRecordDto> = {}): MedicalRecordDto {
   }
 }
 
-function renderScreen(records: readonly MedicalRecordDto[]) {
+function renderScreen(
+  records: readonly MedicalRecordDto[],
+  overrides: { canWrite?: boolean; isLive?: boolean } = {},
+) {
   render(
     <ProntuariosScreen
       records={records}
@@ -47,6 +67,7 @@ function renderScreen(records: readonly MedicalRecordDto[]) {
       patientNames={{ [PATIENT]: 'João da Silva' }}
       canWrite
       isLive
+      {...overrides}
     />,
   )
 }
@@ -97,6 +118,51 @@ describe('registro sem vínculo', () => {
 
     expect(screen.queryByText(/atendimento de/i)).toBeNull()
     expect(screen.queryByText(/não pôde ser carregado/i)).toBeNull()
+  })
+})
+
+describe('o histórico de versões', () => {
+  it('é oferecido em registro corrigido', () => {
+    renderScreen([record({ version: 2 })])
+
+    expect(screen.getByRole('button', { name: /ver histórico/i })).toBeTruthy()
+  })
+
+  it('não aparece na primeira versão', () => {
+    renderScreen([record()])
+
+    expect(screen.queryByRole('button', { name: /ver histórico/i })).toBeNull()
+  })
+
+  it('não depende de poder escrever', () => {
+    /*
+     * Ver as versões anteriores é `record.read` — a mesma permissão que abre
+     * esta tela. Quem audita o prontuário raramente é quem o assina.
+     */
+    renderScreen([record({ version: 2 })], { canWrite: false })
+
+    expect(screen.getByRole('button', { name: /ver histórico/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /corrigir/i })).toBeNull()
+  })
+
+  it('em demonstração não é oferecido', () => {
+    // Sem sessão a action recusaria, e o erro diria que o produto está quebrado
+    // quando ele só está sem banco.
+    renderScreen([record({ version: 2 })], { isLive: false })
+
+    expect(screen.queryByRole('button', { name: /ver histórico/i })).toBeNull()
+  })
+
+  it('abre pedindo a cadeia daquele registro', async () => {
+    renderScreen([record({ version: 2 })])
+
+    fireEvent.click(screen.getByRole('button', { name: /ver histórico/i }))
+
+    await waitFor(() =>
+      expect(listRecordVersionsAction).toHaveBeenCalledWith({
+        recordId: record().id,
+      }),
+    )
   })
 })
 

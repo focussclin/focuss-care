@@ -13,6 +13,24 @@ export interface NewRecordData {
 }
 
 /**
+ * QUAL leitura de prontuário aconteceu.
+ *
+ * O alvo é **declarado, não deduzido**. Antes ele saía de `patientId ?? 'list'`,
+ * o que bastava enquanto havia duas superfícies: a listagem da clínica e a ficha
+ * de um paciente. O histórico de versões é uma terceira, e é sobre o mesmo
+ * paciente da ficha — deduzir do id devolveria `patient` para os dois, e a
+ * trilha não saberia distinguir "abriu a ficha" de "leu as versões anteriores de
+ * um registro corrigido", que é exatamente a pergunta que se faz numa
+ * investigação.
+ *
+ * O tipo é discriminado para que a combinação inválida não exista: não há como
+ * registrar leitura de versões sem paciente, nem a listagem da clínica com um.
+ */
+export type RecordAccess =
+  | { target: 'list' }
+  | { target: 'patient' | 'versions'; patientId: string }
+
+/**
  * PORTA do prontuário.
  *
  * # Não existe `update` e não existe `delete`
@@ -111,17 +129,17 @@ export interface MedicalRecordRepository {
   ): Promise<MedicalRecord>
 
   /**
-   * Registra que alguém LEU o prontuário deste paciente.
+   * Registra que alguém LEU o prontuário.
    *
    * Existe na porta, e não escondido no adapter, porque é requisito de
    * conformidade e não detalhe de implementação: quem trocar o backend precisa
    * saber que isto tem de continuar acontecendo.
    *
-   * **`patientId` nulo é a listagem**, não um paciente. A rota `/prontuarios`
-   * mostra os registros recentes da clínica inteira, e ali não há um alvo: o
-   * evento diz que houve leitura, e o escopo vai em `after`. Antes isto era a
-   * string `'all'`, que o Postgres recusava — `entity_id` é `uuid`, e a linha
-   * inteira era descartada em silêncio.
+   * **A listagem não tem paciente**, e por isso `RecordAccess` é discriminado: a
+   * rota `/prontuarios` mostra os registros recentes da clínica inteira, e ali
+   * não há um alvo — o evento diz que houve leitura e o escopo vai em `after`.
+   * Antes isto era a string `'all'` no lugar do id, que o Postgres recusava
+   * (`entity_id` é `uuid`), e a linha inteira era descartada em silêncio.
    */
-  logAccess(clinicId: string, patientId: string | null): Promise<void>
+  logAccess(clinicId: string, access: RecordAccess): Promise<void>
 }

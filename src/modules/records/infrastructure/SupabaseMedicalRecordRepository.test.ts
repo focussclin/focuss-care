@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { SupabaseMedicalRecordRepository } from './SupabaseMedicalRecordRepository'
 
+/*
+ * `logAccess` importa `audit-log` DINAMICAMENTE, dentro do método. O factory
+ * abaixo só roda na primeira chamada — muito depois de este arquivo terminar de
+ * carregar —, então a constante já existe quando ele a usa.
+ */
+const recordAuditEvent = vi.fn(async (event: unknown) => {
+  void event
+  return { recorded: false as const, reason: 'test' }
+})
+vi.mock('@/lib/audit/audit-log', () => ({
+  recordAuditEvent: (event: unknown) => recordAuditEvent(event),
+}))
+
 /**
  * Contrato do prontuário (R-01).
  *
@@ -67,10 +80,19 @@ function createFakeClient(results: {
   failingTable?: string
   /** Resposta de `maybeSingle` por tabela, quando a ordem não basta. */
   singleByTable?: Record<string, unknown>
+  /**
+   * Linhas devolvidas em SEQUÊNCIA por `medical_records.maybeSingle`.
+   *
+   * A cadeia de versões é lida salto a salto, seguindo `supersedes_id`: sem uma
+   * resposta diferente por salto, não há como provar nem a ordem nem que cada
+   * salto filtra a clínica.
+   */
+  chain?: unknown[]
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
   let maybeSingleCount = 0
+  let chainIndex = 0
 
   const from = vi.fn((table: string) => {
     queryIndex += 1
@@ -113,6 +135,12 @@ function createFakeClient(results: {
 
       if (results.singleByTable && table in results.singleByTable) {
         return { data: results.singleByTable[table], error: null }
+      }
+
+      if (results.chain && table === 'medical_records') {
+        const row = results.chain[chainIndex] ?? null
+        chainIndex += 1
+        return { data: row, error: null }
       }
 
       maybeSingleCount += 1
@@ -657,6 +685,56 @@ describe('leitura', () => {
     )
   })
 
+  it('a cadeia de versões vem da mais nova para a mais antiga', async () => {
+    const PREVIOUS = '7a1f0000-0000-4000-8000-00000000abcd'
+    const fake = createFakeClient({
+      chain: [
+        recordRow({ id: RECORD, version: 2, supersedes_id: PREVIOUS }),
+        recordRow({ id: PREVIOUS, version: 1, supersedes_id: null }),
+      ],
+      rowsByTable: { professionals: [{ id: AUTHOR, display_name: 'Dra. Helena' }] },
+    })
+
+    const versions = await new SupabaseMedicalRecordRepository(
+      fake.client,
+    ).listVersions(CLINIC, RECORD)
+
+    // A ordem é o que a tela usa para dizer qual versão vale hoje.
+    expect(versions.map((entry) => entry.version)).toEqual([2, 1])
+    expect(versions[1].id).toBe(PREVIOUS)
+  })
+
+  it('cada salto da cadeia confere a clínica ativa', async () => {
+    const PREVIOUS = '7a1f0000-0000-4000-8000-00000000abcd'
+    const fake = createFakeClient({
+      chain: [
+        recordRow({ id: RECORD, version: 2, supersedes_id: PREVIOUS }),
+        recordRow({ id: PREVIOUS, version: 1, supersedes_id: null }),
+      ],
+      rowsByTable: { professionals: [] },
+    })
+
+    await new SupabaseMedicalRecordRepository(fake.client).listVersions(
+      CLINIC,
+      RECORD,
+    )
+
+    /*
+     * O id do salto seguinte sai de `supersedes_id` da linha anterior — dado do
+     * banco, mas de uma linha que a RLS já entregou. Repetir o filtro em cada
+     * salto é o que impede a cadeia de sair da clínica caso a coluna aponte para
+     * um registro de outro inquilino.
+     */
+    const clinicFilters = fake
+      .ofTable('medical_records')
+      .filter(
+        (call) => call.method === 'eq' && call.args[0] === 'clinic_id',
+      )
+
+    expect(clinicFilters).toHaveLength(2)
+    expect(clinicFilters.every((call) => call.args[1] === CLINIC)).toBe(true)
+  })
+
   it('a cadeia de versões tem teto — cadeia corrompida não trava o request', async () => {
     // `supersedes_id` sempre apontando para o proprio id = ciclo.
     const fake = createFakeClient({
@@ -668,5 +746,61 @@ describe('leitura', () => {
     ).listVersions(CLINIC, RECORD)
 
     expect(versions.length).toBeLessThanOrEqual(50)
+  })
+})
+
+describe('auditoria de leitura', () => {
+  it('a cadeia de versões é um acesso PRÓPRIO, distinto de abrir a ficha', async () => {
+    /*
+     * Sem alvo próprio, abrir a ficha e ler o que mudou num registro corrigido
+     * chegariam à trilha como o mesmo evento. A pergunta que se faz numa
+     * investigação é a segunda, e ela ficaria sem resposta.
+     */
+    const fake = createFakeClient({ rows: [] })
+
+    await new SupabaseMedicalRecordRepository(fake.client).logAccess(CLINIC, {
+      target: 'versions',
+      patientId: PATIENT,
+    })
+
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'record.read',
+        entityId: PATIENT,
+        after: { scope: 'medical_records', target: 'versions' },
+      }),
+    )
+  })
+
+  it('a listagem da clínica não aponta para paciente nenhum', async () => {
+    // `entity_id` e `uuid`: aqui ja se passou a string 'all', e o Postgres
+    // descartava a linha inteira em silencio.
+    const fake = createFakeClient({ rows: [] })
+
+    await new SupabaseMedicalRecordRepository(fake.client).logAccess(CLINIC, {
+      target: 'list',
+    })
+
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityId: null,
+        after: { scope: 'medical_records', target: 'list' },
+      }),
+    )
+  })
+
+  it('nenhum conteúdo clínico entra no evento', async () => {
+    const fake = createFakeClient({ rows: [] })
+
+    await new SupabaseMedicalRecordRepository(fake.client).logAccess(CLINIC, {
+      target: 'patient',
+      patientId: PATIENT,
+    })
+
+    const event = recordAuditEvent.mock.calls.at(-1)?.[0]
+
+    // O "o que" esta no prontuario, sob a RLS da tabela; aqui fica o "quem,
+    // quando" — `audit_log` e legivel por `audit.read`, que `record.read` nao e.
+    expect(JSON.stringify(event)).not.toContain('content')
   })
 })

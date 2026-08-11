@@ -16,6 +16,7 @@ import {
   formatEncounterMoment,
 } from './recordEncounterLabel'
 import { recordTypeLabel } from './recordTypeLabel'
+import { RecordVersionsModal } from './RecordVersionsModal'
 
 export interface PatientRecordsPanelProps {
   patientId: string
@@ -81,6 +82,8 @@ export function PatientRecordsPanel({
   const router = useRouter()
   const [creating, setCreating] = useState(false)
   const [amending, setAmending] = useState<MedicalRecordDto | null>(null)
+  const [viewingVersions, setViewingVersions] =
+    useState<MedicalRecordDto | null>(null)
 
   /*
    * Escrever exige as duas portas E banco. Falha de leitura também fecha o
@@ -199,11 +202,22 @@ export function PatientRecordsPanel({
                   <StatusBadge tone={record.version > 1 ? 'pending' : 'neutral'}>
                     {`Versão ${record.version}`}
                   </StatusBadge>
-                  {record.version > 1 ? (
-                    <History
-                      aria-label={`Este registro foi corrigido ${record.version - 1} vez(es)`}
-                      className="size-4 text-muted"
-                    />
+
+                  {/*
+                    O gatilho do histórico substituiu um ícone que só anunciava
+                    "corrigido N vezes" e não levava a lugar nenhum. Ele aparece
+                    apenas onde há o que ver: com uma versão só, a cadeia é a
+                    própria linha, e um botão que abrisse um item repetido seria
+                    trabalho oferecido em troca de nada.
+                  */}
+                  {record.version > 1 && isLive ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setViewingVersions(record)}
+                    >
+                      <History aria-hidden className="size-4" />
+                      Ver histórico
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -275,6 +289,15 @@ export function PatientRecordsPanel({
         patient={{ id: patientId, name: patientName }}
         isLive={isLive}
         onDone={() => router.refresh()}
+      />
+
+      <RecordVersionsModal
+        open={viewingVersions !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingVersions(null)
+        }}
+        record={viewingVersions}
+        isLive={isLive}
       />
 
       <RecordEditorModal

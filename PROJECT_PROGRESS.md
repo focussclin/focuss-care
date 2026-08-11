@@ -3127,6 +3127,92 @@ Teleatendimento continua fora do escopo.
 
 ---
 
+## 8.39 Feature — Histórico de versões do prontuário (11/08/2026)
+
+Reauditei as pendências registradas. As de fora continuam bloqueadas por coisa
+que TypeScript não resolve — anexos clínicos sem bucket, IA, P-WD, P-RPC, as 18
+migrations não aplicadas. A que sobrou local e destravada era a mais incômoda:
+`listVersions` existia na porta, no adapter e nos testes, e **nenhuma tela a
+chamava**.
+
+O efeito é o que esta fatia corrige. O módulo repete em cinco arquivos que o
+prontuário é append-only — corrigir insere uma versão nova e a anterior continua
+legível. Só que o selo dizia "Versão 3" e as duas primeiras não tinham por onde
+ser vistas: "não editamos, versionamos" era uma afirmação do código sobre si
+mesmo, sem superfície que a comprovasse. O produto pagava o custo do
+versionamento e não entregava a garantia que ele compra.
+
+### O gatilho substituiu um ícone que não levava a lugar nenhum
+
+Ao lado do selo havia um ícone com `aria-label` "Este registro foi corrigido N
+vez(es)". Ele anunciava que existia algo a ver e não oferecia o ver — a pior
+combinação possível. Virou botão, e ele aparece **só onde há o que ver**: com uma
+versão só, a cadeia é a própria linha.
+
+Aparece nas duas telas que mostram o selo, e **não depende de `canWrite`**: ver
+versões anteriores é `record.read`, a mesma permissão que abre as telas. Quem
+audita o prontuário raramente é quem o assina.
+
+### A trilha passa a distinguir três leituras
+
+`logAccess` deduzia o alvo de `patientId ?? 'list'`, o que bastava enquanto havia
+duas superfícies. O histórico é uma terceira, e é sobre o mesmo paciente da
+ficha: deduzir devolveria `patient` para as duas, e a trilha não separaria "abriu
+a ficha" de "foi ver o que mudou num registro corrigido" — que é exatamente a
+pergunta de uma investigação.
+
+O alvo passou a ser **declarado**, num tipo discriminado que torna a combinação
+inválida inexpressável: não há como registrar leitura de versões sem paciente,
+nem a listagem da clínica com um.
+
+O registro sai por `afterSuccess`, que roda depois da resposta: quem está com o
+paciente na frente não espera a trilha para ver o que foi corrigido. Continua
+valendo o caveat de §8.38 — nenhum evento persiste enquanto a policy de `INSERT`
+de `audit_log` recusar o membro autenticado (P-P6).
+
+### A diferença entre as versões NÃO é destacada
+
+Comparar duas evoluções palavra a palavra e pintar o que mudou seria uma leitura
+da aplicação sobre conteúdo clínico. Um destaque no lugar errado — um "sem" fora
+do trecho marcado, uma negação que some — muda o sentido do que se lê, e quem lê
+acredita no destaque. As versões vêm inteiras, na ordem, cada uma com seu autor e
+sua hora; a comparação fica com quem tem formação para fazê-la.
+
+Também não há "restaurar": voltar a uma versão anterior é escrever uma nova, e é
+o que a correção já faz. Um botão assim sugeriria que a cadeia anda para trás.
+
+### O que a tela afirma quando não sabe
+
+Cadeia vazia é registro ausente **nesta clínica**, e a action traduz isso para
+não encontrado — resposta idêntica à de um id que nunca existiu, que é o que
+impede a tela de virar sonda de existência de registro alheio.
+
+Falha de leitura **não vira lista vazia**. Num prontuário, "nenhuma versão
+anterior" sobre um registro corrigido é a afirmação mais errada disponível: diria
+que a conduta sempre foi aquela. O carregamento se anuncia, a falha se anuncia, e
+nenhum dos dois é confundido com ausência de correção.
+
+Resposta atrasada é descartada por `requestId`, como no seletor de vínculo. Aqui
+o motivo é mais duro que evitar um piscar de tela: seria o texto de uma pessoa
+exibido sob o cabeçalho do registro de outra.
+
+### Estado
+
+`records` passa a **231 testes em 17 arquivos** (+36), e o projeto a **2577
+testes em 201 arquivos**. Typecheck, lint, build e suíte completa estão limpos.
+Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Assinatura clínica das versões | `signed_at` existe e nenhuma versão o preenche. Assinar exige certificado e emissor externo; um botão "assinar" que só carimbasse data seria a mentira mais cara deste módulo |
+| Comparação entre versões | Destaque de diferença sobre texto clínico é leitura da aplicação sobre o registro. Se um dia entrar, entra como recurso declarado — não como enfeite da lista |
+| Auditar a leitura dos outros painéis clínicos | Segue como em §8.38: prescrição, alergia e sinais vitais não registram acesso, e estendê-los é decisão de produto sobre o que conta como acesso clínico |
+| Anexos clínicos | `clinical_attachments` está no schema e **não há bucket**. Bloqueio externo |
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

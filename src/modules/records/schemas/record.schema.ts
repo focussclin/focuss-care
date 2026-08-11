@@ -32,6 +32,15 @@ export const recordMessages = {
     'O atendimento escolhido não é deste paciente. Selecione o atendimento novamente.',
   encountersUnavailable:
     'Não foi possível carregar os atendimentos deste paciente. O registro pode ser salvo sem vínculo.',
+  /**
+   * O histórico não carregou — e a mensagem NÃO oferece consolo.
+   *
+   * Dizer "não há versões anteriores" quando a consulta falhou seria afirmar que
+   * o registro nunca foi corrigido. Num prontuário, essa afirmação é a diferença
+   * entre "a conduta sempre foi esta" e "a conduta foi alterada às 14h".
+   */
+  versionsUnavailable:
+    'Não foi possível carregar as versões deste registro. Tente novamente.',
   forbidden: 'Você não tem acesso ao prontuário desta clínica.',
   notFound: 'Este registro não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
@@ -135,6 +144,20 @@ export const listRecordEncountersSchema = z.object({
 export type ListRecordEncountersInput = z.infer<
   typeof listRecordEncountersSchema
 >
+
+/**
+ * A cadeia de versões de UM registro.
+ *
+ * `recordId` é o único campo, e é de propósito: o paciente e a clínica saem do
+ * servidor. Aceitar `patientId` aqui daria ao cliente a chance de dizer de quem
+ * é o registro que ele está pedindo — e a resposta traz o texto clínico das
+ * versões anteriores.
+ */
+export const listRecordVersionsSchema = z.object({
+  recordId: z.uuid(recordMessages.unexpected),
+})
+
+export type ListRecordVersionsInput = z.infer<typeof listRecordVersionsSchema>
 
 /**
  * O atendimento como o formulário e a lista o exibem.

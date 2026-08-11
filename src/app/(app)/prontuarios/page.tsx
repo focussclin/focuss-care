@@ -57,7 +57,7 @@ export default async function ProntuariosPage() {
    * ver o prontuário do paciente que está na frente dele.
    */
   /*
-   * `null` porque esta tela e a LISTAGEM, nao um paciente.
+   * `target: 'list'` porque esta tela e a LISTAGEM, nao um paciente.
    *
    * Aqui passava a string 'all', e `audit_log.entity_id` e `uuid`: o Postgres
    * recusava a linha inteira com 22P02 e o evento sumia — a auditoria e
@@ -70,7 +70,9 @@ export default async function ProntuariosPage() {
    * eram exatamente isso. Ver `lib/audit/access-context.ts`.
    */
   if (!(await isPrefetchRender())) {
-    await recordSource.repository.logAccess(recordSource.clinicId, null)
+    await recordSource.repository.logAccess(recordSource.clinicId, {
+      target: 'list',
+    })
   }
 
   const [records, patientPage] = await Promise.all([

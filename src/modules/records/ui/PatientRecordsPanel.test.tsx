@@ -34,6 +34,12 @@ vi.mock('../actions/listPatientEncounters.action', () => ({
     listPatientEncountersAction(input),
 }))
 
+const listRecordVersionsAction = vi.fn()
+vi.mock('../actions/listRecordVersions.action', () => ({
+  listRecordVersionsAction: (input: unknown) =>
+    listRecordVersionsAction(input),
+}))
+
 const { PatientRecordsPanel } = await import('./PatientRecordsPanel')
 const { PATIENT_RECORD_LIMIT } = await import('../schemas/record.schema')
 
@@ -74,6 +80,7 @@ beforeEach(() => {
   createRecordAction.mockResolvedValue({ ok: true, data: {} })
   amendRecordAction.mockResolvedValue({ ok: true, data: {} })
   listPatientEncountersAction.mockResolvedValue({ ok: true, data: [encounter] })
+  listRecordVersionsAction.mockResolvedValue({ ok: true, data: [] })
 })
 
 function renderPanel(overrides: Partial<PanelProps> = {}) {
@@ -108,11 +115,35 @@ describe('a lista mostra o registro clínico', () => {
     expect(screen.getByText('Versão 1')).toBeTruthy()
   })
 
-  it('registro corrigido diz quantas vezes foi', () => {
+  it('registro corrigido oferece o histórico das versões', () => {
+    /*
+     * Antes havia aqui um ícone que anunciava "corrigido 2 vezes" e não levava
+     * a lugar nenhum: informava que existia algo a ver, sem oferecer o ver.
+     */
     renderPanel({ records: [medicalRecord({ version: 3 })] })
 
     expect(screen.getByText('Versão 3')).toBeTruthy()
-    expect(screen.getByLabelText(/corrigido 2 vez/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ver histórico/i })).toBeTruthy()
+  })
+
+  it('registro em primeira versão não oferece histórico', () => {
+    // A cadeia é a própria linha: um botão que abrisse um item repetido seria
+    // trabalho oferecido em troca de nada.
+    renderPanel()
+
+    expect(screen.queryByRole('button', { name: /ver histórico/i })).toBeNull()
+  })
+
+  it('abrir o histórico pede a cadeia daquele registro', async () => {
+    renderPanel({ records: [medicalRecord({ version: 3 })] })
+
+    fireEvent.click(screen.getByRole('button', { name: /ver histórico/i }))
+
+    await waitFor(() =>
+      expect(listRecordVersionsAction).toHaveBeenCalledWith({
+        recordId: medicalRecord().id,
+      }),
+    )
   })
 
   it('vazio não afirma que o paciente nunca foi atendido', () => {

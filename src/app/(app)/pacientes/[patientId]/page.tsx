@@ -346,7 +346,10 @@ export default async function PatientProfilePage({
      * medição está registrada.
      */
     if (!(await isPrefetchRender())) {
-      await recordSource.repository.logAccess(recordSource.clinicId, patient.id)
+      await recordSource.repository.logAccess(recordSource.clinicId, {
+        target: 'patient',
+        patientId: patient.id,
+      })
     }
 
     try {
