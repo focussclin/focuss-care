@@ -1,6 +1,13 @@
 'use client'
 
-import { CalendarOff, Info, Plus, UserPlus } from 'lucide-react'
+import {
+  CalendarOff,
+  Info,
+  Plus,
+  RotateCcw,
+  UserMinus,
+  UserPlus,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition, type FormEvent } from 'react'
 
@@ -16,6 +23,8 @@ import {
   answerTimeOffAction,
   createEmployeeAction,
   createTimeOffAction,
+  reinstateEmployeeAction,
+  terminateEmployeeAction,
 } from '../actions/staff.action'
 import {
   contractTypeOptions,
@@ -77,6 +86,18 @@ export function StaffPanel({
   const [fullName, setFullName] = useState('')
   const [roleTitle, setRoleTitle] = useState('')
   const [contractType, setContractType] = useState<string>('clt')
+  const [hireDate, setHireDate] = useState('')
+
+  /**
+   * Quem esta com o formulario de desligamento aberto, e a data escolhida.
+   *
+   * Um estado so para os dois: abrir o de outra pessoa fecha o anterior, e a
+   * data digitada nao sobrevive a troca — ela pertence AQUELE desligamento.
+   */
+  const [terminating, setTerminating] = useState<{
+    id: string
+    date: string
+  } | null>(null)
 
   const [employeeId, setEmployeeId] = useState('')
   const [kind, setKind] = useState<string>('ferias')
@@ -84,6 +105,15 @@ export function StaffPanel({
   const [endsOn, setEndsOn] = useState('')
 
   const editable = canManage && isLive
+
+  /*
+   * Hoje, em 'YYYY-MM-DD'.
+   *
+   * Serve de padrao e de teto do campo de data: o desligamento e registrado no
+   * dia em que acontece, e o `max` do input recusa o futuro antes de a action
+   * precisar recusar.
+   */
+  const today = toIsoDay(new Date())
 
   function run(operation: () => Promise<{ ok: boolean; message?: string }>) {
     setError(null)
@@ -111,13 +141,39 @@ export function StaffPanel({
         roleTitle,
         contractType,
         professionalId: '',
+        hireDate,
       })
 
       if (result.ok) {
         setFullName('')
         setRoleTitle('')
+        setHireDate('')
         setAddingEmployee(false)
       }
+
+      return { ok: result.ok, message: result.ok ? undefined : result.error.message }
+    })
+  }
+
+  function handleTerminate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!terminating) return
+
+    run(async () => {
+      const result = await terminateEmployeeAction({
+        employeeId: terminating.id,
+        terminationDate: terminating.date,
+      })
+
+      if (result.ok) setTerminating(null)
+
+      return { ok: result.ok, message: result.ok ? undefined : result.error.message }
+    })
+  }
+
+  function handleReinstate(id: string) {
+    run(async () => {
+      const result = await reinstateEmployeeAction({ employeeId: id })
 
       return { ok: result.ok, message: result.ok ? undefined : result.error.message }
     })
@@ -202,6 +258,13 @@ export function StaffPanel({
                 label: option.label,
               }))}
             />
+            <TextField
+              label="Admissão"
+              type="date"
+              value={hireDate}
+              onChange={(event) => setHireDate(event.target.value)}
+              hint="Opcional. É ela que confere a ordem do desligamento."
+            />
             <div className="sm:col-span-4 flex justify-end">
               <Button type="submit" disabled={isPending}>
                 <Plus aria-hidden className="size-4" />
@@ -220,23 +283,95 @@ export function StaffPanel({
         ) : (
           <ul className="divide-y divide-border-card border-t border-border-card">
             {employees.map((employee) => (
-              <li
-                key={employee.id}
-                className="flex flex-wrap items-center gap-3 px-5 py-3.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-aux font-semibold text-foreground">
-                    {employee.fullName}
-                  </p>
-                  <p className="truncate text-label text-muted">
-                    {employee.roleTitle ?? 'Sem cargo definido'} ·{' '}
-                    {contractLabels.get(employee.contractType) ??
-                      employee.contractType}
-                  </p>
+              <li key={employee.id} className="flex flex-col gap-3 px-5 py-3.5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-aux font-semibold text-foreground">
+                      {employee.fullName}
+                    </p>
+                    <p className="truncate text-label text-muted">
+                      {employee.roleTitle ?? 'Sem cargo definido'} ·{' '}
+                      {contractLabels.get(employee.contractType) ??
+                        employee.contractType}
+                    </p>
+                    {/*
+                      O periodo do vinculo, quando ele existe.
+
+                      Cadastro anterior a esta fatia nao tem admissao, e a linha
+                      simplesmente nao aparece: um travessao no lugar da data
+                      pareceria campo obrigatorio em branco.
+                    */}
+                    {employee.hireDate || employee.terminationDate ? (
+                      <p className="truncate text-label text-muted">
+                        {employee.hireDate
+                          ? `Admitido em ${formatDay(employee.hireDate)}`
+                          : 'Admissão não registrada'}
+                        {employee.terminationDate
+                          ? ` · desligado em ${formatDay(employee.terminationDate)}`
+                          : ''}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <StatusBadge tone={employee.isActive ? 'positive' : 'negative'}>
+                    {employee.isActive ? 'Ativo' : 'Desligado'}
+                  </StatusBadge>
+
+                  {editable ? (
+                    employee.isActive ? (
+                      <Button
+                        variant="secondary"
+                        disabled={isPending}
+                        onClick={() =>
+                          setTerminating({ id: employee.id, date: today })
+                        }
+                      >
+                        <UserMinus aria-hidden className="size-4" />
+                        Registrar desligamento
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        disabled={isPending}
+                        onClick={() => handleReinstate(employee.id)}
+                      >
+                        <RotateCcw aria-hidden className="size-4" />
+                        Reverter
+                      </Button>
+                    )
+                  ) : null}
                 </div>
-                <StatusBadge tone={employee.isActive ? 'positive' : 'negative'}>
-                  {employee.isActive ? 'Ativo' : 'Desligado'}
-                </StatusBadge>
+
+                {terminating?.id === employee.id ? (
+                  <form
+                    onSubmit={handleTerminate}
+                    className="flex flex-wrap items-end gap-3 rounded-field border border-border-card bg-background p-3"
+                  >
+                    <TextField
+                      label="Data do desligamento"
+                      type="date"
+                      max={today}
+                      value={terminating.date}
+                      onChange={(event) =>
+                        setTerminating({
+                          id: employee.id,
+                          date: event.target.value,
+                        })
+                      }
+                      hint="Não aceita data futura: o vínculo é encerrado agora."
+                    />
+                    <Button type="submit" disabled={isPending}>
+                      {isPending ? 'Salvando…' : 'Confirmar desligamento'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={isPending}
+                      onClick={() => setTerminating(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </form>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -393,4 +528,22 @@ export function StaffPanel({
       </p>
     </div>
   )
+}
+
+/** 'YYYY-MM-DD' no fuso local — o mesmo formato que o `<input type="date">` usa. */
+function toIsoDay(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+/**
+ * 'YYYY-MM-DD' -> '12/03/2026'.
+ *
+ * A hora local explicita evita que o fuso devolva o dia anterior: a data e dia
+ * de calendario, e `new Date('2026-03-12')` seria meia-noite em UTC.
+ */
+function formatDay(value: string): string {
+  return formatShortDate(new Date(`${value}T00:00:00`))
 }

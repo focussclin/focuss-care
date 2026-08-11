@@ -39,7 +39,27 @@ function timeOffRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function createFakeClient(results: { updated?: unknown } = {}) {
+function employeeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: EMPLOYEE,
+    full_name: 'Ana Ribeiro',
+    role_title: 'Recepcionista',
+    contract_type: 'clt',
+    is_active: true,
+    professional_id: null,
+    hire_date: null,
+    termination_date: null,
+    ...overrides,
+  }
+}
+
+function createFakeClient(
+  results: {
+    updated?: unknown
+    /** Linha devolvida pela LEITURA previa do desligamento. */
+    employee?: unknown
+  } = {},
+) {
   const calls: RecordedCall[] = []
 
   const from = vi.fn((table: string) => {
@@ -57,17 +77,7 @@ function createFakeClient(results: { updated?: unknown } = {}) {
       calls.push({ table, method: 'single', args: [] })
 
       if (table === 'employees') {
-        return {
-          data: {
-            id: EMPLOYEE,
-            full_name: 'Ana Ribeiro',
-            role_title: 'Recepcionista',
-            contract_type: 'clt',
-            is_active: true,
-            professional_id: null,
-          },
-          error: null,
-        }
+        return { data: employeeRow(), error: null }
       }
 
       return { data: timeOffRow(), error: null }
@@ -75,6 +85,19 @@ function createFakeClient(results: { updated?: unknown } = {}) {
 
     query.maybeSingle = async () => {
       calls.push({ table, method: 'maybeSingle', args: [] })
+
+      if (table === 'employees') {
+        const isUpdate = own().some((call) => call.method === 'update')
+
+        // Antes do update, a leitura previa da admissao; depois, a linha nova.
+        return {
+          data: isUpdate
+            ? ('updated' in results ? results.updated : employeeRow())
+            : ('employee' in results ? results.employee : employeeRow()),
+          error: null,
+        }
+      }
+
       return {
         data: 'updated' in results ? results.updated : timeOffRow(),
         error: null,
@@ -132,6 +155,7 @@ describe('funcionários', () => {
       roleTitle: 'Recepcionista',
       contractType: 'clt',
       professionalId: null,
+      hireDate: null,
     })
 
     const insert = fake
@@ -271,5 +295,153 @@ describe('createTimeOffSchema', () => {
     })
 
     expect(result.success).toBe(true)
+  })
+})
+
+/**
+ * Desligamento — feature **S-03**.
+ *
+ * As duas colunas existiam e nada as escrevia: o cadastro nascia ativo e não
+ * havia caminho para desligar ninguém.
+ */
+describe('desligamento', () => {
+  it('grava a data e deriva `is_active` DELA', async () => {
+    /*
+     * Com dois caminhos independentes existiria a linha "ativo, desligado em
+     * 12/03", e nenhuma tela saberia qual das duas afirmações obedecer.
+     */
+    const fake = createFakeClient({
+      employee: employeeRow({ hire_date: '2026-03-01' }),
+      updated: employeeRow({
+        hire_date: '2026-03-01',
+        termination_date: '2026-08-10',
+        is_active: false,
+      }),
+    })
+
+    const employee = await new SupabaseTeamRepository(
+      fake.client,
+    ).setEmployeeTermination(CLINIC, EMPLOYEE, new Date('2026-08-10T00:00:00'))
+
+    const patch = fake
+      .ofTable('employees')
+      .find((call) => call.method === 'update')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(patch.termination_date).toBe('2026-08-10')
+    expect(patch.is_active).toBe(false)
+    expect(employee.isActive).toBe(false)
+  })
+
+  it('reverter apaga a data e devolve a pessoa à equipe', async () => {
+    const fake = createFakeClient({
+      employee: employeeRow({ termination_date: '2026-08-10', is_active: false }),
+      updated: employeeRow(),
+    })
+
+    const employee = await new SupabaseTeamRepository(
+      fake.client,
+    ).setEmployeeTermination(CLINIC, EMPLOYEE, null)
+
+    const patch = fake
+      .ofTable('employees')
+      .find((call) => call.method === 'update')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(patch.termination_date).toBeNull()
+    expect(patch.is_active).toBe(true)
+    expect(employee.terminationDate).toBeNull()
+  })
+
+  it('recusa data anterior à admissão sem escrever nada', async () => {
+    const fake = createFakeClient({
+      employee: employeeRow({ hire_date: '2026-03-01' }),
+    })
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).setEmployeeTermination(
+        CLINIC,
+        EMPLOYEE,
+        new Date('2026-02-01T00:00:00'),
+      ),
+    ).rejects.toMatchObject({ reason: 'termination-before-hire' })
+
+    expect(
+      fake.ofTable('employees').some((call) => call.method === 'update'),
+    ).toBe(false)
+  })
+
+  it('recusa data futura sem escrever nada', async () => {
+    // Sem worker para virar o vinculo no dia marcado, aceitar o futuro tiraria
+    // a pessoa da equipe hoje.
+    const fake = createFakeClient({ employee: employeeRow() })
+    const future = new Date()
+    future.setFullYear(future.getFullYear() + 1)
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).setEmployeeTermination(
+        CLINIC,
+        EMPLOYEE,
+        future,
+      ),
+    ).rejects.toMatchObject({ reason: 'termination-in-future' })
+
+    expect(
+      fake.ofTable('employees').some((call) => call.method === 'update'),
+    ).toBe(false)
+  })
+
+  it('funcionário de outra clínica responde not-found', async () => {
+    // Alvo inexistente e alvo de outro inquilino dao no mesmo: a resposta nao
+    // pode revelar que o id existe em algum lugar.
+    const fake = createFakeClient({ employee: null })
+
+    await expect(
+      new SupabaseTeamRepository(fake.client).setEmployeeTermination(
+        CLINIC,
+        EMPLOYEE,
+        new Date('2026-08-10T00:00:00'),
+      ),
+    ).rejects.toMatchObject({ reason: 'not-found' })
+  })
+
+  it('a escrita é escopada em clínica E id', async () => {
+    const fake = createFakeClient({ employee: employeeRow() })
+
+    await new SupabaseTeamRepository(fake.client).setEmployeeTermination(
+      CLINIC,
+      EMPLOYEE,
+      new Date('2026-08-10T00:00:00'),
+    )
+
+    const filters = fake
+      .ofTable('employees')
+      .filter((call) => call.method === 'eq')
+      .map((call) => call.args)
+
+    expect(filters).toContainEqual(['clinic_id', CLINIC])
+    expect(filters).toContainEqual(['id', EMPLOYEE])
+  })
+
+  it('linha com desligamento e `is_active` true é lida como DESLIGADA', async () => {
+    /*
+     * So acontece com linha escrita fora do produto. O desligamento vence:
+     * mostrar "Ativo" sobre alguem com data de saida seria a tela
+     * contradizendo o banco.
+     */
+    const fake = createFakeClient({
+      updated: employeeRow({ termination_date: '2026-08-10', is_active: true }),
+      employee: employeeRow(),
+    })
+
+    const employee = await new SupabaseTeamRepository(
+      fake.client,
+    ).setEmployeeTermination(CLINIC, EMPLOYEE, new Date('2026-08-10T00:00:00'))
+
+    expect(employee.isActive).toBe(false)
   })
 })

@@ -5,16 +5,21 @@ import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { toTeamFailure } from '../application/teamFailure'
+import type { Employee } from '../domain/Employee'
 import { teamRepositoryFor } from '../infrastructure/repository'
 import {
   answerTimeOffSchema,
   createEmployeeSchema,
   createTimeOffSchema,
+  reinstateEmployeeSchema,
   teamMessages,
+  terminateEmployeeSchema,
   type AnswerTimeOffInput,
   type CreateEmployeeInput,
   type CreateTimeOffInput,
   type EmployeeDto,
+  type ReinstateEmployeeInput,
+  type TerminateEmployeeInput,
   type TimeOffDto,
 } from '../schemas/team.schema'
 
@@ -56,15 +61,10 @@ const runCreateEmployee = createAction<
         roleTitle: input.roleTitle,
         contractType: input.contractType,
         professionalId: input.professionalId,
+        hireDate: input.hireDate ? new Date(`${input.hireDate}T00:00:00`) : null,
       })
 
-      return ok<EmployeeDto>({
-        id: employee.id,
-        fullName: employee.fullName,
-        roleTitle: employee.roleTitle,
-        contractType: employee.contractType,
-        isActive: employee.isActive,
-      })
+      return ok<EmployeeDto>(toEmployeeDto(employee))
     } catch (cause) {
       return toTeamFailure<'fullName' | 'contractType'>('employee.create', cause)
     }
@@ -89,6 +89,144 @@ export async function createEmployeeAction(
   rawInput: unknown,
 ): Promise<ActionResult<EmployeeDto, 'fullName' | 'contractType'>> {
   return runCreateEmployee(rawInput)
+}
+
+/**
+ * Desligamento — feature **S-03**.
+ *
+ * # Por que duas actions, e um método só no repositório
+ *
+ * Desligar e reverter são a mesma escrita (a data, e o `is_active` que sai
+ * dela) e **dois atos diferentes** na trilha. `audit_log` é lido por pergunta —
+ * "quem desligou quem, e quando" —, e um evento único com a data dentro faria a
+ * reversão parecer um desligamento com data nula.
+ *
+ * A regra da data é conferida no adapter, junto da escrita: recusar desligamento
+ * anterior à admissão exige conhecer a admissão, e ela está na linha.
+ */
+const runTerminateEmployee = createAction<
+  TerminateEmployeeInput,
+  EmployeeDto,
+  'terminationDate'
+>({
+  name: 'employee.terminate',
+  schema: terminateEmployeeSchema,
+  roles: rolesWith('team.manage'),
+  messages,
+  revalidatePaths: ['/equipe'],
+
+  handler: async (input, context) => {
+    const repository = teamRepositoryFor(context.supabase)
+
+    try {
+      const employee = await repository.setEmployeeTermination(
+        context.clinicId,
+        input.employeeId,
+        new Date(`${input.terminationDate}T00:00:00`),
+      )
+
+      return ok<EmployeeDto>(toEmployeeDto(employee))
+    } catch (cause) {
+      return toTeamFailure<'terminationDate'>('employee.terminate', cause)
+    }
+  },
+
+  /**
+   * A DATA entra; o nome, não.
+   *
+   * Data de desligamento é informação de gestão e é o que a pergunta da trilha
+   * precisa. O nome é dado pessoal, e `audit_log` é append-only e legível pela
+   * operação inteira — mesma regra de `employee.created`.
+   */
+  audit: (output) => ({
+    action: 'employee.terminated',
+    entityType: 'employee',
+    entityId: output.id,
+    after: { termination_date: output.terminationDate },
+  }),
+})
+
+export async function terminateEmployeeAction(
+  rawInput: unknown,
+): Promise<ActionResult<EmployeeDto, 'terminationDate'>> {
+  return runTerminateEmployee(rawInput)
+}
+
+/**
+ * Reverter o desligamento.
+ *
+ * Não é readmissão: é o conserto de um registro errado. A data de admissão
+ * permanece, porque o vínculo é o mesmo — uma recontratação de verdade é outro
+ * cadastro, com outro período.
+ */
+const runReinstateEmployee = createAction<
+  ReinstateEmployeeInput,
+  EmployeeDto,
+  'employeeId'
+>({
+  name: 'employee.reinstate',
+  schema: reinstateEmployeeSchema,
+  roles: rolesWith('team.manage'),
+  messages,
+  revalidatePaths: ['/equipe'],
+
+  handler: async (input, context) => {
+    const repository = teamRepositoryFor(context.supabase)
+
+    try {
+      const employee = await repository.setEmployeeTermination(
+        context.clinicId,
+        input.employeeId,
+        null,
+      )
+
+      return ok<EmployeeDto>(toEmployeeDto(employee))
+    } catch (cause) {
+      return toTeamFailure<'employeeId'>('employee.reinstate', cause)
+    }
+  },
+
+  audit: (output) => ({
+    action: 'employee.reinstated',
+    entityType: 'employee',
+    entityId: output.id,
+    after: { contract_type: output.contractType },
+  }),
+})
+
+export async function reinstateEmployeeAction(
+  rawInput: unknown,
+): Promise<ActionResult<EmployeeDto, 'employeeId'>> {
+  return runReinstateEmployee(rawInput)
+}
+
+/**
+ * Entidade -> o que atravessa a fronteira.
+ *
+ * Um lugar só para as três actions de vínculo: com uma cópia por action, a
+ * primeira a ganhar um campo novo deixaria as outras devolvendo uma forma
+ * diferente para a mesma tela.
+ */
+function toEmployeeDto(employee: Employee): EmployeeDto {
+  return {
+    id: employee.id,
+    fullName: employee.fullName,
+    roleTitle: employee.roleTitle,
+    contractType: employee.contractType,
+    isActive: employee.isActive,
+    hireDate: employee.hireDate ? toIsoDay(employee.hireDate) : null,
+    terminationDate: employee.terminationDate
+      ? toIsoDay(employee.terminationDate)
+      : null,
+  }
+}
+
+/** 'YYYY-MM-DD' no fuso local — a data é dia de calendário, não instante. */
+function toIsoDay(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 type TimeOffField = 'employeeId' | 'startsOn' | 'endsOn'

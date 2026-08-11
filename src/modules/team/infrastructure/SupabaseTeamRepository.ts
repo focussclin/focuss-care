@@ -16,6 +16,7 @@ import type {
   NewTimeOffData,
   TimeOff,
 } from '../domain/Employee'
+import { isEmployed, refuseTermination } from '../domain/Employee'
 import type {
   CreatedInvitation,
   MembershipStatus,
@@ -54,6 +55,55 @@ interface MemberJoinRow {
  * filtro impede a operação errada — e transforma "linha de outra clínica" em
  * "não encontrado" em vez de "atualizou zero linhas em silêncio".
  */
+/**
+ * Colunas do vinculo trabalhista que a aplicacao le.
+ *
+ * `salary_cents` e `cpf` continuam FORA, e a ausencia e deliberada: salario e o
+ * dado mais sensivel de uma folha, o produto nao tem folha, e o que nao sai do
+ * banco nao vaza para log nenhum.
+ */
+const EMPLOYEE_COLUMNS =
+  'id, full_name, role_title, contract_type, is_active, professional_id, hire_date, termination_date'
+
+interface EmployeeRow {
+  id: string
+  full_name: string
+  role_title: string | null
+  contract_type: string
+  is_active: boolean
+  professional_id: string | null
+  hire_date: string | null
+  termination_date: string | null
+}
+
+/**
+ * Linha -> entidade.
+ *
+ * `isActive` sai da DATA, e nao da coluna booleana: uma linha com desligamento
+ * registrado e `is_active = true` foi escrita fora do produto, e o desligamento
+ * vence. Mostrar "Ativo" sobre alguem com data de saida seria a tela
+ * contradizendo o banco.
+ *
+ * A data e dia de calendario ('YYYY-MM-DD'). A hora local explicita evita que o
+ * fuso do servidor devolva o dia anterior — mesma armadilha de `birth_date`.
+ */
+function toEmployee(row: EmployeeRow): Employee {
+  const terminationDate = row.termination_date
+    ? new Date(`${row.termination_date}T00:00:00`)
+    : null
+
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    roleTitle: row.role_title,
+    contractType: row.contract_type as ContractType,
+    isActive: row.is_active && isEmployed(terminationDate),
+    hireDate: row.hire_date ? new Date(`${row.hire_date}T00:00:00`) : null,
+    terminationDate,
+    professionalId: row.professional_id,
+  }
+}
+
 export class SupabaseTeamRepository implements TeamRepository {
   constructor(private readonly client: Client) {}
 
@@ -273,28 +323,15 @@ export class SupabaseTeamRepository implements TeamRepository {
   async listEmployees(clinicId: string): Promise<Employee[]> {
     const { data, error } = await this.client
       .from('employees')
-      .select('id, full_name, role_title, contract_type, is_active, professional_id')
+      .select(EMPLOYEE_COLUMNS)
       .eq('clinic_id', clinicId)
       .order('full_name', { ascending: true })
       .limit(200)
 
     if (error) throw readFailure('listEmployees', error)
 
-    /*
-     * `salary_cents` e `cpf` NÃO estão no select, de propósito.
-     *
-     * Salário é o dado mais sensível de uma folha e o produto não tem folha;
-     * trazê-lo para o servidor de aplicação — e daí para um log — seria acumular
-     * risco por uma funcionalidade que ninguém pediu.
-     */
-    return (data ?? []).map((row) => ({
-      id: row.id,
-      fullName: row.full_name,
-      roleTitle: row.role_title,
-      contractType: row.contract_type as ContractType,
-      isActive: row.is_active,
-      professionalId: row.professional_id,
-    }))
+    // `salary_cents` e `cpf` continuam fora do select — ver `EMPLOYEE_COLUMNS`.
+    return (data ?? []).map((row) => toEmployee(row as EmployeeRow))
   }
 
   async createEmployee(
@@ -309,21 +346,87 @@ export class SupabaseTeamRepository implements TeamRepository {
         role_title: data.roleTitle,
         contract_type: data.contractType,
         professional_id: data.professionalId,
+        hire_date: data.hireDate ? toDateOnly(data.hireDate) : null,
         is_active: true,
       })
-      .select('id, full_name, role_title, contract_type, is_active, professional_id')
+      .select(EMPLOYEE_COLUMNS)
       .single()
 
     if (error) throw toWriteError(error)
 
-    return {
-      id: row.id,
-      fullName: row.full_name,
-      roleTitle: row.role_title,
-      contractType: row.contract_type as ContractType,
-      isActive: row.is_active,
-      professionalId: row.professional_id,
+    return toEmployee(row as EmployeeRow)
+  }
+
+  /**
+   * Registra o desligamento, ou o reverte com `null`.
+   *
+   * A leitura previa existe pela regra: recusar data anterior a admissao exige
+   * conhecer a admissao, e ela esta na linha. E a mesma leitura que responde
+   * `not-found` antes de escrever — paciente de outra clinica e paciente
+   * inexistente dao no mesmo aqui.
+   */
+  async setEmployeeTermination(
+    clinicId: string,
+    employeeId: string,
+    terminationDate: Date | null,
+  ): Promise<Employee> {
+    const { data: current, error: readError } = await this.client
+      .from('employees')
+      .select('hire_date')
+      .eq('clinic_id', clinicId)
+      .eq('id', employeeId)
+      .maybeSingle()
+
+    if (readError) throw toWriteError(readError)
+    if (!current) {
+      throw new TeamRepositoryError(
+        'not-found',
+        `nenhum funcionario ${employeeId} na clinica ativa`,
+      )
     }
+
+    if (terminationDate) {
+      const hireDate = current.hire_date
+        ? new Date(`${current.hire_date}T00:00:00`)
+        : null
+
+      const refusal = refuseTermination(hireDate, terminationDate, new Date())
+
+      if (refusal) {
+        throw new TeamRepositoryError(
+          refusal === 'in-future'
+            ? 'termination-in-future'
+            : 'termination-before-hire',
+          `desligamento recusado: ${refusal}`,
+        )
+      }
+    }
+
+    const { data: row, error } = await this.client
+      .from('employees')
+      .update({
+        termination_date: terminationDate ? toDateOnly(terminationDate) : null,
+        /*
+         * A coluna booleana continua sendo escrita, e SEMPRE a partir da data:
+         * e o que impede a linha "ativo, desligado em 12/03" de existir.
+         */
+        is_active: isEmployed(terminationDate),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('clinic_id', clinicId)
+      .eq('id', employeeId)
+      .select(EMPLOYEE_COLUMNS)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!row) {
+      throw new TeamRepositoryError(
+        'forbidden',
+        'o funcionario e legivel mas a escrita foi recusada',
+      )
+    }
+
+    return toEmployee(row as EmployeeRow)
   }
 
   async listTimeOff(clinicId: string, limit: number): Promise<TimeOff[]> {

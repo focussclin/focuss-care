@@ -139,6 +139,19 @@ export const employeeMessages = {
   employeeRequired: 'Selecione o funcionário.',
   datesRequired: 'Informe as datas de início e fim.',
   datesInverted: 'A data de fim precisa ser igual ou depois da de início.',
+  hireDateInvalid: 'Informe uma data de admissão válida.',
+  terminationRequired: 'Informe a data do desligamento.',
+  /**
+   * As duas recusas do desligamento, com o motivo na própria frase.
+   *
+   * "Data inválida" mandaria adivinhar. A segunda diz por que o produto não
+   * aceita agendamento de saída: sem executor, marcar o futuro tiraria a pessoa
+   * da equipe hoje.
+   */
+  terminationBeforeHire:
+    'O desligamento não pode ser anterior à admissão. Confira as duas datas.',
+  terminationInFuture:
+    'O desligamento não pode ser no futuro: o sistema não tem como virar o vínculo no dia marcado, e a pessoa sairia da equipe hoje. Registre no dia em que acontecer.',
   /**
    * Recusa de responder ausência já respondida.
    *
@@ -212,9 +225,49 @@ export const createEmployeeSchema = z.object({
     .optional()
     .transform((value) => value?.trim() ?? '')
     .transform((value) => (value === '' ? null : value)),
+  /**
+   * Admissão — opcional, e não obrigatória.
+   *
+   * A base já tem funcionários cadastrados sem ela, e exigi-la agora faria
+   * quem registra uma contratação de ontem parar para procurar a data exata do
+   * contrato. Sem admissão, o desligamento só perde a conferência de ordem.
+   */
+  hireDate: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value),
+      employeeMessages.hireDateInvalid,
+    )
+    .transform((value) => (value === '' ? null : value)),
 })
 
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>
+
+/**
+ * Desligamento — a data é obrigatória, e é ela que desliga.
+ *
+ * Não há campo "ativo": `is_active` sai da data no adapter. Aceitar os dois
+ * criaria a linha "ativo, desligado em 12/03", e nenhuma tela saberia qual das
+ * duas afirmações obedecer.
+ */
+export const terminateEmployeeSchema = z.object({
+  employeeId: z.uuid(employeeMessages.employeeRequired),
+  terminationDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, employeeMessages.terminationRequired),
+})
+
+export type TerminateEmployeeInput = z.infer<typeof terminateEmployeeSchema>
+
+/** Reverter o desligamento: só o alvo — a data volta a ser nula. */
+export const reinstateEmployeeSchema = z.object({
+  employeeId: z.uuid(employeeMessages.employeeRequired),
+})
+
+export type ReinstateEmployeeInput = z.infer<typeof reinstateEmployeeSchema>
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, employeeMessages.datesRequired)
 
@@ -263,7 +316,11 @@ export interface EmployeeDto {
   fullName: string
   roleTitle: string | null
   contractType: string
+  /** Derivado do desligamento — ver `isEmployed`. */
   isActive: boolean
+  /** 'YYYY-MM-DD', ou null. Dia de calendário, não instante. */
+  hireDate: string | null
+  terminationDate: string | null
 }
 
 export interface TimeOffDto {

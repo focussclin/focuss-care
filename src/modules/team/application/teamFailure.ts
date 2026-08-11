@@ -1,7 +1,7 @@
 import { err, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { isTeamRepositoryError } from '../domain/TeamRepositoryError'
-import { teamMessages } from '../schemas/team.schema'
+import { employeeMessages, teamMessages } from '../schemas/team.schema'
 
 /**
  * Falha de escrita da equipe -> `Result` com mensagem em pt-BR.
@@ -31,6 +31,15 @@ export function toTeamFailure<F extends string>(
         return err<F>('forbidden', teamMessages.roleEscalation)
       case 'last-owner':
         return err<F>('conflict', teamMessages.lastOwner)
+      /*
+       * As duas recusas do desligamento saem como 'conflict', a mesma classe de
+       * `self-revoke`: nao e entrada malformada, e o estado que nao permite a
+       * operacao. A mensagem diz qual data conferir.
+       */
+      case 'termination-before-hire':
+        return err<F>('conflict', employeeMessages.terminationBeforeHire)
+      case 'termination-in-future':
+        return err<F>('conflict', employeeMessages.terminationInFuture)
       case 'not-found':
         return err<F>('not-found', teamMessages.notFound)
       case 'forbidden':

@@ -96,6 +96,31 @@ export interface TeamRepository {
   createEmployee(clinicId: string, data: NewEmployeeData): Promise<Employee>
 
   /**
+   * Registra o desligamento — ou o reverte, com `null`.
+   *
+   * # Uma operação, e não duas colunas
+   *
+   * `is_active` é escrita a partir da data, nunca ao lado dela: com dois
+   * caminhos independentes existiria a linha "ativo, desligado em 12/03", e
+   * nenhuma tela saberia qual das duas afirmações obedecer.
+   *
+   * # A regra é conferida AQUI
+   *
+   * Recusar data anterior à admissão exige conhecer a admissão, e ela está na
+   * linha. Ler no adapter, junto da escrita, é o mesmo desenho de
+   * `outcomeIsDue` na agenda — deixá-la na action exigiria carregar o
+   * funcionário duas vezes e ainda assim decidir sobre uma leitura velha.
+   *
+   * Reverter (`null`) não recusa nada: desfazer um registro errado é o conserto
+   * do erro, não uma segunda decisão a validar.
+   */
+  setEmployeeTermination(
+    clinicId: string,
+    employeeId: string,
+    terminationDate: Date | null,
+  ): Promise<Employee>
+
+  /**
    * Ausências registradas, mais recentes primeiro.
    *
    * Não há `delete`: uma ausência cancelada continua na base com o status. O

@@ -3728,6 +3728,97 @@ não discordar do código.
 
 ---
 
+## 8.45 Feature — Admissão e desligamento do funcionário (11/08/2026)
+
+Reauditei com a varredura que mais rende neste projeto: **coluna de tabela viva
+que nenhum arquivo de `src/` cita**. Sobraram sete, e cinco estão presas —
+`clinics.logo_url` (sem bucket), `whatsapp_channels.provider_config`
+(credencial), `work_schedules.start_time/end_time` (P-WD),
+`appointments.checked_in_at` (é da fatia de fila-agenda, fechada) e
+`memberships.invited_by/invited_at`.
+
+As outras duas são `employees.hire_date` e `employees.termination_date`, em
+`/equipe`. Elas expõem um buraco maior que o de duas colunas.
+
+### Não havia como desligar ninguém
+
+`createEmployee` grava `is_active: true` e **não existia nenhuma escrita que o
+mudasse**. A porta do repositório já dizia "funcionários da clínica, ativos e
+desligados" — o vocabulário existia, o caminho não. Na prática:
+
+- a lista de funcionários só crescia, e quem saiu da clínica continuava lá como
+  "Ativo";
+- o seletor de ausências, que filtra por `isActive`, oferecia gente que não
+  trabalha mais ali. Registrar férias de quem já saiu é o tipo de dado que só
+  aparece errado meses depois, num questionamento trabalhista.
+
+### `is_active` deixou de ser um interruptor à parte
+
+A escrita é uma só: a data de desligamento. `is_active` sai **dela**, sempre —
+`isEmployed(terminationDate)`. Enquanto eram duas coisas independentes, existia a
+linha "ativo, desligado em 12/03", e nenhuma tela saberia qual das duas
+afirmações obedecer.
+
+A regra vale também na **leitura**: linha com data de saída e `is_active = true`
+só pode ter sido escrita fora do produto, e o desligamento vence. Mostrar "Ativo"
+sobre alguém com data de saída registrada seria a tela contradizendo o banco.
+
+### Data futura é recusada, e o motivo não é formalismo
+
+Aviso prévio é rotina de RH, e é exatamente o que este produto **não pode
+prometer**: não há worker nem cron para virar o vínculo no dia marcado, então
+aceitar data futura tiraria a pessoa da equipe **hoje**, enquanto ela ainda
+trabalha. A mensagem diz isso e diz o que fazer — registrar no dia em que
+acontecer. Quando houver executor, a regra muda com ele.
+
+A outra recusa é período negativo (desligamento antes da admissão). São **duas
+razões separadas**, e não uma "data inválida": quem lê precisa saber qual das
+duas datas conferir. O campo já traz `max` com a data de hoje, então o caso comum
+nem chega ao servidor.
+
+### Admissão é opcional, e isso é sobre a base que existe
+
+A base tem funcionários cadastrados antes de o campo existir. Exigir a admissão
+agora faria quem registra uma contratação de ontem parar para procurar a data
+exata do contrato — e travaria o desligamento de todo cadastro antigo, deixando
+essas pessoas presas na equipe para sempre. Sem admissão, o desligamento apenas
+perde a conferência de ordem.
+
+Na tela, cadastro sem admissão **não ganha travessão**: um "—" no lugar da data
+pareceria campo obrigatório em branco.
+
+### Duas actions, uma escrita
+
+`audit_log` é lido por pergunta — "quem desligou quem, e quando". Um evento único
+com a data dentro faria a reversão parecer um desligamento de data nula. Por isso
+`employee.terminated` e `employee.reinstated` são eventos próprios, com uma única
+operação de repositório por trás.
+
+A data entra na trilha; **o nome não** — mesma regra de `employee.created`, e a
+mesma razão de `salary_cents` e `cpf` continuarem fora do `select`.
+
+Reverter não é readmissão: é o conserto de um registro errado, e por isso não
+valida nada nem mexe na admissão. Uma recontratação de verdade é outro período, e
+seria outro cadastro.
+
+### Estado
+
+`team` passa a **177 testes em 11 arquivos**, e o projeto a **2800 testes em 218
+arquivos** (+42, +3 arquivos). Typecheck, lint, build e suíte completa estão
+limpos. Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Editar a admissão depois do cadastro | O campo entra na criação. Corrigir uma admissão errada é edição de vínculo, e a tela ainda não tem esse formulário — entra com ele, não como um segundo botão solto na linha |
+| `appointments.checked_in_at` | A coluna existe e ninguém a escreve: §8.43 carimba o `status`, não o instante. É da fatia de sincronização fila-agenda, já fechada |
+| `memberships.invited_by` / `invited_at` | Quem convidou e quando — trilha do acesso, não do vínculo trabalhista. Pertence à tela de convites |
+| Salário e CPF do funcionário | Segue de §8.33: o produto não tem folha, e guardá-los agora acumula risco sem contrapartida |
+| Escalas de trabalho | Segue bloqueada por P-WD: `work_schedules.weekday` não tem convenção verificável neste ambiente |
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

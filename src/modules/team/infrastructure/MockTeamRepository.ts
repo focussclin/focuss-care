@@ -84,6 +84,16 @@ export class MockTeamRepository implements TeamRepository {
     return []
   }
 
+  /**
+   * Sem banco, o vinculo nao muda.
+   *
+   * Recusa como as outras escritas: devolver o funcionario "desligado" faria a
+   * demonstracao mostrar uma saida que ninguem gravou.
+   */
+  async setEmployeeTermination(): Promise<never> {
+    return this.refuseWrite('setEmployeeTermination')
+  }
+
   async createEmployee(): Promise<never> {
     return this.refuseWrite('createEmployee')
   }

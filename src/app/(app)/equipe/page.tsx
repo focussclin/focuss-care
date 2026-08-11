@@ -87,6 +87,12 @@ export default async function EquipePage() {
         roleTitle: employee.roleTitle,
         contractType: employee.contractType,
         isActive: employee.isActive,
+        // Dia de calendário como string: `Date` não atravessa a fronteira para
+        // o Client Component sem virar texto em algum ponto.
+        hireDate: employee.hireDate ? toIsoDay(employee.hireDate) : null,
+        terminationDate: employee.terminationDate
+          ? toIsoDay(employee.terminationDate)
+          : null,
       }))}
       /*
        * `reason` NÃO é mapeado: em atestado e licença ele costuma dizer a
@@ -106,4 +112,12 @@ export default async function EquipePage() {
       isLive={teamSource.isLive}
     />
   )
+}
+
+/** 'YYYY-MM-DD' no fuso local — a data é dia de calendário, não instante. */
+function toIsoDay(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${date.getFullYear()}-${month}-${day}`
 }

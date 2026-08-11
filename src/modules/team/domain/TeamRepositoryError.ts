@@ -31,6 +31,21 @@ export type TeamWriteFailure =
    * era contornavel por quem ele restringia.
    */
   | 'role-escalation'
+  /**
+   * Desligamento anterior à admissão — período negativo.
+   *
+   * Duas recusas separadas, e não uma "data inválida": quem lê precisa saber
+   * QUAL das duas datas conferir. Ver `refuseTermination`.
+   */
+  | 'termination-before-hire'
+  /**
+   * Desligamento no futuro.
+   *
+   * A que surpreende: aviso prévio é rotina, e é justamente o que este produto
+   * não pode prometer. Sem worker que vire o vínculo no dia marcado, aceitar
+   * data futura tiraria a pessoa da equipe hoje, enquanto ela ainda trabalha.
+   */
+  | 'termination-in-future'
   /** O alvo não existe — ou existe em outra clínica, o que dá no mesmo aqui. */
   | 'not-found'
   /** A policy de RLS recusou. */
