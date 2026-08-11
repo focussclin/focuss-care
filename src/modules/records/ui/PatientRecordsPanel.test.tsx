@@ -343,12 +343,17 @@ describe('estados', () => {
     ).toBe(true)
   })
 
-  it('modo real avisa que a leitura é auditada', () => {
-    // Quem lê precisa saber que o acesso fica registrado — é o que separa
-    // registro legítimo de vigilância silenciosa.
+  it('não repete o aviso de acesso registrado, que é da rota', () => {
+    /*
+     * Este painel é um de quatro recortes clínicos da ficha. Quem sabe quais
+     * foram entregues a quem está lendo é a rota, e ela declara o registro uma
+     * vez acima do bloco clínico — a recepção recebe sinais vitais e não recebe
+     * prontuário. Um aviso por painel repetiria a mesma frase quatro vezes
+     * dizendo menos.
+     */
     renderPanel()
 
-    expect(screen.getByText(/Cada acesso a este prontuário fica registrado/i)).toBeTruthy()
+    expect(screen.queryByText(/acesso.*registrado/i)).toBeNull()
   })
 
   it('falha de leitura aparece e fecha a escrita', () => {

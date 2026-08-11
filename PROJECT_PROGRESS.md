@@ -3213,6 +3213,114 @@ Teleatendimento continua fora do escopo.
 
 ---
 
+## 8.40 Feature — Auditoria de acesso clínico na ficha (11/08/2026)
+
+A pendência estava registrada em §8.38 e §8.39 como decisão de produto adiada:
+prescrições, sinais vitais e alergias são dado de saúde e **não registravam
+acesso nenhum**. Reauditando, ela não exigia tabela, permissão nem migration —
+só uma camada de registro com escopo correto. Fechou aqui.
+
+### O caso que o produto não via
+
+`receptionist` e `admin` têm `encounter.read` e **não** têm `record.read`. Os
+dois abrem a ficha de qualquer paciente, recebem os sinais vitais dele e não
+passam por caminho auditado nenhum. A trilha respondia "quem leu o prontuário" —
+nunca "quem leu dado clínico".
+
+O gap não era de tela: os três painéis já protegiam por papel e já filtravam por
+clínica. O que faltava era o registro do acesso, e ele é o tipo de coisa cuja
+ausência não quebra nada — o dado aparece igual, a tela funciona igual, e o
+silêncio só é notado quando alguém pergunta quem leu o quê.
+
+### Um ato, um evento
+
+Quatro chamadas, uma por painel, dariam quatro linhas por abertura de ficha — a
+mesma poluição que a pré-busca causava antes de `isPrefetchRender`, e com o mesmo
+efeito: o acesso que importa some no meio das repetições do mesmo.
+
+Abrir a ficha é **um** ato. O evento nomeia os recortes entregues nele
+(`clinical_scopes: 'medical_records,prescriptions,vitals,allergies'`), em ordem
+canônica — sem ela, `vitals,allergies` e `allergies,vitals` seriam dois acessos
+diferentes para qualquer agrupamento na trilha.
+
+### Só o que atravessou a fronteira
+
+Escopo entra quando o dado é real e foi lido. Papel sem permissão, consulta
+recusada pela RLS e modo demonstração ficam de fora: um evento afirmando leitura
+de alergias sobre uma consulta que falhou é acusação falsa contra quem abriu a
+ficha, e uma trilha com acusação falsa deixa de responder qualquer coisa.
+
+**Lista vazia conta como acesso.** "Esta paciente não tem alergia registrada"
+também é informação de saúde, e quem perguntou recebeu a resposta.
+
+**Nenhum escopo entregue, nenhum evento.** `finance` abre a ficha por
+`patient.read` e recebe nome, telefone e documento — cadastro, não saúde.
+
+### Por que na rota, e não numa porta de módulo
+
+`logAccess` é a porta do prontuário, e os outros três recortes pertencem a
+`patients` e `encounters`. Espalhar o registro por três portas novas repetiria a
+mesma decisão em três módulos e ainda deixaria cada um cego para os outros — e é
+justamente a soma que interessa. Quem sabe o que foi entregue numa abertura é a
+composição, que é a rota.
+
+`RecordAccess` perdeu o alvo `patient`, que ficou inalcançável: deixá-lo criaria
+um segundo caminho capaz de gravar meio evento. A porta segue cobrindo os dois
+acessos exclusivamente de prontuário — a listagem da clínica e a cadeia de
+versões.
+
+### O aviso saiu do painel e subiu para a rota
+
+Pela mesma razão. A recepção recebe sinais vitais e não recebe prontuário: um
+aviso por painel repetiria quatro vezes uma frase que diz menos. A rota declara
+uma vez, acima do bloco clínico, **nomeando os recortes daquele leitor** — e só
+aparece quando houve acesso clínico de verdade.
+
+### Um guard, porque a falta não quebra nada
+
+`src/app/clinicalAccessAudit.test.ts` varre `src/app`: rota que importa fonte
+clínica (`getMedicalRecordRepository`, `getPrescriptionSource`,
+`getVitalsSource`, `getAllergySource`) e não registra acesso reprova. A lista de
+fontes é conferida contra `src/modules` no mesmo arquivo — uma fonte renomeada
+tornaria a rota invisível para a varredura, que é exatamente o buraco que o teste
+fecha.
+
+Foi este o desenho que faltou por um mês: não havia o que quebrar quando a
+auditoria não existia.
+
+### A trilha ficou alcançável
+
+`/auditoria` filtrava por sete verbos e **nenhum deles era `record.read`** — o
+evento pelo qual a tela é procurada. Chegava-se a ele digitando o nome do verbo
+no campo de ação personalizada, o que exige sabê-lo de antemão. Entraram os três
+verbos do prontuário (lido, criado, corrigido) e a entidade `medical_record`.
+
+Os metadados continuam fora da listagem: `audit_log` é legível por `audit.read`,
+que `admin` tem e `record.read` não — exibir os escopos ali daria uma leitura
+lateral do que foi acessado.
+
+### Estado
+
+O projeto passa a **2593 testes em 204 arquivos** (+16, +3 arquivos). Typecheck,
+lint, build e suíte completa estão limpos. Teleatendimento continua fora do
+escopo.
+
+Continua valendo o caveat de §8.38 e §8.39: **nenhum evento persiste** enquanto a
+policy de `INSERT` de `audit_log` recusar o membro autenticado (P-P6). O que esta
+fatia muda é que existe o que gravar, com o escopo certo, no dia em que a
+migration for aplicada.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| P-P6 — a policy de `INSERT` de `audit_log` | Bloqueio externo (B1): exige acesso SQL ao projeto Supabase. Migration proposta; enquanto ela não roda, toda a trilha é best-effort que falha em silêncio |
+| Leitura clínica em outras rotas | `/atendimentos` mostra queixa principal e `/portal-profissional` mostra a agenda própria. Nenhuma lê fonte clínica pelos acessores conhecidos hoje — quando ler, o guard cobra |
+| Retenção e consulta por paciente | A trilha é append-only e paginada por clínica; não há tela que responda "todos os acessos ao prontuário desta paciente" em uma consulta. É fatia própria, e depende de P-P6 antes de valer alguma coisa |
+| Assinatura clínica e anexos | Seguem como em §8.39: certificado externo e bucket de Storage, os dois bloqueios de fora |
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

@@ -23,6 +23,17 @@ export interface AuditoriaScreenProps {
 
 const actionOptions = [
   { value: '', label: 'Todas as ações' },
+  /*
+   * A leitura de dado clínico abre a lista, e não é ordem alfabética.
+   *
+   * É o evento pelo qual esta tela é procurada: "quem abriu o prontuário desta
+   * paciente" é a pergunta que uma investigação faz, e ela era a única sem
+   * atalho — dava para chegar nela digitando `record.read` no campo de ação
+   * personalizada, o que exige saber o nome do verbo de antemão.
+   */
+  { value: 'record.read', label: 'Dado clínico lido' },
+  { value: 'record.created', label: 'Registro de prontuário criado' },
+  { value: 'record.amended', label: 'Registro de prontuário corrigido' },
   { value: 'patient.created', label: 'Paciente criado' },
   { value: 'patient.updated', label: 'Paciente atualizado' },
   { value: 'patient.archived', label: 'Paciente arquivado' },
@@ -35,6 +46,7 @@ const actionOptions = [
 const entityOptions = [
   { value: '', label: 'Todas as entidades' },
   { value: 'patient', label: 'Paciente' },
+  { value: 'medical_record', label: 'Registro de prontuário' },
   { value: 'appointment', label: 'Agendamento' },
   { value: 'notification', label: 'Notificação' },
   { value: 'patient_contact', label: 'Contato de paciente' },

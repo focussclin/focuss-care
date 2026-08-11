@@ -25,10 +25,17 @@ export interface NewRecordData {
  *
  * O tipo é discriminado para que a combinação inválida não exista: não há como
  * registrar leitura de versões sem paciente, nem a listagem da clínica com um.
+ *
+ * **Não há alvo `patient` aqui, e a ausência é deliberada.** Abrir a ficha
+ * entrega quatro recortes clínicos de uma vez — prontuário, prescrições, sinais
+ * vitais e alergias —, e três deles não são deste módulo. Esse acesso é um ato
+ * só, registrado pela rota em `lib/audit/clinical-access.ts`; deixar um valor
+ * aqui para ele criaria um segundo caminho, capaz de gravar meio evento. Esta
+ * porta cobre os dois acessos que são exclusivamente de prontuário.
  */
 export type RecordAccess =
   | { target: 'list' }
-  | { target: 'patient' | 'versions'; patientId: string }
+  | { target: 'versions'; patientId: string }
 
 /**
  * PORTA do prontuário.

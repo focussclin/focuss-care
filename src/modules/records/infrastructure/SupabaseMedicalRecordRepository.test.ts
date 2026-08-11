@@ -793,7 +793,7 @@ describe('auditoria de leitura', () => {
     const fake = createFakeClient({ rows: [] })
 
     await new SupabaseMedicalRecordRepository(fake.client).logAccess(CLINIC, {
-      target: 'patient',
+      target: 'versions',
       patientId: PATIENT,
     })
 

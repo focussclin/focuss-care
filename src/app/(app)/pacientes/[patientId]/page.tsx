@@ -1,7 +1,13 @@
 import type { Metadata } from 'next'
 import { forbidden, notFound } from 'next/navigation'
 import { connection } from 'next/server'
-import { ArrowLeft, CalendarPlus, CalendarX2, StickyNote } from 'lucide-react'
+import {
+  ArrowLeft,
+  CalendarPlus,
+  CalendarX2,
+  LockKeyhole,
+  StickyNote,
+} from 'lucide-react'
 import Link from 'next/link'
 import { z } from 'zod'
 
@@ -11,6 +17,11 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { isPrefetchRender } from '@/lib/audit/access-context'
+import {
+  describeClinicalScopes,
+  recordClinicalAccess,
+  type ClinicalScope,
+} from '@/lib/audit/clinical-access'
 import { getCurrentProfessionalId } from '@/lib/auth/active-clinic'
 import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
@@ -331,27 +342,6 @@ export default async function PatientProfilePage({
    * fictícia nenhuma.
    */
   if (recordSource?.isLive) {
-    /*
-     * Auditoria de LEITURA, antes de entregar o conteúdo.
-     *
-     * Nos outros módulos audita-se a escrita; no prontuário, abrir também é um
-     * ato. Esta é a **primeira chamada do produto que informa um paciente**:
-     * `/prontuarios` passa `null` porque é a listagem da clínica, e enquanto
-     * fosse a única superfície a trilha não sabia responder "quem leu o
-     * prontuário desta paciente?" — só "alguém abriu a lista".
-     *
-     * Pré-busca não é acesso: o corpo desta rota roda quando o navegador se
-     * adianta, e passar o mouse sobre o nome na listagem gravaria uma leitura de
-     * prontuário que ninguém fez. Ver `lib/audit/access-context.ts`, onde a
-     * medição está registrada.
-     */
-    if (!(await isPrefetchRender())) {
-      await recordSource.repository.logAccess(recordSource.clinicId, {
-        target: 'patient',
-        patientId: patient.id,
-      })
-    }
-
     try {
       records = await recordSource.repository.listCurrentByPatient(
         recordSource.clinicId,
@@ -371,6 +361,49 @@ export default async function PatientProfilePage({
           ? recordMessages.forbidden
           : recordMessages.unavailable
     }
+  }
+
+  /*
+   * Auditoria de ACESSO CLÍNICO — um evento por abertura de ficha.
+   *
+   * # Por que aqui, e não dentro de cada painel
+   *
+   * Quatro chamadas, uma por recorte, dariam quatro linhas por abertura: a mesma
+   * poluição que a pré-busca causava, e com o mesmo efeito — o acesso que
+   * importa some no meio das repetições. Abrir a ficha é UM ato, e o evento diz
+   * quais recortes clínicos foram entregues nele.
+   *
+   * # Por que depois das leituras, e não antes
+   *
+   * O evento nomeia o que ATRAVESSOU a fronteira, e isso só se sabe depois de
+   * cada consulta responder. Continua valendo o "auditar antes de entregar" de
+   * `/prontuarios`: nada saiu para o navegador ainda — a resposta desta rota é
+   * montada abaixo.
+   *
+   * Escopo entra apenas quando o dado é REAL e foi lido: papel sem permissão,
+   * consulta recusada pela RLS e modo demonstração ficam de fora. Um evento
+   * afirmando leitura de alergias sobre uma consulta que falhou seria uma
+   * acusação falsa contra quem abriu a ficha.
+   *
+   * # O que isto conserta
+   *
+   * `receptionist` e `admin` têm `encounter.read` e não têm `record.read`: os
+   * dois abriam a ficha, recebiam os sinais vitais da pessoa e não passavam por
+   * nenhum caminho auditado. A trilha respondia "quem leu o prontuário" e nunca
+   * "quem leu dado clínico".
+   *
+   * Pré-busca continua não sendo acesso — ver `lib/audit/access-context.ts`.
+   */
+  const clinicalScopes: ClinicalScope[] = []
+  if (recordSource?.isLive && !recordsError) clinicalScopes.push('medical_records')
+  if (prescriptionSource?.isLive && !prescriptionsError) {
+    clinicalScopes.push('prescriptions')
+  }
+  if (vitalsSource?.isLive && !vitalsError) clinicalScopes.push('vitals')
+  if (allergySource?.isLive && !allergiesError) clinicalScopes.push('allergies')
+
+  if (clinicalScopes.length > 0 && !(await isPrefetchRender())) {
+    await recordClinicalAccess({ patientId: patient.id, scopes: clinicalScopes })
   }
 
   const consents = consentSource.isLive
@@ -576,6 +609,26 @@ export default async function PatientProfilePage({
               </p>
             )}
           </Card>
+
+          {/*
+            O aviso de acesso registrado vive AQUI, e não dentro de cada painel.
+
+            É a rota que sabe quais recortes foram entregues a quem está lendo —
+            a recepção recebe sinais vitais e não recebe prontuário, e um aviso
+            por painel repetiria a mesma frase quatro vezes dizendo menos.
+
+            Ele só aparece quando houve acesso clínico de verdade: quem abre a
+            ficha e recebe apenas cadastro não é avisado de um registro que não
+            existe.
+          */}
+          {clinicalScopes.length > 0 ? (
+            <p className="flex items-start gap-2.5 rounded-card border border-border-card bg-surface px-4 py-3 text-aux text-muted">
+              <LockKeyhole aria-hidden className="mt-0.5 size-4 shrink-0" />
+              Acesso registrado: a leitura de{' '}
+              {describeClinicalScopes(clinicalScopes)} nesta ficha fica na trilha
+              de auditoria, com quem abriu e quando.
+            </p>
+          ) : null}
 
           {/*
             O prontuário abre os painéis clínicos, e a ordem é a da leitura:

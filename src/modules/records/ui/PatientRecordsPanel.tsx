@@ -1,6 +1,6 @@
 'use client'
 
-import { FileText, History, LockKeyhole, PenLine, Plus, Stethoscope } from 'lucide-react'
+import { FileText, History, PenLine, Plus, Stethoscope } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -121,17 +121,14 @@ export function PatientRecordsPanel({
       />
 
       {/*
-        Aviso de auditoria de leitura, e não decoração: a rota registra quem
-        abriu o prontuário deste paciente. Quem lê precisa saber disso — é o que
-        separa registro legítimo de vigilância silenciosa.
+        O aviso de acesso registrado NÃO fica aqui.
+
+        Este painel é um de quatro recortes clínicos da ficha, e quem sabe quais
+        deles foram entregues a quem está lendo é a rota — ela declara o registro
+        uma vez, acima do bloco clínico. Repetir a frase em cada painel diria
+        menos, quatro vezes.
       */}
-      {isLive ? (
-        <p className="flex items-start gap-2.5 border-b border-border-card px-5 py-3 text-label text-muted">
-          <LockKeyhole aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          Informações protegidas por sigilo profissional. Cada acesso a este
-          prontuário fica registrado.
-        </p>
-      ) : (
+      {isLive ? null : (
         <p
           role="status"
           className="border-b border-border-card px-5 py-3 text-label text-muted"
