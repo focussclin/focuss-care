@@ -21,6 +21,34 @@ export interface EmergencyContact {
 }
 
 /**
+ * Endereço do paciente.
+ *
+ * Mora aqui pelo mesmo motivo de `EmergencyContact`: é campo de `Patient`, e
+ * `_shared` não importa de módulo nenhum. As REGRAS — o que é endereço mínimo,
+ * como se escreve um CEP, quais siglas de UF existem — ficam em
+ * `modules/patients/domain/PatientDocuments.ts`.
+ *
+ * `patients.address` é `jsonb` **NOT NULL** e sem forma declarada. Até esta
+ * fatia o insert gravava `{}` em toda linha da base: a coluna existia e nunca
+ * teve conteúdo. A aplicação define a forma, fecha em Zod e a relê na leitura.
+ *
+ * Todo campo é anulável porque endereço chega pela metade no balcão — quem
+ * marca consulta por telefone raramente sabe o CEP de cor. O que não pode é
+ * ficar sem rua, cidade e UF ao mesmo tempo em que afirma ter endereço.
+ */
+export interface PatientAddress {
+  /** Somente dígitos (8), ou null. A máscara é da tela. */
+  zip: string | null
+  street: string | null
+  number: string | null
+  complement: string | null
+  district: string | null
+  city: string | null
+  /** Sigla da UF em maiúsculas: 'SP', 'MG'. */
+  state: string | null
+}
+
+/**
  * Tipos de leitura compartilhados entre dashboard, agenda e pacientes.
  * As tres telas mostram as mesmas entidades sob recortes diferentes — manter isso
  * em um lugar so evita que cada tela invente o proprio formato.
@@ -82,8 +110,26 @@ export interface Patient {
   emergencyContactUnreadable?: boolean
   /** Null quando a data de nascimento nao foi informada no cadastro. */
   birthDate: Date | null
-  /** CPF, quando informado. */
-  document?: string
+  /**
+   * `patients.cpf` — **somente dígitos**, já validado pelo dígito verificador.
+   *
+   * Antes chamava-se `document` e era só leitura: a coluna aparecia na ficha e
+   * nenhuma escrita do produto a preenchia. Dois nomes para a mesma coluna é
+   * como uma tela passa a mostrar um valor que outra não sabe atualizar.
+   */
+  cpf?: string | null
+  /** `patients.cns` — Cartão Nacional de Saúde, somente dígitos (15). */
+  cns?: string | null
+  /** `patients.address`, já validado contra a forma fechada. */
+  address?: PatientAddress | null
+  /**
+   * A coluna `address` tinha conteúdo que NÃO casou com a forma esperada.
+   *
+   * Mesmo papel de `emergencyContactUnreadable`: só acontece com linha escrita
+   * fora do produto, e existe para a ficha avisar que salvar vai substituir o
+   * que está lá, em vez de mostrar "sem endereço" sobre um dado que existe.
+   */
+  addressUnreadable?: boolean
   /** Opcional: o schema remoto ainda nao tem coluna de preferencia de contato. */
   contactPreference?: 'WhatsApp' | 'Telefone' | 'E-mail'
   /**

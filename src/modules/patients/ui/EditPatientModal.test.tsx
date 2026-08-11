@@ -34,6 +34,16 @@ function patient(overrides: Partial<EditablePatient> = {}): EditablePatient {
     emergencyContactPhone: '',
     emergencyContactRelationship: '',
     emergencyContactUnreadable: false,
+    cpf: '',
+    cns: '',
+    addressZip: '',
+    addressStreet: '',
+    addressNumber: '',
+    addressComplement: '',
+    addressDistrict: '',
+    addressCity: '',
+    addressState: '',
+    addressUnreadable: false,
     ...overrides,
   }
 }
@@ -177,5 +187,100 @@ describe('contato gravado em formato desconhecido', () => {
     renderModal()
 
     expect(screen.queryByText(/formato que o sistema não reconhece/i)).toBeNull()
+  })
+})
+
+/**
+ * O grupo documental na edição — CPF, CNS e endereço.
+ *
+ * As três colunas existiam desde o primeiro schema e nenhuma escrita do produto
+ * as preenchia. O formulário é onde isso deixa de ser verdade.
+ */
+describe('documentos e endereço', () => {
+  it('carregam preenchidos, em dígitos', () => {
+    renderModal({
+      cpf: '52998224725',
+      cns: '123456789010000',
+      addressZip: '01310930',
+      addressStreet: 'Avenida Paulista',
+      addressCity: 'São Paulo',
+      addressState: 'SP',
+    })
+
+    // Dígitos, e não máscara: o campo é texto livre e o servidor normaliza de
+    // novo ao salvar.
+    expect(
+      (screen.getByLabelText(/^cpf/i) as HTMLInputElement).value,
+    ).toBe('52998224725')
+    expect(
+      (screen.getByLabelText(/logradouro/i) as HTMLInputElement).value,
+    ).toBe('Avenida Paulista')
+    expect(
+      (screen.getByLabelText(/^uf$/i) as unknown as HTMLSelectElement).value,
+    ).toBe('SP')
+  })
+
+  it('CPF que não fecha é barrado antes do envio', async () => {
+    /*
+     * A mesma checagem roda no servidor. Aqui ela evita a ida de rede e coloca o
+     * erro no campo, que é onde o leitor de tela o associa.
+     */
+    const onSubmit = renderModal()
+
+    fireEvent.change(screen.getByLabelText(/^cpf/i), {
+      target: { value: '529.982.247-26' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
+  })
+
+  it('endereço pela metade é barrado', async () => {
+    // Uma ficha com "apto 42" no lugar do endereço afirma que a pessoa tem
+    // endereço cadastrado, e o balcão para de perguntar.
+    const onSubmit = renderModal()
+
+    fireEvent.change(screen.getByLabelText(/complemento/i), {
+      target: { value: 'Apto 42' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() => expect(onSubmit).not.toHaveBeenCalled())
+  })
+
+  it('endereço completo chega ao servidor', async () => {
+    const onSubmit = renderModal()
+
+    fireEvent.change(screen.getByLabelText(/logradouro/i), {
+      target: { value: 'Avenida Paulista' },
+    })
+    fireEvent.change(screen.getByLabelText(/cidade/i), {
+      target: { value: 'São Paulo' },
+    })
+    fireEvent.change(screen.getByLabelText(/^uf$/i), { target: { value: 'SP' } })
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }))
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          addressStreet: 'Avenida Paulista',
+          addressCity: 'São Paulo',
+          addressState: 'SP',
+        }),
+      ),
+    )
+  })
+
+  it('endereço em formato desconhecido avisa que salvar substitui', () => {
+    renderModal({ addressUnreadable: true })
+
+    expect(screen.getByText(/endereço gravado num formato/i)).toBeTruthy()
+  })
+
+  it('o formulário declara que não consulta CEP em base externa', () => {
+    // Sem isso, alguém digita o CEP e espera o resto aparecer sozinho.
+    renderModal()
+
+    expect(screen.getByText(/não é consultado em base externa/i)).toBeTruthy()
   })
 })

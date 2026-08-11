@@ -1,6 +1,10 @@
 import type { BiologicalSex } from '@/lib/supabase/database.types'
 import type { Paginated } from '@/modules/_shared/domain/Paginated'
-import type { EmergencyContact, Patient } from '@/modules/_shared/domain/types'
+import type {
+  EmergencyContact,
+  Patient,
+  PatientAddress,
+} from '@/modules/_shared/domain/types'
 
 /**
  * Dados de um cadastro novo, ja normalizados pela camada de aplicacao.
@@ -11,11 +15,10 @@ import type { EmergencyContact, Patient } from '@/modules/_shared/domain/types'
  *    parametros proprios de `create`, vindos do `ActionContext` — P3 de
  *    docs/01-arquitetura.md. Se morassem neste objeto, um dia alguem os
  *    preencheria com o que o cliente mandou.
- *  - **CPF, CNS, endereco e foto** continuam de fora. Os tres primeiros sao o
- *    grupo DOCUMENTAL, que pertence ao faturamento: CPF pede validacao de
- *    digito e uma decisao sobre duplicidade na clinica, e gravar identificador
- *    fiscal sem as duas coisas acumula risco sem contrapartida. `photo_url`
- *    depende de bucket de Storage, que nao existe.
+ *  - **`photo_url` continua de fora**: depende de bucket de Storage, que nao
+ *    existe. O grupo DOCUMENTAL (CPF, CNS e endereco) entrou com as duas
+ *    condicoes que ele exigia — validacao de digito, em
+ *    `domain/PatientDocuments.ts`, e politica de duplicidade, em `findCpfOwner`.
  *
  * **`biological_sex` passou a ser coletado** (P-01 completa): a coluna e NOT
  * NULL, o enum tem 'not_informed', e e esse o padrao quando ninguem perguntou —
@@ -46,6 +49,29 @@ export interface NewPatientData {
   emergencyContact: EmergencyContact | null
   /** Observacao administrativa do cadastro. Nao e dado clinico. */
   adminNotes: string | null
+  /**
+   * CPF em DIGITOS, ou null.
+   *
+   * A mascara e da tela. Guardar `123.456.789-09` faria a mesma pessoa existir
+   * duas vezes na base — e `findCpfOwner` nao encontraria nenhuma das duas.
+   */
+  cpf: string | null
+  /** CNS em digitos (15), ou null. */
+  cns: string | null
+  /**
+   * Endereco na forma FECHADA, ou null.
+   *
+   * `null` grava `{}` na coluna, que e NOT NULL — objeto vazio e "sem
+   * endereco", nao endereco falso.
+   */
+  address: PatientAddress | null
+}
+
+/** Quem ja tem este CPF na clinica. */
+export interface CpfOwner {
+  id: string
+  /** Nome como a ficha o exibe — social quando existe. */
+  name: string
 }
 
 /** Estados de cadastro que o banco sabe filtrar — `patients.is_active`. */
@@ -152,6 +178,32 @@ export interface PatientRepository {
     patientId: string,
     data: NewPatientData,
   ): Promise<Patient>
+
+  /**
+   * Quem já tem este CPF nesta clínica — ou null.
+   *
+   * # Por que a aplicação confere, e não o banco
+   *
+   * Não há `unique (clinic_id, cpf)` no schema aplicado, e criá-lo é migration
+   * (bloqueio B1). Enquanto não existir, esta consulta é a única barreira: duas
+   * gravações **simultâneas** do mesmo CPF ainda passam, e a fatia declara isso
+   * em vez de fingir garantia.
+   *
+   * # Por que devolve QUEM, e não um booleano
+   *
+   * Duplicidade de CPF quase sempre é a mesma pessoa cadastrada duas vezes, e a
+   * ação certa é continuar no cadastro que já existe. "CPF já cadastrado" manda
+   * procurar; "CPF já cadastrado para Maria Souza" diz onde. O nome não vaza
+   * nada: quem tem `patient.write` já vê a listagem inteira da clínica.
+   *
+   * `exceptPatientId` existe para a edição não colidir com o próprio paciente —
+   * salvar a ficha sem mexer no CPF acusaria conflito consigo mesma.
+   */
+  findCpfOwner(
+    clinicId: string,
+    cpf: string,
+    exceptPatientId: string | null,
+  ): Promise<CpfOwner | null>
 
   /**
    * Arquiva (`is_active = false`) ou reativa o cadastro.

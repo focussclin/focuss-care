@@ -27,6 +27,16 @@ const validated = {
   emergencyContactName: null,
   emergencyContactPhone: null,
   emergencyContactRelationship: null,
+  // Grupo documental — vazio por padrão, como sai de um cadastro de balcão.
+  cpf: null,
+  cns: null,
+  addressZip: null,
+  addressStreet: null,
+  addressNumber: null,
+  addressComplement: null,
+  addressDistrict: null,
+  addressCity: null,
+  addressState: null,
 }
 
 describe('montagem do contato de emergência', () => {

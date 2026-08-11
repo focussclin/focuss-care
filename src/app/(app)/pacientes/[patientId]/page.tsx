@@ -27,6 +27,11 @@ import { can } from '@/lib/auth/permissions'
 import { getSessionState } from '@/lib/auth/session'
 import { formatPhone } from '@/lib/utils/phone'
 import {
+  formatAddress,
+  formatCns,
+  formatCpf,
+} from '@/modules/patients/domain/PatientDocuments'
+import {
   biologicalSexLabel,
   preferredName,
   showsLegalName,
@@ -516,6 +521,22 @@ export default async function PatientProfilePage({
               emergencyContactUnreadable: Boolean(
                 patient.emergencyContactUnreadable,
               ),
+              /*
+               * CPF e CNS vão em DÍGITOS para o formulário, e não formatados: o
+               * campo é texto livre e o servidor normaliza de novo ao salvar.
+               * Mandar `123.456.789-09` faria a comparação de "mudou?" acusar
+               * alteração em todo save.
+               */
+              cpf: patient.cpf ?? '',
+              cns: patient.cns ?? '',
+              addressZip: patient.address?.zip ?? '',
+              addressStreet: patient.address?.street ?? '',
+              addressNumber: patient.address?.number ?? '',
+              addressComplement: patient.address?.complement ?? '',
+              addressDistrict: patient.address?.district ?? '',
+              addressCity: patient.address?.city ?? '',
+              addressState: patient.address?.state ?? '',
+              addressUnreadable: Boolean(patient.addressUnreadable),
             }}
             isLive={patientSource.isLive}
             openOnMount={editar === '1'}
@@ -557,7 +578,14 @@ export default async function PatientProfilePage({
                     : '—'
                 }
               />
-              <ProfileField label="Documento" value={patient.document ?? '—'} />
+              <ProfileField
+                label="CPF"
+                value={patient.cpf ? formatCpf(patient.cpf) : '—'}
+              />
+              <ProfileField
+                label="CNS"
+                value={patient.cns ? formatCns(patient.cns) : '—'}
+              />
               <ProfileField
                 label="Preferência de contato"
                 value={patient.contactPreference ?? '—'}
@@ -572,6 +600,30 @@ export default async function PatientProfilePage({
                 <ProfileField label="Nome de registro" value={patient.name} />
               ) : null}
             </dl>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Endereço"
+              description="Usado em correspondência, guia de convênio e nota fiscal."
+            />
+            {patient.addressUnreadable ? (
+              <p
+                role="status"
+                className="mx-5 mb-5 rounded-field border border-danger/30 bg-danger-surface px-4 py-3 text-aux text-danger"
+              >
+                Há um endereço gravado num formato que o sistema não reconhece.
+                Abra a edição e cadastre-o de novo para poder usá-lo.
+              </p>
+            ) : patient.address ? (
+              <p className="px-5 pb-5 text-aux text-foreground">
+                {formatAddress(patient.address)}
+              </p>
+            ) : (
+              <p className="px-5 pb-5 text-aux text-muted">
+                Nenhum endereço cadastrado.
+              </p>
+            )}
           </Card>
 
           <Card>

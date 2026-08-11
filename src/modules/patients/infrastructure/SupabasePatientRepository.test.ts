@@ -48,6 +48,8 @@ function createFakeClient(results: {
   const chainable = [
     'select',
     'eq',
+    // `neq` entrou com a conferencia de CPF: a edicao exclui o proprio paciente.
+    'neq',
     'is',
     'or',
     'not',
@@ -550,6 +552,9 @@ describe('SupabasePatientRepository — isolamento do tenant', () => {
           email: null,
           biologicalSex: 'not_informed',
           genderIdentity: null,
+          cpf: null,
+          cns: null,
+          address: null,
           emergencyContact: null,
           adminNotes: null,
         },
@@ -563,5 +568,86 @@ describe('SupabasePatientRepository — isolamento do tenant', () => {
       '9019956f-bdd8-4d61-868d-09b02332dad0',
     ])
     expect(calls).toContainEqual(['is', 'deleted_at', null])
+  })
+})
+
+describe('conferencia de CPF', () => {
+  it('procura na clinica ativa, so entre cadastros nao removidos', async () => {
+    const fake = createFakeClient({
+      anchor: { data: { id: OTHER_TENANT_ID, full_name: 'Maria', social_name: null } },
+    })
+
+    await new SupabasePatientRepository(fake.client).findCpfOwner(
+      CLINIC,
+      '52998224725',
+      null,
+    )
+
+    const calls = fake.ofQuery(0)
+
+    expect(calls).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(calls).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['cpf', '52998224725'] }),
+    )
+    /*
+     * Cadastro removido por fora do produto nao pode bloquear o CPF de quem esta
+     * no balcao. Arquivado, sim: continua sendo a mesma pessoa, e o caminho e
+     * reativar — nao criar um segundo cadastro.
+     */
+    expect(calls).toContainEqual(
+      expect.objectContaining({ method: 'is', args: ['deleted_at', null] }),
+    )
+    expect(calls.some((call) => call.method === 'neq')).toBe(false)
+  })
+
+  it('na edicao, exclui o proprio paciente', async () => {
+    const fake = createFakeClient({ anchor: { data: null } })
+
+    await new SupabasePatientRepository(fake.client).findCpfOwner(
+      CLINIC,
+      '52998224725',
+      ANCHOR_ID,
+    )
+
+    // Sem isto, salvar a ficha sem mexer no CPF acusaria conflito consigo mesma.
+    expect(fake.ofQuery(0)).toContainEqual(
+      expect.objectContaining({ method: 'neq', args: ['id', ANCHOR_ID] }),
+    )
+  })
+
+  it('devolve o nome SOCIAL quando existe', async () => {
+    const fake = createFakeClient({
+      anchor: {
+        data: {
+          id: OTHER_TENANT_ID,
+          full_name: 'Maria Souza',
+          social_name: 'Mari Souza',
+        },
+      },
+    })
+
+    const owner = await new SupabasePatientRepository(fake.client).findCpfOwner(
+      CLINIC,
+      '52998224725',
+      null,
+    )
+
+    // A mensagem de conflito e lida por quem vai procurar essa pessoa na
+    // listagem, que a mostra pelo nome social.
+    expect(owner).toEqual({ id: OTHER_TENANT_ID, name: 'Mari Souza' })
+  })
+
+  it('sem dono, devolve null', async () => {
+    const fake = createFakeClient({ anchor: { data: null } })
+
+    const owner = await new SupabasePatientRepository(fake.client).findCpfOwner(
+      CLINIC,
+      '52998224725',
+      null,
+    )
+
+    expect(owner).toBeNull()
   })
 })

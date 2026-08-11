@@ -103,6 +103,29 @@ const runUpdatePatient = createAction<
         return err<CreatePatientField>('not-found', createPatientMessages.notFound)
       }
 
+      /*
+       * Duplicidade de CPF, com o PRÓPRIO paciente fora da conta.
+       *
+       * Salvar a ficha sem mexer no CPF acusaria conflito consigo mesma — e o
+       * conflito apareceria justamente em quem já estava certo. Ver
+       * `findCpfOwner`.
+       */
+      if (data.cpf) {
+        const owner = await repository.findCpfOwner(
+          context.clinicId,
+          data.cpf,
+          input.patientId,
+        )
+
+        if (owner) {
+          return err<CreatePatientField>(
+            'conflict',
+            createPatientMessages.cpfTaken(owner.name),
+            { cpf: createPatientMessages.cpfTaken(owner.name) },
+          )
+        }
+      }
+
       const changed = changedFields(current, data)
 
       const patient = await repository.update(

@@ -219,6 +219,24 @@ export function NewPatientModal({
           {...register('socialName')}
         />
 
+        {/*
+          CPF entra no CADASTRO — e é o único do grupo documental que entra.
+
+          Não é exceção à regra do parágrafo acima; é o que a faz valer. O CPF é
+          o que impede a mesma pessoa de virar dois cadastros, e uma checagem de
+          duplicidade que só roda na edição descobre a duplicata depois de ela
+          existir. CNS e endereço continuam na edição: nenhum dos dois evita
+          nada no balcão, e os dois são digitação longa.
+        */}
+        <TextField
+          label="CPF (opcional)"
+          inputMode="numeric"
+          disabled={isSubmitting}
+          hint="Se a pessoa tiver em mãos. É o que evita cadastro duplicado."
+          error={errors.cpf?.message}
+          {...register('cpf')}
+        />
+
         <TextareaField
           label="Observação inicial (opcional)"
           rows={3}

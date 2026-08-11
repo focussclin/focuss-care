@@ -3415,6 +3415,135 @@ escopo.
 
 ---
 
+## 8.42 Feature — Grupo documental do paciente (11/08/2026)
+
+§8.35 deixou a pendência escrita com as duas condições que faltavam:
+
+> `cpf`, `cns`, `address` — grupo DOCUMENTAL, que pertence ao faturamento. CPF
+> pede validação de dígito e uma decisão sobre duplicidade na clínica; gravar
+> identificador fiscal sem as duas coisas acumula risco sem contrapartida.
+
+Esta fatia entrega as duas e o grupo junto. Nenhuma migration, nenhuma
+credencial: as três colunas existem desde o primeiro schema.
+
+### O que a ficha mostrava e ninguém escrevia
+
+`patients.cpf` aparecia na ficha como "Documento" — e **nenhuma escrita do
+produto o preenchia**. `cns` nunca era lido nem escrito. `address` é `jsonb` NOT
+NULL, e o insert gravava `{}` em toda linha da base desde sempre.
+
+Além do dado ausente, havia um nome a mais: a entidade tinha `document` e a
+coluna se chama `cpf`. Dois nomes para a mesma coluna é como uma tela passa a
+mostrar um valor que outra não sabe atualizar — `document` saiu.
+
+### Validação de dígito, e por que ela é a metade que importa
+
+CPF errado não é erro de digitação inofensivo: ele viaja para a nota fiscal,
+para a guia do convênio e para o pedido de exame. Quando a recusa chega, o
+atendimento já aconteceu, e o retrabalho é de quem cobra — não de quem digitou.
+
+A sequência repetida (`111.111.111-11`) **passa** no módulo 11 e é inválida por
+definição. Sem a recusa explícita, é exatamente o que alguém digita para pular o
+campo.
+
+O CNS tem **duas** regras, e o primeiro dígito diz qual vale: `1` e `2` são
+definitivos e derivam do PIS; `7`, `8` e `9` são provisórios e só exigem que a
+soma ponderada seja múltipla de 11. Tratar as duas famílias como uma recusaria
+metade dos cartões reais — e cartão recusado no balcão vira "o sistema não
+aceita", que é como um campo válido deixa de ser preenchido. O ramo em que o
+dígito daria 10 (o cartão que termina em `001`) tem teste próprio.
+
+### Duplicidade: a política, e o limite dela
+
+Antes de gravar, a action pergunta se o CPF já é de outro paciente **da clínica
+ativa**. A resposta traz **quem**: duplicidade de CPF quase sempre é a mesma
+pessoa cadastrada duas vezes, e o que resolve é continuar na ficha que já existe.
+"CPF já cadastrado" manda procurar; "já está no cadastro de Maria Souza" diz
+onde. O nome não vaza nada — quem tem `patient.write` já enxerga a listagem
+inteira da clínica.
+
+Cadastro **removido** (`deleted_at`) não bloqueia; **arquivado**, sim: continua
+sendo a mesma pessoa, e o caminho é reativar. Na edição, o próprio paciente sai
+da conta — sem isso, salvar a ficha sem mexer no CPF acusaria conflito consigo
+mesma.
+
+**O limite, declarado:** não há `unique (clinic_id, cpf)` no schema aplicado, e
+criá-lo é migration (bloqueio B1). Duas gravações **simultâneas** do mesmo CPF
+ainda passam. A conferência da aplicação é a única barreira, e esta fatia diz
+isso em vez de fingir garantia.
+
+### CPF entra no cadastro; CNS e endereço, na edição
+
+O modal de cadastro declara, desde P-01, que o balcão é nome e telefone — "um
+formulário de dez campos entre o paciente e a consulta é como nascem cadastros
+preenchidos no chute". O CPF entra lá assim mesmo, e **não como exceção**: é ele
+que impede a mesma pessoa de virar dois cadastros, e uma checagem de duplicidade
+que só roda na edição descobre a duplicata depois de ela existir.
+
+CNS e endereço não evitam nada no balcão e são digitação longa. Ficam na edição,
+onde alguém senta para completar a ficha.
+
+### Endereço: ou tem o mínimo, ou não existe
+
+Rua, cidade e UF. Uma ficha com "apto 42" no lugar do endereço **afirma** que a
+pessoa tem endereço cadastrado, e o balcão para de perguntar. Número fica fora da
+exigência: "s/n" é endereço real em zona rural e em via antiga, e cobrá-lo faria
+alguém inventar um número.
+
+A forma é fechada em Zod e **relida na leitura**, como `emergency_contact`:
+`{}` é "sem endereço" (o estado de toda linha anterior a esta fatia), e conteúdo
+que não casa **não vira `null` em silêncio** — a ficha avisa que salvar vai
+substituí-lo. A UF é conferida contra as 27 siglas: uma inventada chegaria à
+etiqueta de correspondência e à guia.
+
+**O CEP não é consultado em base externa**, e o formulário diz isso. Integração
+com ViaCEP é dependência de fora; sem o aviso, alguém digita o CEP e espera o
+resto aparecer sozinho.
+
+### O que a LISTAGEM não recebe (achado da revisão)
+
+`PatientListItem` é `Omit<Patient, …>` e existia justamente para o documento não
+atravessar a fronteira até a listagem Client Component. Ele omitia `'document'` —
+e `document` **deixou de existir** quando a entidade passou a chamar a coluna de
+`cpf`.
+
+`Omit` com uma chave que não pertence ao tipo não é erro: ela é ignorada em
+silêncio. O typecheck ficou limpo, o `toPatientListItem` continuou montando um
+objeto literal sem os campos novos — **nenhum dado atravessou** —, mas o tipo
+parou de proibir: quem acrescentasse `cpf` ao mapeador depois passaria pela
+compilação sem que nada reclamasse. Um guarda que não guarda mais é pior que
+guarda nenhum, porque ninguém procura por ele.
+
+A revisão corrigiu, e ampliou o recorte: além de `cpf`, `cns` e `address`, saem
+também `emergencyContact` e o par de sinalizadores de conteúdo ilegível. A
+listagem mostra nome, contato e datas; documento, endereço e contato de
+emergência são da ficha, que é server-side.
+
+### O que não entra na trilha
+
+`changedFields` ganhou os três campos e continua registrando **quais** mudaram,
+nunca os valores. Identificador fiscal em `audit_log` seria dado pessoal num
+lugar append-only, legível por `audit.read`, e fora do alcance de qualquer pedido
+de exclusão que a LGPD permita ao titular.
+
+### Estado
+
+`patients` passa a **403 testes em 31 arquivos**, e o projeto a **2691 testes em 211 arquivos**
+(+60, +4 arquivos). Typecheck, lint, build e suíte completa estão limpos.
+Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| `unique (clinic_id, cpf)` no banco | Migration — bloqueio B1. Enquanto não existir, duas gravações simultâneas do mesmo CPF passam pela conferência da aplicação |
+| Fundir cadastros duplicados | A mensagem manda abrir a ficha que já existe, e é o certo hoje: fundir prontuário, agenda, cobrança e guia de duas fichas é fatia própria, e das grandes |
+| Busca por CPF | A listagem procura por nome e telefone. Achar pelo documento é o que a recepção faz com a carteirinha na mão, e cabe na paleta — mas é contrato de busca próprio |
+| Consulta de CEP | Depende de serviço externo. O formulário declara que os campos são digitados |
+| `photo_url` | Segue de §8.35: depende de bucket de Storage, que não existe |
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha

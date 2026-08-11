@@ -1,4 +1,7 @@
-import type { EmergencyContact } from '@/modules/_shared/domain/types'
+import type {
+  EmergencyContact,
+  PatientAddress,
+} from '@/modules/_shared/domain/types'
 
 import type { NewPatientData } from '../domain/PatientRepository'
 import type { CreatePatientInput } from '../schemas/patient.schema'
@@ -25,7 +28,39 @@ export function toNewPatientData(
     genderIdentity: input.genderIdentity,
     emergencyContact: toEmergencyContact(input),
     adminNotes: input.notes,
+    cpf: input.cpf,
+    cns: input.cns,
+    address: toAddress(input),
   }
+}
+
+/**
+ * Os sete campos do formulário viram um objeto — ou `null`.
+ *
+ * `null` quando nenhum deles foi preenchido, e é o que APAGA o endereço gravado:
+ * limpar é edição legítima. O schema já recusou o endereço pela metade antes de
+ * chegar aqui, então o que passa ou está vazio ou tem rua, cidade e UF.
+ */
+function toAddress(input: {
+  addressZip: string | null
+  addressStreet: string | null
+  addressNumber: string | null
+  addressComplement: string | null
+  addressDistrict: string | null
+  addressCity: string | null
+  addressState: string | null
+}): PatientAddress | null {
+  const address: PatientAddress = {
+    zip: input.addressZip,
+    street: input.addressStreet,
+    number: input.addressNumber,
+    complement: input.addressComplement,
+    district: input.addressDistrict,
+    city: input.addressCity,
+    state: input.addressState,
+  }
+
+  return Object.values(address).some((field) => field !== null) ? address : null
 }
 
 /**

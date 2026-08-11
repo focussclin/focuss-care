@@ -63,6 +63,10 @@ describe('changedFields', () => {
     biologicalSex: 'not_informed' as const,
     genderIdentity: null,
     emergencyContact: null,
+    // Grupo documental: vazio, como sai de um cadastro de balcão.
+    cpf: null,
+    cns: null,
+    address: null,
   }
 
   it('nao acusa mudanca quando nada mudou', () => {

@@ -2,7 +2,7 @@
 
 import { cacheTags } from '@/lib/cache/tags'
 import { createAction } from '@/modules/_shared/application/createAction'
-import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
+import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
 import { patientWriteRoles } from '../application/patientWriteRoles'
 import { toNewPatientData } from '../application/toNewPatientData'
@@ -71,6 +71,34 @@ const runCreatePatient = createAction<
     const repository = patientRepositoryFor(context.supabase)
 
     try {
+      /*
+       * Duplicidade de CPF — a segunda condição que o grupo documental exigia.
+       *
+       * O erro volta NO CAMPO, e com o nome de quem já tem o documento: a causa
+       * quase sempre é a mesma pessoa sendo cadastrada duas vezes, e o que
+       * resolve é continuar na ficha que já existe. Dizer só "já cadastrado"
+       * mandaria procurar sem dizer onde.
+       *
+       * Sem `unique (clinic_id, cpf)` no banco (bloqueio B1), esta é a única
+       * barreira: dois cadastros SIMULTÂNEOS do mesmo CPF ainda passam. A fatia
+       * declara o limite em vez de fingir garantia.
+       */
+      if (input.cpf) {
+        const owner = await repository.findCpfOwner(
+          context.clinicId,
+          input.cpf,
+          null,
+        )
+
+        if (owner) {
+          return err<CreatePatientField>(
+            'conflict',
+            createPatientMessages.cpfTaken(owner.name),
+            { cpf: createPatientMessages.cpfTaken(owner.name) },
+          )
+        }
+      }
+
       const patient = await repository.create(
         context.clinicId,
         toNewPatientData(input),

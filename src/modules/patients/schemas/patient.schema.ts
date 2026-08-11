@@ -2,6 +2,13 @@ import { z } from 'zod'
 
 import { normalizePhone } from '@/lib/utils/phone'
 
+import {
+  BRAZILIAN_STATES,
+  isValidCns,
+  isValidCpf,
+  isValidZip,
+  onlyDigits,
+} from '../domain/PatientDocuments'
 import { BIOLOGICAL_SEX_VALUES } from '../domain/PatientIdentity'
 
 export const patientMessages = {
@@ -14,6 +21,21 @@ export const patientMessages = {
   invalidEmail: 'Digite um e-mail válido.',
   genderIdentityTooLong: 'A identidade de gênero pode ter no máximo 80 caracteres.',
   relationshipTooLong: 'O parentesco pode ter no máximo 60 caracteres.',
+  /**
+   * O CPF não fecha no dígito verificador.
+   *
+   * A mensagem diz "confira" e não "inválido": quem digita CPF no balcão está
+   * lendo um documento, e o caso comum é um dígito trocado — não um documento
+   * falso.
+   */
+  cpfInvalid: 'Confira o CPF: os dígitos não conferem.',
+  cnsInvalid: 'Confira o CNS: os 15 dígitos não conferem.',
+  zipInvalid: 'O CEP tem oito dígitos. Exemplo: 01310-930.',
+  stateInvalid: 'Selecione a UF.',
+  addressIncomplete:
+    'Um endereço precisa de rua, cidade e UF. Preencha os três ou deixe o endereço em branco.',
+  streetTooLong: 'O logradouro pode ter no máximo 160 caracteres.',
+  addressFieldTooLong: 'Este campo do endereço é longo demais.',
 } as const
 
 export const contactPreferenceOptions = [
@@ -81,6 +103,62 @@ export const newPatientSchema = z.object({
     .string()
     .max(60, patientMessages.relationshipTooLong)
     .optional(),
+
+  /*
+   * Grupo DOCUMENTAL — CPF, CNS e endereco.
+   *
+   * O formulario aceita mascara (`123.456.789-09`) e digito solto: a
+   * normalizacao e do servidor, como no telefone. O que ele NAO aceita e um CPF
+   * que nao fecha — essa checagem e a mesma nos dois lados, porque errar o
+   * documento so aparece quando a nota fiscal ou a guia sao recusadas, com o
+   * atendimento ja feito.
+   */
+  cpf: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || isValidCpf(value),
+      patientMessages.cpfInvalid,
+    )
+    .optional(),
+  cns: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || isValidCns(value),
+      patientMessages.cnsInvalid,
+    )
+    .optional(),
+  addressZip: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || isValidZip(value),
+      patientMessages.zipInvalid,
+    )
+    .optional(),
+  addressStreet: z
+    .string()
+    .max(160, patientMessages.streetTooLong)
+    .optional(),
+  addressNumber: z.string().max(20, patientMessages.addressFieldTooLong).optional(),
+  addressComplement: z
+    .string()
+    .max(80, patientMessages.addressFieldTooLong)
+    .optional(),
+  addressDistrict: z
+    .string()
+    .max(80, patientMessages.addressFieldTooLong)
+    .optional(),
+  addressCity: z.string().max(80, patientMessages.addressFieldTooLong).optional(),
+  addressState: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === '' || BRAZILIAN_STATES.includes(value as never),
+      patientMessages.stateInvalid,
+    )
+    .optional(),
 })
 
 export type NewPatientInput = z.infer<typeof newPatientSchema>
@@ -144,6 +222,24 @@ export const createPatientMessages = {
   emergencyPhoneRequired:
     'Informe o telefone do contato de emergência — sem ele não há como avisar ninguém.',
   emergencyNameRequired: 'Informe o nome do contato de emergência.',
+  cpfInvalid: 'Confira o CPF: os dígitos não conferem.',
+  cnsInvalid: 'Confira o CNS: os 15 dígitos não conferem.',
+  zipInvalid: 'O CEP tem oito dígitos. Exemplo: 01310-930.',
+  stateInvalid: 'Selecione a UF.',
+  streetTooLong: 'O logradouro pode ter no máximo 160 caracteres.',
+  addressFieldTooLong: 'Este campo do endereço é longo demais.',
+  addressIncomplete:
+    'Um endereço precisa de rua, cidade e UF. Preencha os três ou deixe o endereço em branco.',
+  /**
+   * O CPF já é de outro paciente desta clínica.
+   *
+   * A mensagem NOMEIA quem: duplicidade de CPF quase sempre é a mesma pessoa
+   * cadastrada duas vezes, e o que resolve é continuar na ficha existente.
+   * "CPF já cadastrado" manda procurar; esta diz onde. Não vaza nada — quem tem
+   * `patient.write` já enxerga a listagem inteira da clínica.
+   */
+  cpfTaken: (name: string) =>
+    `Este CPF já está no cadastro de ${name}. Abra a ficha dessa pessoa em vez de criar outra.`,
   /** Resumo exibido no topo do formulário quando o servidor recusa a entrada. */
   invalidFields: 'Revise os campos destacados e tente novamente.',
   conflict: 'Já existe um paciente com esses dados nesta clínica.',
@@ -231,6 +327,126 @@ const identityShape = {
       createPatientMessages.relationshipTooLong,
     )
     .transform((value) => (value === '' ? null : value)),
+}
+
+/** Campo de texto do endereço: apara, limita e transforma vazio em `null`. */
+function addressText(max: number, message: string) {
+  return z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine((value) => value.length <= max, message)
+    .transform((value) => (value === '' ? null : value))
+}
+
+/**
+ * Grupo documental, do lado do servidor.
+ *
+ * Guardado em DÍGITOS: `123.456.789-09` e `12345678909` são o mesmo CPF, e
+ * gravar o que cada um digitou faria a mesma pessoa existir duas vezes na base —
+ * a checagem de duplicidade da action não encontraria nenhuma das duas.
+ *
+ * A UF é normalizada para maiúsculas antes de ser conferida contra a lista
+ * fechada: `sp` é o que se digita, `SP` é o que a etiqueta e a guia esperam.
+ */
+const documentShape = {
+  cpf: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || isValidCpf(value),
+      createPatientMessages.cpfInvalid,
+    )
+    .transform((value) => (value === '' ? null : onlyDigits(value))),
+
+  cns: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || isValidCns(value),
+      createPatientMessages.cnsInvalid,
+    )
+    .transform((value) => (value === '' ? null : onlyDigits(value))),
+
+  addressZip: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value === '' || isValidZip(value),
+      createPatientMessages.zipInvalid,
+    )
+    .transform((value) => (value === '' ? null : onlyDigits(value))),
+
+  addressStreet: addressText(160, createPatientMessages.streetTooLong),
+  addressNumber: addressText(20, createPatientMessages.addressFieldTooLong),
+  addressComplement: addressText(80, createPatientMessages.addressFieldTooLong),
+  addressDistrict: addressText(80, createPatientMessages.addressFieldTooLong),
+  addressCity: addressText(80, createPatientMessages.addressFieldTooLong),
+
+  addressState: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim().toUpperCase() ?? '')
+    .refine(
+      (value) => value === '' || BRAZILIAN_STATES.includes(value as never),
+      createPatientMessages.stateInvalid,
+    )
+    .transform((value) => (value === '' ? null : value)),
+}
+
+/**
+ * Endereço: ou tem o mínimo, ou não existe.
+ *
+ * Rua, cidade e UF. Sem os três não dá para mandar nada nem localizar ninguém, e
+ * uma ficha com "apto 42" no lugar do endereço **afirma** que a pessoa tem
+ * endereço cadastrado — o balcão para de perguntar.
+ *
+ * Número fica de fora da exigência: "s/n" é endereço real em zona rural e em via
+ * antiga, e cobrá-lo faria alguém inventar um número.
+ *
+ * A regra vale nas DUAS escritas, como a do contato de emergência: aplicá-la só
+ * na edição deixaria o cadastro gravar meio endereço, e o defeito apareceria
+ * quando alguém precisasse enviar alguma coisa.
+ */
+export function addressMustBeUsable(
+  value: {
+    addressZip: string | null
+    addressStreet: string | null
+    addressNumber: string | null
+    addressComplement: string | null
+    addressDistrict: string | null
+    addressCity: string | null
+    addressState: string | null
+  },
+  ctx: z.RefinementCtx,
+) {
+  const filled = [
+    value.addressZip,
+    value.addressStreet,
+    value.addressNumber,
+    value.addressComplement,
+    value.addressDistrict,
+    value.addressCity,
+    value.addressState,
+  ].some((field) => field !== null)
+
+  if (!filled) return
+
+  const missing: ('addressStreet' | 'addressCity' | 'addressState')[] = []
+  if (!value.addressStreet) missing.push('addressStreet')
+  if (!value.addressCity) missing.push('addressCity')
+  if (!value.addressState) missing.push('addressState')
+
+  for (const path of missing) {
+    ctx.addIssue({
+      code: 'custom',
+      path: [path],
+      message: createPatientMessages.addressIncomplete,
+    })
+  }
 }
 
 /**
@@ -362,6 +578,7 @@ const createPatientObject = z.object({
     .transform((value) => (value === '' ? null : value)),
 
   ...identityShape,
+  ...documentShape,
 })
 
 /**
@@ -372,9 +589,9 @@ const createPatientObject = z.object({
  * mantem a regra do contato de emergencia valendo nas DUAS escritas — aplicar so
  * na edicao deixaria o cadastro gravar meio contato.
  */
-export const createPatientSchema = createPatientObject.superRefine(
-  emergencyContactMustBeComplete,
-)
+export const createPatientSchema = createPatientObject
+  .superRefine(emergencyContactMustBeComplete)
+  .superRefine(addressMustBeUsable)
 
 /** Entrada ja normalizada que o caso de uso recebe. */
 export type CreatePatientInput = z.infer<typeof createPatientSchema>
@@ -403,6 +620,7 @@ export const updatePatientSchema = createPatientObject
     patientId: z.uuid(createPatientMessages.unexpected),
   })
   .superRefine(emergencyContactMustBeComplete)
+  .superRefine(addressMustBeUsable)
 
 export type UpdatePatientInput = z.infer<typeof updatePatientSchema>
 

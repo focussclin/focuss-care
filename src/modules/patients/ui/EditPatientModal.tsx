@@ -14,6 +14,7 @@ import type { BiologicalSex } from '@/lib/supabase/database.types'
 
 import { BIOLOGICAL_SEX_OPTIONS } from '../domain/PatientIdentity'
 import { editPatientFormSchema } from '../schemas/patient.schema'
+import { PatientDocumentFields } from './PatientDocumentFields'
 
 /** Estado atual do cadastro, na forma que o formulario consome. */
 export interface EditablePatient {
@@ -42,6 +43,19 @@ export interface EditablePatient {
    * vazios sobre um contato que existe seria esconder a perda.
    */
   emergencyContactUnreadable: boolean
+
+  // Grupo documental — CPF, CNS e endereco.
+  cpf: string
+  cns: string
+  addressZip: string
+  addressStreet: string
+  addressNumber: string
+  addressComplement: string
+  addressDistrict: string
+  addressCity: string
+  addressState: string
+  /** Mesmo papel de `emergencyContactUnreadable`, para a coluna `address`. */
+  addressUnreadable: boolean
 }
 
 type EditPatientFormValues = {
@@ -57,6 +71,15 @@ type EditPatientFormValues = {
   emergencyContactName?: string
   emergencyContactPhone?: string
   emergencyContactRelationship?: string
+  cpf?: string
+  cns?: string
+  addressZip?: string
+  addressStreet?: string
+  addressNumber?: string
+  addressComplement?: string
+  addressDistrict?: string
+  addressCity?: string
+  addressState?: string
 }
 
 export interface EditPatientSubmitFailure {
@@ -99,6 +122,15 @@ export function EditPatientModal({
     emergencyContactName: patient.emergencyContactName,
     emergencyContactPhone: patient.emergencyContactPhone,
     emergencyContactRelationship: patient.emergencyContactRelationship,
+    cpf: patient.cpf,
+    cns: patient.cns,
+    addressZip: patient.addressZip,
+    addressStreet: patient.addressStreet,
+    addressNumber: patient.addressNumber,
+    addressComplement: patient.addressComplement,
+    addressDistrict: patient.addressDistrict,
+    addressCity: patient.addressCity,
+    addressState: patient.addressState,
   }
 
   const {
@@ -279,6 +311,13 @@ export function EditPatientModal({
           hint="Autodeclarada. Deixe em branco se a pessoa não informou."
           error={errors.genderIdentity?.message}
           {...register('genderIdentity')}
+        />
+
+        <PatientDocumentFields
+          register={register}
+          errors={errors}
+          disabled={busy}
+          addressUnreadable={patient.addressUnreadable}
         />
 
         <fieldset className="flex flex-col gap-4 rounded-field border border-border-card p-4">

@@ -6,6 +6,7 @@ import type { Database, Json, PatientRow } from '@/lib/supabase/database.types'
 import type { Patient } from '@/modules/_shared/domain/types'
 
 import type {
+  CpfOwner,
   NewPatientData,
   PatientListQuery,
   PatientMetrics,
@@ -40,7 +41,7 @@ const PATIENT_LIST_COLUMNS =
 
 /** Campos permitidos no perfil server-side e no retorno de uma escrita. */
 const PATIENT_DETAIL_COLUMNS =
-  'id, full_name, social_name, birth_date, cpf, phone, phone_alt, email, biological_sex, gender_identity, emergency_contact, admin_notes, is_active, created_at'
+  'id, full_name, social_name, birth_date, cpf, cns, address, phone, phone_alt, email, biological_sex, gender_identity, emergency_contact, admin_notes, is_active, created_at'
 
 /**
  * Adapter Supabase.
@@ -296,7 +297,13 @@ export class SupabasePatientRepository implements PatientRepository {
         phone: data.phone,
         phone_alt: data.phoneAlt,
         email: data.email,
-        address: {},
+        cpf: data.cpf,
+        cns: data.cns,
+        /*
+         * Sem endereco a coluna recebe `{}`, e nao `null`: ela e NOT NULL, e
+         * objeto vazio e "sem endereco" — nao endereco falso.
+         */
+        address: (data.address ?? {}) as unknown as Json,
         /*
          * `as unknown as Json` e a mesma travessia de `workflows.trigger_config`:
          * o tipo do dominio e fechado, e `Json` do supabase-js exige assinatura
@@ -344,6 +351,9 @@ export class SupabasePatientRepository implements PatientRepository {
         phone: data.phone,
         phone_alt: data.phoneAlt,
         email: data.email,
+        cpf: data.cpf,
+        cns: data.cns,
+        address: (data.address ?? {}) as unknown as Json,
         /*
          * `as unknown as Json` e a mesma travessia de `workflows.trigger_config`:
          * o tipo do dominio e fechado, e `Json` do supabase-js exige assinatura
@@ -365,6 +375,42 @@ export class SupabasePatientRepository implements PatientRepository {
     const visits = await this.loadVisitDates(clinicId, [patientId])
 
     return toPatient(row as PatientRow, visits.get(patientId))
+  }
+
+  /**
+   * O CPF já é de outro paciente desta clínica?
+   *
+   * `deleted_at is null` entra no `WHERE`: cadastro removido por fora do produto
+   * não pode bloquear o CPF de quem está no balcão. Arquivado, sim — `is_active`
+   * fica de fora de propósito, porque paciente arquivado continua sendo a mesma
+   * pessoa e o caminho certo é reativá-lo, não criar um segundo cadastro.
+   *
+   * `neq('id', ...)` só entra quando há um id a excluir: na edição, o próprio
+   * paciente não é conflito consigo mesmo.
+   */
+  async findCpfOwner(
+    clinicId: string,
+    cpf: string,
+    exceptPatientId: string | null,
+  ): Promise<CpfOwner | null> {
+    let query = this.client
+      .from('patients')
+      .select('id, full_name, social_name')
+      .eq('clinic_id', clinicId)
+      .eq('cpf', cpf)
+      .is('deleted_at', null)
+      .limit(1)
+
+    if (exceptPatientId) query = query.neq('id', exceptPatientId)
+
+    const { data, error } = await query.maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (!data) return null
+
+    // O nome SOCIAL vence, como em toda exibicao: a mensagem de conflito e lida
+    // por quem vai procurar essa pessoa na listagem, que a mostra pelo social.
+    return { id: data.id, name: data.social_name ?? data.full_name }
   }
 
   async setArchived(

@@ -41,6 +41,17 @@ export function changedFields(
   }
   if (emergencyContactChanged(current, next)) changed.push('emergency_contact')
 
+  /*
+   * Grupo documental. O evento diz que o CPF mudou — **nunca qual é**.
+   *
+   * Identificador fiscal em `audit_log` seria dado pessoal num lugar
+   * append-only, legível por `audit.read`, e fora do alcance de qualquer pedido
+   * de exclusão que a LGPD permita ao titular.
+   */
+  if ((current.cpf ?? null) !== next.cpf) changed.push('cpf')
+  if ((current.cns ?? null) !== next.cns) changed.push('cns')
+  if (addressChanged(current, next)) changed.push('address')
+
   return changed
 }
 
@@ -69,5 +80,32 @@ function emergencyContactChanged(
     before.name !== after.name ||
     (before.phone ?? null) !== (after.phone ?? null) ||
     (before.relationship ?? null) !== (after.relationship ?? null)
+  )
+}
+
+/**
+ * O endereço mudou?
+ *
+ * Campo a campo, pelo mesmo motivo do contato: a ordem das chaves de um `jsonb`
+ * não é garantida, e comparar texto acusaria mudança a cada save.
+ *
+ * Endereço ILEGÍVEL conta como mudança — salvar substitui o que está lá.
+ */
+function addressChanged(current: Patient, next: NewPatientData): boolean {
+  if (current.addressUnreadable) return true
+
+  const before = current.address ?? null
+  const after = next.address
+
+  if (before === null || after === null) return before !== after
+
+  return (
+    (before.zip ?? null) !== (after.zip ?? null) ||
+    (before.street ?? null) !== (after.street ?? null) ||
+    (before.number ?? null) !== (after.number ?? null) ||
+    (before.complement ?? null) !== (after.complement ?? null) ||
+    (before.district ?? null) !== (after.district ?? null) ||
+    (before.city ?? null) !== (after.city ?? null) ||
+    (before.state ?? null) !== (after.state ?? null)
   )
 }

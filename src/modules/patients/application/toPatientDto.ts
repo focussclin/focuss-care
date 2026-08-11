@@ -4,11 +4,19 @@ import type { PatientDto } from '../schemas/patient.schema'
 
 /**
  * Forma mínima enviada para a listagem Client Component.
- * Documento e observação administrativa ficam exclusivamente no perfil server-side.
+ * Identificadores documentais, endereço, contato de emergência e observação
+ * administrativa ficam exclusivamente no perfil server-side.
  */
 export type PatientListItem = Omit<
   Patient,
-  'document' | 'adminNotes' | 'contactPreference'
+  | 'cpf'
+  | 'cns'
+  | 'address'
+  | 'addressUnreadable'
+  | 'emergencyContact'
+  | 'emergencyContactUnreadable'
+  | 'adminNotes'
+  | 'contactPreference'
 >
 
 export function toPatientListItem(patient: Patient): PatientListItem {
@@ -31,7 +39,8 @@ export function toPatientListItem(patient: Patient): PatientListItem {
  *
  * A conversao existe porque `Patient` tem `Date`, e o que uma Server Action
  * devolve e serializado antes de chegar ao navegador. Datas viram string ISO;
- * campos que a tela nao precisa (visitas, documento) ficam de fora.
+ * campos que a tela nao precisa (visitas, identificadores documentais,
+ * endereço e contato de emergência) ficam de fora.
  *
  * Um lugar so para os tres casos de uso — criar, editar e arquivar devolvem
  * exatamente a mesma forma, e e isso que deixa o container tratar os tres com o

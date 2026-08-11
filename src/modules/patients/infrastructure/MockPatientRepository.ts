@@ -157,6 +157,18 @@ export class MockPatientRepository implements PatientRepository {
     return this.refuseWrite('setArchived')
   }
 
+  /**
+   * Ninguém tem CPF repetido numa base que não persiste.
+   *
+   * Devolver `null` não é fingir sucesso: a escrita seguinte recusa de qualquer
+   * forma, com mensagem própria. Inventar um dono aqui produziria um conflito
+   * com um paciente de exemplo — e quem visse a demonstração concluiria que o
+   * produto acusa duplicidade onde não há.
+   */
+  async findCpfOwner(): Promise<null> {
+    return null
+  }
+
   private refuseWrite(operation: string): never {
     throw new PatientRepositoryError(
       'unavailable',
