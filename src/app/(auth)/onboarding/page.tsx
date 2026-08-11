@@ -33,7 +33,6 @@ export const metadata: Metadata = {
  * `/login` saiu do `instant = false` porque nao redireciona: la o formulario e
  * o shell, e so o aviso de OAuth depende da requisicao.
  */
-export const instant = false
 
 export default async function OnboardingPage() {
   const session = await getSessionState()

@@ -40,7 +40,6 @@ export const metadata: Metadata = {
  * para uma mensagem que quase nunca aparece deslocaria o formulario.
  */
 /** A validacao server-side substitui o proxy no runtime Cloudflare Workers. */
-export const instant = false
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const session = await getSessionState()
