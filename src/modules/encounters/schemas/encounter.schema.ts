@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { CHIEF_COMPLAINT_MAX_LENGTH } from '../domain/Encounter'
+
 /**
  * Mensagens que só o servidor produz.
  *
@@ -20,6 +22,24 @@ export const encounterMessages = {
   invalidTransition:
     'A fila mudou desde que esta tela carregou. Atualize para ver o estado atual.',
   forbidden: 'Você não tem permissão para alterar a fila de atendimento.',
+  /**
+   * Queixa principal — feature **E-03**.
+   *
+   * Permissão própria: `record.write`. Iniciar o atendimento é ato da recepção;
+   * dizer o que a pessoa tem é de quem atende.
+   */
+  chiefComplaintForbidden:
+    'Você não tem permissão para registrar a queixa principal deste atendimento.',
+  chiefComplaintTooLong:
+    'A queixa principal pode ter no máximo 500 caracteres. Detalhes vão na evolução.',
+  /**
+   * Recusa de escrever em atendimento encerrado.
+   *
+   * Não é erro de sistema: é a janela clínica que fechou. Reescrever a queixa
+   * de um atendimento fechado mudaria a justificativa de uma conduta já tomada.
+   */
+  chiefComplaintClosed:
+    'Este atendimento já foi encerrado. A queixa principal não pode mais ser alterada.',
   notFound: 'Este registro não está mais disponível nesta clínica.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a ação agora. Tente novamente.',
@@ -116,6 +136,28 @@ export interface QueueEntryDto {
   startedAt: string | null
 }
 
+/**
+ * Queixa principal — feature **E-03**.
+ *
+ * Texto vazio vira `null`: apagar e correcao legitima enquanto a consulta corre,
+ * e uma queixa errada e pior que nenhuma. Sem essa normalizacao, `''` ficaria no
+ * banco e a tela mostraria um campo "preenchido" com nada dentro.
+ */
+export const setChiefComplaintSchema = z.object({
+  encounterId: z.uuid(encounterMessages.notFound),
+  chiefComplaint: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() ?? '')
+    .refine(
+      (value) => value.length <= CHIEF_COMPLAINT_MAX_LENGTH,
+      encounterMessages.chiefComplaintTooLong,
+    )
+    .transform((value) => (value === '' ? null : value)),
+})
+
+export type SetChiefComplaintInput = z.infer<typeof setChiefComplaintSchema>
+
 export interface EncounterDto {
   id: string
   patientId: string
@@ -124,6 +166,17 @@ export interface EncounterDto {
   professionalName: string
   appointmentId: string | null
   status: string
+  /**
+   * Queixa principal — **só viaja para quem tem `record.read`**.
+   *
+   * É conteúdo clínico. `undefined` significa "este papel não vê", e é
+   * diferente de `null`, que significa "ninguém registrou ainda". A tela usa a
+   * distinção para não oferecer um campo que o servidor vai recusar.
+   *
+   * A filtragem acontece no SERVIDOR, em `toEncounterDto` — o que a recepção
+   * não pode ver não atravessa a fronteira.
+   */
+  chiefComplaint?: string | null
   startsAt: string
   endedAt: string | null
 }

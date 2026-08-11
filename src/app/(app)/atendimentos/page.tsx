@@ -50,6 +50,17 @@ export default async function AtendimentosPage() {
   const role = await getActiveClinicRole()
   if (!can(role, 'encounter.read')) forbidden()
 
+  /*
+   * A QUEIXA PRINCIPAL e conteudo clinico, e esta tela e da recepcao.
+   *
+   * `record.read` separa os dois: quem opera a fila ve quem esta em atendimento
+   * e com quem; o que a pessoa tem so viaja para quem cuida. A filtragem
+   * acontece no servidor, em `toEncounterDto` — esconder na tela deixaria o
+   * texto no payload.
+   */
+  const canSeeClinical = can(role, 'record.read')
+  const canWriteClinical = can(role, 'record.write')
+
   const today = startOfDay(new Date())
 
   const [encounterSource, patientSource, appointmentSource] = await Promise.all([
@@ -87,11 +98,12 @@ export default async function AtendimentosPage() {
       queue={queue.map(toQueueEntryDto)}
       openEncounters={encounters
         .filter((encounter) => encounter.status === 'open')
-        .map(toEncounterDto)}
+        .map((encounter) => toEncounterDto(encounter, canSeeClinical))}
       closedEncounters={encounters
         .filter((encounter) => encounter.status === 'closed')
-        .map(toEncounterDto)}
+        .map((encounter) => toEncounterDto(encounter, canSeeClinical))}
       metrics={metrics}
+      canWriteChiefComplaint={canWriteClinical}
       patients={patientPage.items.map((patient) => ({
         id: patient.id,
         name: patient.name,

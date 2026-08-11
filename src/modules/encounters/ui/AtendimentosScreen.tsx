@@ -22,6 +22,7 @@ import { formatTime } from '@/lib/utils/date'
 import { callPatientAction } from '../actions/callPatient.action'
 import { closeEncounterAction } from '../actions/closeEncounter.action'
 import { startEncounterAction } from '../actions/startEncounter.action'
+import { ChiefComplaintField } from './ChiefComplaintField'
 import {
   encounterMessages,
   type EncounterDto,
@@ -32,6 +33,13 @@ import { CheckInModal, type CheckInOption } from './CheckInModal'
 export interface AtendimentosScreenProps {
   queue: readonly QueueEntryDto[]
   openEncounters: readonly EncounterDto[]
+  /**
+   * Quem tem `record.write` pode registrar a queixa principal (E-03).
+   *
+   * A recepcao opera esta tela e NAO tem a permissao: para ela o campo nem
+   * aparece. Esconder e cortesia — a recusa de verdade e do servidor.
+   */
+  canWriteChiefComplaint?: boolean
   closedEncounters: readonly EncounterDto[]
   metrics: { waiting: number; inService: number; closedToday: number }
   /** Pacientes para o check-in de encaixe. */
@@ -73,6 +81,7 @@ export function AtendimentosScreen({
   queue,
   openEncounters,
   closedEncounters,
+  canWriteChiefComplaint = false,
   metrics,
   patients,
   professionals,
@@ -293,6 +302,21 @@ export function AtendimentosScreen({
                       Com {encounter.professionalName} · início às{' '}
                       {formatTime(new Date(encounter.startsAt))}
                     </p>
+
+                    {/*
+                      A queixa so existe no DTO para quem tem `record.read` —
+                      `undefined` e "este papel nao ve", `null` e "ninguem
+                      registrou". A distincao evita oferecer um campo que o
+                      servidor recusaria.
+                    */}
+                    {encounter.chiefComplaint !== undefined ? (
+                      <ChiefComplaintField
+                        encounterId={encounter.id}
+                        value={encounter.chiefComplaint}
+                        canWrite={canWriteChiefComplaint && isLive}
+                        disabled={isPending}
+                      />
+                    ) : null}
                   </div>
 
                   <StatusBadge tone="positive">Em atendimento</StatusBadge>

@@ -18,9 +18,23 @@ import { encounterMessages } from '../schemas/encounter.schema'
  * `invalid-transition` sai como `'conflict'`: para o pipeline, é a mesma classe
  * de "o estado mudou debaixo de você", e a mensagem já diz para atualizar.
  */
+/**
+ * Mensagens que UMA action precisa dizer diferente das outras.
+ *
+ * Opcional e por chave: as quatro actions de fila compartilham o texto padrao, e
+ * a queixa principal (E-03) precisa de outro para `invalid-transition` —
+ * naquele caso o estado que mudou nao e a fila, e o atendimento ENCERRADO.
+ * Mandar "atualize a tela" ali faria a pessoa recarregar uma tela ja correta.
+ */
+export interface EncounterFailureOverrides {
+  invalidTransition?: string
+  forbidden?: string
+}
+
 export function toEncounterFailure<F extends string>(
   action: string,
   cause: unknown,
+  overrides: EncounterFailureOverrides = {},
 ): ActionResult<never, F> {
   if (isEncounterRepositoryError(cause)) {
     console.error(`[${action}] escrita recusada`, {
@@ -30,11 +44,14 @@ export function toEncounterFailure<F extends string>(
 
     switch (cause.reason) {
       case 'invalid-transition':
-        return err<F>('conflict', encounterMessages.invalidTransition)
+        return err<F>(
+          'conflict',
+          overrides.invalidTransition ?? encounterMessages.invalidTransition,
+        )
       case 'not-found':
         return err<F>('not-found', encounterMessages.notFound)
       case 'forbidden':
-        return err<F>('forbidden', encounterMessages.forbidden)
+        return err<F>('forbidden', overrides.forbidden ?? encounterMessages.forbidden)
       case 'unavailable':
         return err<F>('unavailable', encounterMessages.unavailable)
       case 'unexpected':

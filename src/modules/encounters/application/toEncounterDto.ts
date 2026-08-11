@@ -30,7 +30,18 @@ export function toQueueEntryDto(entry: QueueEntry): QueueEntryDto {
   }
 }
 
-export function toEncounterDto(encounter: Encounter): EncounterDto {
+/**
+ * Entidade -> o que atravessa a fronteira da Server Action.
+ *
+ * `canSeeClinical` decide se a QUEIXA PRINCIPAL viaja. É o mesmo desenho de
+ * `toServiceDto(service, canSeePrice)`: o que um papel não pode ver **não
+ * atravessa**, em vez de ser escondido na tela. `/atendimentos` é operada pela
+ * recepção, e a queixa é conteúdo clínico.
+ */
+export function toEncounterDto(
+  encounter: Encounter,
+  canSeeClinical: boolean,
+): EncounterDto {
   return {
     id: encounter.id,
     patientId: encounter.patientId,
@@ -39,6 +50,7 @@ export function toEncounterDto(encounter: Encounter): EncounterDto {
     professionalName: encounter.professionalName,
     appointmentId: encounter.appointmentId,
     status: encounter.status,
+    ...(canSeeClinical ? { chiefComplaint: encounter.chiefComplaint } : {}),
     startsAt: encounter.startedAt.toISOString(),
     endedAt: encounter.endedAt?.toISOString() ?? null,
   }

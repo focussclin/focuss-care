@@ -80,4 +80,20 @@ export interface EncounterRepository {
    * registro de que aconteceu é o que sustenta prontuário e faturamento.
    */
   close(clinicId: string, encounterId: string): Promise<Encounter>
+
+  /**
+   * Registra ou corrige a queixa principal — feature **E-03**.
+   *
+   * Só alcanca atendimento ABERTO, e a condicao vai no `WHERE`: entre a tela
+   * carregar e o clique chegar, outra pessoa pode ter encerrado o atendimento, e
+   * gravar por cima mudaria a justificativa de uma conduta ja tomada.
+   *
+   * `null` apaga o que estava la — corrigir para vazio e edicao legitima
+   * enquanto a consulta corre, e uma queixa errada e pior que nenhuma.
+   */
+  setChiefComplaint(
+    clinicId: string,
+    encounterId: string,
+    complaint: string | null,
+  ): Promise<Encounter>
 }

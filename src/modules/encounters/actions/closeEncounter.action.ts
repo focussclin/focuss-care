@@ -1,6 +1,6 @@
 'use server'
 
-import { rolesWith } from '@/lib/auth/permissions'
+import { can, rolesWith } from '@/lib/auth/permissions'
 import { createEncounterNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
@@ -58,7 +58,7 @@ const runCloseEncounter = createAction<CloseEncounterInput, EncounterDto>({
         input.encounterId,
       )
 
-      return ok<EncounterDto>(toEncounterDto(encounter))
+      return ok<EncounterDto>(toEncounterDto(encounter, can(context.role, 'record.read')))
     } catch (cause) {
       return toEncounterFailure('encounter.close', cause)
     }

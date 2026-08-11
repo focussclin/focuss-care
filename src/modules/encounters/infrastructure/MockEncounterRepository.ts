@@ -64,6 +64,7 @@ export class MockEncounterRepository implements EncounterRepository {
           appointment.status === 'completed'
             ? ('closed' as const)
             : ('open' as const),
+        chiefComplaint: null,
         startedAt: appointment.startsAt,
         endedAt:
           appointment.status === 'completed'
@@ -115,6 +116,10 @@ export class MockEncounterRepository implements EncounterRepository {
 
   async close(): Promise<never> {
     return this.refuseWrite('close')
+  }
+
+  async setChiefComplaint(): Promise<never> {
+    return this.refuseWrite('setChiefComplaint')
   }
 
   private sameDayAppointments(day: Date) {

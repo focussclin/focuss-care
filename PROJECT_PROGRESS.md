@@ -96,7 +96,7 @@ As 42 rotas existem e renderizam. A coluna **Dados** diz de onde vem o conteúdo
 | `/agenda` | **COMPLETO** | Banco (scheduling + patients + settings) · seletor de paciente busca no servidor, não filtra uma página no navegador · confirmação e desfecho (§8.34) | Membro; buscar paciente exige `patient.read`; confirmar exige `appointment.write` e desfecho exige `appointment.cancel` |
 | `/pacientes` e subrotas | **COMPLETO** | Banco (patients + `admin_notes` + patient_contacts + consents); tags administrativas preparadas e aguardando migration | `patient.read`; alterações exigem `patient.write` |
 | `/recepcao` | **COMPLETO** | Banco (scheduling + encounters) — quem falta chegar e quem está atrasado, derivado na rota | `encounter.read` |
-| `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) | Membro |
+| `/atendimentos` | **COMPLETO** | Banco (encounters + patients + scheduling) · queixa principal filtrada por papel (§8.36) | `encounter.read`; a queixa exige `record.read`, e escrevê-la `record.write` |
 | `/display` | **COMPLETO** | Banco (encounters) — projeta `waiting_queue` para a TV da sala de espera, com nome abreviado | `encounter.read` |
 | `/prontuarios` | **COMPLETO** | Banco (records) | `record.read` |
 | `/assinaturas` | **COMPLETO** | Banco (subscription) — plano, estado e cotas contadas do uso real | `clinic.settings` |
@@ -2886,6 +2886,86 @@ apareceria justamente na emergência.
 | `cpf`, `cns`, `address` | Grupo DOCUMENTAL, que pertence ao faturamento. CPF pede validação de dígito e uma decisão sobre duplicidade na clínica; gravar identificador fiscal sem as duas coisas acumula risco sem contrapartida |
 | `photo_url` | Depende de bucket de Storage, que não existe |
 | Nome social nas outras telas | `patients ( full_name )` aparece em **9 módulos** (agenda, recepção, financeiro, convênios, inbox, tarefas, CRM, conciliação, atendimentos). Propagar é mudança transversal; propagar pela metade seria pior — o nome mudaria em algumas telas e não em outras |
+
+---
+
+## 8.36 Feature — Queixa principal do atendimento (10/08/2026)
+
+Reauditei o que sobrou fora dos módulos já fechados. As tabelas sem superfície
+continuam todas bloqueadas (IA, bucket, P-WD, P-RPC), e a varredura de colunas
+apontou uma única coluna viva e não reclamada: **`encounters.chief_complaint`**,
+nunca lida e nunca escrita.
+
+### Não é `waiting_queue.reason`, e a diferença é o ponto
+
+O domínio da fila já dizia, por escrito, o que faltava: `reason` é "motivo
+declarado na chegada. **Não é queixa clínica**". A recepção anota o que a pessoa
+falou no balcão; a queixa principal é registro de quem atende, na primeira linha
+da consulta, e é dela que sai a conduta. Colapsar as duas faria a anotação do
+balcão passar por afirmação clínica.
+
+O atendimento começava, portanto, sem nenhum registro do motivo clínico — e o
+prontuário não tinha vínculo com o porquê da visita.
+
+### `record.write`, e não `encounter.write`
+
+As outras quatro actions do módulo pedem `encounter.write`, recepção inclusive.
+Esta pede a permissão **clínica**, e a diferença é real na matriz de I-05:
+`receptionist` tem `encounter.write` e **não** tem `record.write`; `admin`
+também não — administrar a clínica não é cuidar do paciente.
+
+Por isso é action própria, e não um campo em `startEncounter`: juntar as duas
+obrigaria a recepção a digitar conteúdo clínico para a fila andar.
+
+### A queixa não atravessa a fronteira para quem não pode vê-la
+
+`/atendimentos` é operada pela recepção. `toEncounterDto(encounter, canSeeClinical)`
+**omite a chave** quando o papel não tem `record.read` — mesmo desenho de
+`toServiceDto(service, canSeePrice)`. Esconder na tela deixaria o texto no
+payload.
+
+A distinção entre ausente e nulo é usada: `undefined` é "este papel não vê",
+`null` é "ninguém registrou". É ela que faz o campo aparecer só para quem pode
+usá-lo, em vez de oferecer um controle que o servidor recusaria.
+
+O typecheck cobrou a mudança em quatro pontos — incluindo dois `.map(toEncounterDto)`
+onde o segundo argumento teria sido o **índice do array**, e a queixa vazaria
+para a recepção em toda linha de índice ímpar.
+
+### O texto NÃO entra na auditoria
+
+É a informação mais sensível do módulo — diz o que a pessoa tem — e `audit_log`
+é append-only e legível pela operação inteira, incluindo papéis sem
+`record.read`. Gravá-lo ali contornaria a própria filtragem desta fatia. O evento
+registra que houve registro e se a queixa foi **apagada**; o conteúdo fica em
+`encounters.chief_complaint`, sob a RLS da tabela.
+
+### Só com o atendimento aberto
+
+`eq('status', 'open')` vai no `WHERE`, não numa leitura anterior: entre a tela
+carregar e o clique chegar, outra pessoa pode ter encerrado. Gravar por cima
+mudaria a justificativa de uma conduta já tomada.
+
+Zero linhas tem três causas, separadas por releitura: encerrado
+(`invalid-transition`), ausente (`not-found`), aberto e legível (`forbidden` —
+falta policy). A mensagem de encerrado **não** manda recarregar a tela, ao
+contrário das outras actions do módulo: ali o que mudou é a fila; aqui foi a
+janela clínica que fechou, e mandar atualizar faria a pessoa recarregar uma tela
+já correta. Isso exigiu `EncounterFailureOverrides` no tradutor.
+
+Apagar é permitido enquanto a consulta corre: uma queixa errada é pior que
+nenhuma.
+
+### Estado
+
+`encounters` passa a 165 testes (+31: 14 de action, 9 de adapter, 8 de fronteira,
+14 de UI). `/atendimentos` mostra a queixa abaixo do paciente, fechada por
+padrão — a tela é operacional, e um campo de texto aberto em cada linha
+empurraria "quem está com quem" para baixo.
+
+**Fica pendente:** a queixa não aparece no prontuário (`/prontuarios`) nem na
+ficha do paciente. `medical_records.encounter_id` existe e permitiria o vínculo;
+é fatia própria, do módulo `records`.
 
 ---
 

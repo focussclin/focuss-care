@@ -60,9 +60,38 @@ export interface Encounter {
   /** Null quando nasceu de um encaixe, sem agendamento por trás. */
   appointmentId: string | null
   status: EncounterStatus
+  /**
+   * Queixa principal — o que trouxe o paciente, em termos clínicos.
+   *
+   * # Não é `waiting_queue.reason`, e a diferença é o ponto
+   *
+   * `reason` é o motivo declarado na CHEGADA: a recepção anota o que a pessoa
+   * disse no balcão. A queixa principal é registro de quem ATENDE, na primeira
+   * linha da consulta, e é dela que sai a conduta. Colapsar as duas faria a
+   * anotação da recepção passar por afirmação clínica.
+   *
+   * `null` enquanto ninguém registrou — é o estado normal de um atendimento que
+   * acabou de começar, e não uma pendência.
+   */
+  chiefComplaint: string | null
   startedAt: Date
   endedAt: Date | null
 }
+
+/**
+ * A queixa só pode ser registrada com o atendimento ABERTO.
+ *
+ * Depois de encerrado, o que ficou registrado é o que a clínica afirmou sobre
+ * aquela consulta. Reescrever a queixa de um atendimento fechado mudaria a
+ * justificativa de uma conduta já tomada — e o produto não sobrescreve
+ * informação clínica histórica em silêncio.
+ */
+export function canRecordChiefComplaint(status: EncounterStatus): boolean {
+  return status === 'open'
+}
+
+/** Limite de tamanho. Queixa principal é uma frase, não a evolução inteira. */
+export const CHIEF_COMPLAINT_MAX_LENGTH = 500
 
 /** Números do topo da tela — consulta própria, não derivação da lista. */
 export interface EncounterMetrics {

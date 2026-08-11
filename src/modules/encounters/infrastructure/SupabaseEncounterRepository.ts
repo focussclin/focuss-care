@@ -41,6 +41,7 @@ const ENCOUNTER_SELECT = `
   professional_id,
   appointment_id,
   status,
+  chief_complaint,
   started_at,
   ended_at,
   patients ( full_name ),
@@ -69,6 +70,7 @@ type EncounterJoinRow = {
   professional_id: string
   appointment_id: string | null
   status: EncounterStatus
+  chief_complaint: string | null
   started_at: string
   ended_at: string | null
   patients: { full_name: string } | null
@@ -102,6 +104,7 @@ function toEncounter(row: EncounterJoinRow): Encounter {
     professionalName: row.professionals?.display_name ?? 'Profissional',
     appointmentId: row.appointment_id,
     status: row.status,
+    chiefComplaint: row.chief_complaint,
     startedAt: new Date(row.started_at),
     endedAt: row.ended_at ? new Date(row.ended_at) : null,
   }
@@ -331,6 +334,69 @@ export class SupabaseEncounterRepository implements EncounterRepository {
     }
 
     return toEncounter(row as unknown as EncounterJoinRow)
+  }
+
+  /**
+   * Registra ou corrige a queixa principal — feature **E-03**.
+   *
+   * `eq('status', 'open')` é a condição de origem, no `WHERE` e não numa leitura
+   * anterior: entre a tela carregar e o clique chegar, outra pessoa pode ter
+   * encerrado o atendimento. Gravar por cima mudaria a justificativa de uma
+   * conduta já tomada.
+   *
+   * Zero linhas tem três causas, e a releitura as separa — o mesmo padrão do
+   * resto do projeto: sumiu, foi encerrado, ou a policy recusou.
+   */
+  async setChiefComplaint(
+    clinicId: string,
+    encounterId: string,
+    complaint: string | null,
+  ): Promise<Encounter> {
+    const { data, error } = await this.client
+      .from('encounters')
+      .update({ chief_complaint: complaint, updated_at: new Date().toISOString() })
+      .eq('clinic_id', clinicId)
+      .eq('id', encounterId)
+      .eq('status', 'open')
+      .select(ENCOUNTER_SELECT)
+      .maybeSingle()
+
+    if (error) throw toWriteError(error)
+    if (data) return toEncounter(data as unknown as EncounterJoinRow)
+
+    const { data: existing, error: readError } = await this.client
+      .from('encounters')
+      .select('status')
+      .eq('clinic_id', clinicId)
+      .eq('id', encounterId)
+      .maybeSingle()
+
+    if (readError) throw toWriteError(readError)
+    if (!existing) {
+      throw new EncounterRepositoryError(
+        'not-found',
+        `atendimento ${encounterId} indisponivel nesta clinica`,
+      )
+    }
+
+    /*
+     * Encerrado é `invalid-transition`, e não `not-found`: o atendimento está
+     * lá, e a pessoa precisa saber que a janela fechou — não procurar um
+     * registro que não sumiu.
+     */
+    if (existing.status !== 'open') {
+      throw invalidTransition(encounterId, 'registrar a queixa principal')
+    }
+
+    /*
+     * Legivel e ABERTO, e mesmo assim zero linhas: quem recusou foi a policy.
+     * Sem policy de UPDATE o Postgres nao devolve erro — a linha nao e
+     * alcancada e nada muda, em silencio.
+     */
+    throw new EncounterRepositoryError(
+      'forbidden',
+      `escrita recusada para o atendimento ${encounterId}`,
+    )
   }
 
   /**
