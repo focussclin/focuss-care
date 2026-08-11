@@ -2,6 +2,7 @@
 
 import { can, rolesWith } from '@/lib/auth/permissions'
 import { createEncounterNotification } from '@/lib/notifications/operational'
+import { syncAppointmentProgress } from '@/lib/scheduling/appointment-progress'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -41,7 +42,8 @@ const runStartEncounter = createAction<
     unavailable: encounterMessages.unavailable,
     unexpected: encounterMessages.unexpected,
   },
-  revalidatePaths: ['/atendimentos', '/dashboard'],
+  /* `/agenda` entra pelo carimbo de `in_progress`. Ver `checkIn.action.ts`. */
+  revalidatePaths: ['/atendimentos', '/dashboard', '/agenda'],
 
   afterSuccess: async (output, _input, context) => {
     await createEncounterNotification({
@@ -51,6 +53,22 @@ const runStartEncounter = createAction<
       kind: 'started',
       patientName: output.patientName,
       eventAt: output.startsAt,
+    })
+
+    /*
+     * `in_progress` aceita partir de `scheduled` — ver `IN_PROGRESS_FROM`.
+     *
+     * Quando o atendimento comeca, a pessoa esta na sala, e isso e fato
+     * observado. Exigir a passagem por `checked_in` deixaria a agenda presa em
+     * "Agendado" sempre que a chegada nao tivesse sido carimbada — inclusive nos
+     * atendimentos anteriores a esta fatia, que sao a base inteira.
+     */
+    await syncAppointmentProgress({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      appointmentId: output.appointmentId,
+      progress: 'in_progress',
+      userId: context.userId,
     })
   },
 

@@ -4,10 +4,13 @@ import type { AppointmentStatus } from '@/modules/_shared/domain/types'
 
 import {
   allowedSourcesFor,
+  canCheckIn,
   canConfirm,
   canRecordOutcome,
+  canStart,
   canTransition,
   isAppointmentOutcome,
+  isAppointmentProgress,
   isTerminal,
   outcomeIsDue,
 } from './AppointmentLifecycle'
@@ -108,10 +111,15 @@ describe('a transição em si', () => {
 
     expect(allowed).toEqual([
       'scheduled -> confirmed',
+      'scheduled -> checked_in',
+      'scheduled -> in_progress',
       'scheduled -> completed',
       'scheduled -> no_show',
+      'confirmed -> checked_in',
+      'confirmed -> in_progress',
       'confirmed -> completed',
       'confirmed -> no_show',
+      'checked_in -> in_progress',
       'checked_in -> completed',
       'checked_in -> no_show',
       'in_progress -> completed',
@@ -136,11 +144,66 @@ describe('a transição em si', () => {
   })
 
   it.each(['checked_in', 'in_progress'] as const)(
-    '%s não é alcançável por aqui — quem move é a fila',
+    '%s é alcançável, e quem move continua sendo a fila',
     (status) => {
-      expect(ALL.filter((from) => canTransition(from, status))).toEqual([])
+      /*
+       * A-04 inverteu a linha que existia aqui. Até então os dois estados não
+       * tinham origem nenhuma — o enum os previa e nada os escrevia, e a agenda
+       * mostrava "Agendado" sobre quem já estava na sala.
+       *
+       * A máquina passou a prevê-los; **o botão continua não existindo na
+       * agenda**. Quem observa a chegada é a recepção, na tela da fila, e é de
+       * lá que a transição parte (`lib/scheduling/appointment-progress.ts`).
+       */
+      expect(ALL.filter((from) => canTransition(from, status)).length)
+        .toBeGreaterThan(0)
+      expect(ALL.filter(isTerminal).some((from) => canTransition(from, status)))
+        .toBe(false)
     },
   )
+})
+
+describe('andamento da visita', () => {
+  it('a chegada sai do que ainda não começou', () => {
+    expect(canCheckIn('scheduled')).toBe(true)
+    // Confirmar e chegar são coisas diferentes.
+    expect(canCheckIn('confirmed')).toBe(true)
+  })
+
+  it.each(['checked_in', 'in_progress', 'completed', 'canceled', 'no_show'] as const)(
+    'a chegada não sai de %s',
+    (status) => {
+      expect(canCheckIn(status)).toBe(false)
+    },
+  )
+
+  it('o início aceita partir de `scheduled`, sem passar pela chegada', () => {
+    /*
+     * Quando o atendimento começa, a pessoa está na sala — isso é fato
+     * observado. Exigir `checked_in` deixaria a agenda presa em "Agendado"
+     * sempre que a chegada não tivesse sido carimbada, inclusive em todo
+     * atendimento anterior a esta fatia.
+     */
+    expect(canStart('scheduled')).toBe(true)
+    expect(canStart('confirmed')).toBe(true)
+    expect(canStart('checked_in')).toBe(true)
+  })
+
+  it.each(['in_progress', 'completed', 'canceled', 'no_show'] as const)(
+    'o início não sai de %s',
+    (status) => {
+      expect(canStart(status)).toBe(false)
+    },
+  )
+
+  it('andamento não é desfecho', () => {
+    // `checked_in` e `in_progress` dizem ONDE a visita está, não como terminou:
+    // nenhum dos dois entra na taxa de comparecimento.
+    const progress = ALL.filter(isAppointmentProgress)
+
+    expect(progress).toEqual(['checked_in', 'in_progress'])
+    expect(progress.some(isAppointmentOutcome)).toBe(false)
+  })
 })
 
 /**
@@ -154,6 +217,14 @@ describe('origens permitidas', () => {
 
   it.each(['completed', 'no_show'] as const)('%s bate com `canRecordOutcome`', (to) => {
     expect([...allowedSourcesFor(to)]).toEqual(ALL.filter(canRecordOutcome))
+  })
+
+  it('chegada bate com `canCheckIn`', () => {
+    expect([...allowedSourcesFor('checked_in')]).toEqual(ALL.filter(canCheckIn))
+  })
+
+  it('início bate com `canStart`', () => {
+    expect([...allowedSourcesFor('in_progress')]).toEqual(ALL.filter(canStart))
   })
 
   it('status sem transição declarada não tem origem nenhuma', () => {

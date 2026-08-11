@@ -346,7 +346,13 @@ describe('nenhuma action revalida rota que não alimenta', () => {
      */
     const allowedByModule: Record<string, readonly string[]> = {
       billing: ['/financeiro'],
-      encounters: ['/atendimentos', '/dashboard'],
+      /*
+       * `/agenda` entra com A-04: a chegada e o início do atendimento passaram a
+       * carimbar `appointments.status`. Antes desta fatia, a fila não tocava na
+       * agenda, e revalidá-la seria jogar fora cache de uma tela que o módulo
+       * não alterava.
+       */
+      encounters: ['/atendimentos', '/dashboard', '/agenda'],
       identity: ['/'],
       insurance: ['/convenios'],
       patients: [

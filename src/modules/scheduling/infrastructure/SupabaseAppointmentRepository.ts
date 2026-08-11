@@ -9,7 +9,10 @@ import {
 } from '@/lib/clinic/business-hours'
 import type { Database } from '@/lib/supabase/database.types'
 
-import type { AppointmentOutcome } from '../domain/AppointmentLifecycle'
+import type {
+  AppointmentOutcome,
+  AppointmentProgress,
+} from '../domain/AppointmentLifecycle'
 import {
   allowedSourcesFor,
   isAppointmentOutcome,
@@ -515,6 +518,22 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     recordedBy: string,
   ): Promise<Appointment> {
     return this.transition(clinicId, appointmentId, outcome, recordedBy)
+  }
+
+  /**
+   * Chegada e inicio do atendimento, vindos da FILA.
+   *
+   * Reusa `transition` inteiro — mesma condicao de origem no `WHERE`, mesma
+   * releitura para separar as tres causas de zero linhas, mesmo registro em
+   * `appointment_status_history`. O que muda e so o destino.
+   */
+  async markProgress(
+    clinicId: string,
+    appointmentId: string,
+    progress: AppointmentProgress,
+    changedBy: string,
+  ): Promise<Appointment> {
+    return this.transition(clinicId, appointmentId, progress, changedBy)
   }
 
   /**

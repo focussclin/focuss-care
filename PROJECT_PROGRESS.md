@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2631 testes em 207 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2727 testes em 213 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -3541,6 +3541,100 @@ Teleatendimento continua fora do escopo.
 | Busca por CPF | A listagem procura por nome e telefone. Achar pelo documento é o que a recepção faz com a carteirinha na mão, e cabe na paleta — mas é contrato de busca próprio |
 | Consulta de CEP | Depende de serviço externo. O formulário declara que os campos são digitados |
 | `photo_url` | Segue de §8.35: depende de bucket de Storage, que não existe |
+
+---
+
+## 8.43 Feature — A fila move a agenda (11/08/2026)
+
+§8.34 fechou o ciclo de vida do atendimento e deixou o limite escrito, com todas
+as letras:
+
+> **Fica pendente, e é o limite honesto desta fatia:** `checked_in` e
+> `in_progress` continuam inalcançáveis. Quem move o paciente pela fila é o
+> módulo `encounters`, e carimbar `appointments.status` de lá exigiria um módulo
+> compor o repositório de outro (…). O efeito prático: a agenda e a fila de
+> espera continuam podendo discordar sobre o mesmo paciente.
+
+Esta fatia fecha isso. Nenhuma migration: os dois valores existem em
+`appointment_status` desde o primeiro schema, e `appointmentStatusMeta` já tinha
+rótulo para os dois — "Aguardando" e "Em atendimento" eram texto que nunca
+aparecia.
+
+### O que a clínica via
+
+Recepção registrava a chegada, o paciente sentava na sala de espera, o
+profissional o chamava — e a agenda continuava dizendo **"Agendado"**. Duas telas
+do mesmo produto afirmando coisas diferentes sobre a mesma pessoa no mesmo
+minuto, e a errada é a que a clínica abre para saber como o dia está andando.
+
+### O padrão que faltava, e onde ele já existia
+
+A objeção de §8.34 era correta: `encounters` escrevendo em `appointments` daria
+dois donos à máquina de estados da agenda. Mas o projeto **já tinha** o lugar
+certo — `lib/notifications/operational.ts` faz exatamente isto desde antes: um
+efeito derivado que atravessa módulos, chamado de `afterSuccess`, morando na
+camada de composição.
+
+`lib/scheduling/appointment-progress.ts` segue esse desenho. A transição em si
+continua sendo do módulo dono: o lib chama `markProgress`, que reusa o
+`transition` inteiro do adapter da agenda — mesma condição de origem no `WHERE`,
+mesma releitura para separar as três causas de zero linhas, mesma
+`appointment_status_history`. **Uma implementação, dois chamadores.**
+
+### A máquina de estados ganhou duas arestas — e o teste obrigou a olhar
+
+`AppointmentLifecycle.test.ts` tem um teste que escreve o mapa de transições por
+extenso, "de propósito: uma linha nova aqui obriga quem a acrescentar a olhar
+para o conjunto inteiro". Ele quebrou, junto com o que afirmava que os dois
+estados não eram alcançáveis. Era exatamente o momento para o qual ele foi
+escrito.
+
+O mapa passou de 9 para 14 transições. A que mais importa é a que **não** entrou:
+os três terminais continuam sem saída, então uma chegada registrada depois de o
+desfecho ter sido lançado não reabre nada — alcança zero linhas e vira
+`stale-status`.
+
+**`in_progress` aceita partir de `scheduled`**, sem passar por `checked_in`, e é
+deliberado: quando o atendimento começa, a pessoa está na sala, e isso é fato
+observado. Exigir a chegada carimbada deixaria a agenda presa em "Agendado" em
+todo atendimento anterior a esta fatia — que é a base inteira. A regra é
+auto-corretiva.
+
+### Chegada não é desfecho, e por isso não tem hora
+
+`recordOutcome` recusa desfecho antes de `starts_at`: registrar falta na véspera
+é adivinhação. Chegada não tem essa trava — paciente que chega adiantado chegou,
+e o balcão não vai esperar o relógio para dizer isso.
+
+Pelo mesmo motivo `checked_in` e `in_progress` ficam fora de
+`APPOINTMENT_OUTCOMES`: eles dizem **onde a visita está**, não como terminou, e
+nenhum dos dois entra na taxa de comparecimento.
+
+### O que acontece quando a agenda não acompanha
+
+O paciente **chegou**. A fila não volta atrás porque um `UPDATE` em outra tabela
+não alcançou linha nenhuma — o efeito roda em `afterSuccess`, depois da resposta,
+e devolve um desfecho tipado em vez de lançar. `walk-in` (encaixe, sem
+agendamento) é resposta normal e não é falha; `stale-status` é o caso esperado de
+quem foi cancelado enquanto esperava.
+
+O log leva a classe da falha e o destino — nunca o nome do paciente nem o motivo
+declarado na chegada.
+
+### Estado
+
+`scheduling` passa a 208 testes e `encounters` a 172; o projeto vai a **2727
+testes em 213 arquivos** (+36, +2 arquivos). Typecheck, lint, build e suíte
+completa estão limpos. Teleatendimento continua fora do escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Encerrar o atendimento não carimba `completed` | Seria um segundo caminho para o desfecho, e o da agenda grava a decisão de quem opera — inclusive `no_show`, que o encerramento não conhece. Fechar a consulta e afirmar "compareceu" são atos diferentes, e juntá-los tiraria a escolha de quem registra |
+| Chamar o paciente não muda a agenda | `called` é estado da FILA (o painel da TV), não do agendamento: entre ser chamado e entrar na sala, o atendimento não começou. Um estado a mais na agenda para o mesmo minuto seria ruído |
+| A agenda não oferece "registrar chegada" | Quem observa a chegada é a recepção, na tela da fila. Um botão na agenda criaria uma segunda porta para o mesmo fato, sem a fila que a recepção usa para chamar |
+| `deleted_at` em `listProfessionals` | Segue de §8.33: profissional removido por fora do produto ainda aparece no seletor da agenda. É outro módulo e outra fatia |
 
 ---
 

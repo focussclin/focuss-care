@@ -1,6 +1,9 @@
 import type { Appointment, Professional } from '@/modules/_shared/domain/types'
 
-import type { AppointmentOutcome } from './AppointmentLifecycle'
+import type {
+  AppointmentOutcome,
+  AppointmentProgress,
+} from './AppointmentLifecycle'
 
 /**
  * Dados de um agendamento novo, já normalizados pela camada de aplicação.
@@ -191,5 +194,32 @@ export interface AppointmentRepository {
     appointmentId: string,
     outcome: AppointmentOutcome,
     recordedBy: string,
+  ): Promise<Appointment>
+
+  /**
+   * Move o atendimento para `checked_in` ou `in_progress`.
+   *
+   * # Quem chama isto não é a agenda
+   *
+   * É a FILA de espera, pelo módulo de atendimento, através de
+   * `lib/scheduling/appointment-progress.ts`. Os dois estados existiam no enum
+   * do banco e eram inalcançáveis porque a agenda não tem botão de "chegou" — e
+   * nem deve ter: quem observa a chegada é a recepção, na tela da fila.
+   *
+   * Fica na mesma porta das outras transições, e não numa porta nova, porque é a
+   * mesma escrita: compare-and-swap na coluna `status`, com `appointment_status_history`
+   * registrada junto. Duas implementações da mesma transição divergiriam, e a
+   * que envelhecesse primeiro deixaria a agenda com um estado que a máquina de
+   * estados não prevê.
+   *
+   * **Não recusa por horário.** `outcomeIsDue` vale para desfecho, que é
+   * afirmação sobre o que aconteceu; chegada é fato observado no balcão, e
+   * paciente que chega adiantado chegou.
+   */
+  markProgress(
+    clinicId: string,
+    appointmentId: string,
+    progress: AppointmentProgress,
+    changedBy: string,
   ): Promise<Appointment>
 }

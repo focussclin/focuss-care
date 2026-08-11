@@ -98,6 +98,17 @@ export class MockAppointmentRepository implements AppointmentRepository {
     return this.refuseWrite('recordOutcome')
   }
 
+  /**
+   * Sem banco, a agenda de demonstracao nao anda junto com a fila.
+   *
+   * Recusa como as outras escritas, e quem chama trata: a sincronizacao e
+   * best-effort e devolve `{ synced: false }`. Fingir sucesso aqui faria a
+   * demonstracao mostrar "Em atendimento" sobre uma linha que ninguem gravou.
+   */
+  async markProgress(): Promise<never> {
+    return this.refuseWrite('markProgress')
+  }
+
   private refuseWrite(operation: string): never {
     throw new AppointmentRepositoryError(
       'unavailable',

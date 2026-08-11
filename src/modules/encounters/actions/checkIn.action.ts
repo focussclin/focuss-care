@@ -2,6 +2,7 @@
 
 import { rolesWith } from '@/lib/auth/permissions'
 import { createEncounterNotification } from '@/lib/notifications/operational'
+import { syncAppointmentProgress } from '@/lib/scheduling/appointment-progress'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -37,7 +38,14 @@ const runCheckIn = createAction<CheckInInput, QueueEntryDto, 'patientId'>({
     unavailable: encounterMessages.unavailable,
     unexpected: encounterMessages.unexpected,
   },
-  revalidatePaths: ['/atendimentos', '/dashboard'],
+  /*
+   * `/agenda` entra porque o carimbo abaixo muda `appointments.status`.
+   *
+   * Sem ela, quem faz o check-in e volta para a agenda continua vendo
+   * "Agendado" sobre a pessoa que acabou de entrar na sala de espera — que é
+   * exatamente a divergência que esta fatia veio fechar.
+   */
+  revalidatePaths: ['/atendimentos', '/dashboard', '/agenda'],
 
   afterSuccess: async (output, _input, context) => {
     await createEncounterNotification({
@@ -47,6 +55,21 @@ const runCheckIn = createAction<CheckInInput, QueueEntryDto, 'patientId'>({
       kind: 'checked_in',
       patientName: output.patientName,
       eventAt: output.arrivedAt,
+    })
+
+    /*
+     * A agenda acompanha a fila — feature **A-04**.
+     *
+     * Depois da resposta e best-effort, pelo mesmo motivo da notificação: o
+     * paciente chegou, e a chegada não se desfaz porque a agenda não pôde ser
+     * carimbada. Encaixe (`appointmentId` nulo) não tem agenda a mover.
+     */
+    await syncAppointmentProgress({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      appointmentId: output.appointmentId,
+      progress: 'checked_in',
+      userId: context.userId,
     })
   },
 

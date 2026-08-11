@@ -272,3 +272,89 @@ describe('trilha operacional', () => {
     })
   })
 })
+
+/**
+ * A fila carimba a agenda — feature **A-04**.
+ *
+ * Os dois estados existiam no enum e eram inalcançáveis. O que se prova aqui é
+ * que eles passam pelo MESMO caminho das outras transições: condição de origem
+ * no `WHERE`, escopo de clínica e trilha operacional.
+ */
+describe('andamento vindo da fila', () => {
+  it('a chegada só alcança o que ainda não começou', async () => {
+    const fake = createFake({ current: { status: 'scheduled', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER)
+
+    expect(fake.argsOf('in')).toContainEqual([
+      'status',
+      ['scheduled', 'confirmed'],
+    ])
+    const patch = fake.argsOf('update')[0][0] as Record<string, unknown>
+    expect(patch.status).toBe('checked_in')
+  })
+
+  it('o início aceita partir de `scheduled`, sem passar pela chegada', async () => {
+    /*
+     * Auto-corretivo de propósito: exigir `checked_in` deixaria a agenda presa
+     * em "Agendado" em todo atendimento anterior a esta fatia.
+     */
+    const fake = createFake({ current: { status: 'scheduled', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'in_progress', USER)
+
+    expect(fake.argsOf('in')).toContainEqual([
+      'status',
+      ['scheduled', 'confirmed', 'checked_in'],
+    ])
+  })
+
+  it('não carimba `confirmed_at`: chegar não é confirmar', async () => {
+    const fake = createFake({ current: { status: 'scheduled', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER)
+
+    const patch = fake.argsOf('update')[0][0] as Record<string, unknown>
+    expect(patch.confirmed_at).toBeUndefined()
+  })
+
+  it('aceita chegada ANTES do horário marcado', async () => {
+    /*
+     * `outcomeIsDue` vale para desfecho, que é afirmação sobre o que aconteceu.
+     * Chegada é fato observado no balcão — e paciente adiantado chegou.
+     */
+    const fake = createFake({ current: { status: 'confirmed', starts_at: FUTURE } })
+
+    await expect(
+      fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER),
+    ).resolves.toBeDefined()
+  })
+
+  it('é escopado em clínica E id', async () => {
+    const fake = createFake({ current: { status: 'scheduled', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER)
+
+    expect(fake.argsOf('eq')).toContainEqual(['clinic_id', CLINIC])
+    expect(fake.argsOf('eq')).toContainEqual(['id', APPOINTMENT])
+  })
+
+  it('entra na trilha operacional como qualquer outra transição', async () => {
+    const fake = createFake({ current: { status: 'confirmed', starts_at: PAST } })
+
+    await fake.subject.markProgress(CLINIC, APPOINTMENT, 'checked_in', USER)
+
+    const history = fake.ofTable('appointment_status_history')
+    const payload = history.find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(payload).toMatchObject({
+      appointment_id: APPOINTMENT,
+      from_status: 'confirmed',
+      to_status: 'checked_in',
+      changed_by: USER,
+    })
+  })
+})

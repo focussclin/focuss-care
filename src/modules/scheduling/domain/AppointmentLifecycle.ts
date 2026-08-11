@@ -55,6 +55,63 @@ export function isTerminal(status: AppointmentStatus): boolean {
 }
 
 /**
+ * O andamento da visita — os dois estados que a FILA move.
+ *
+ * `checked_in` e `in_progress` existem no enum do banco desde o primeiro schema
+ * e eram **inalcançáveis**: quem move o paciente pela fila é o módulo de
+ * atendimento (chegada, chamada, início), e ele não tocava em
+ * `appointments.status`. O efeito prático era a agenda dizer "Agendado" sobre
+ * alguém que já estava na sala — duas telas afirmando coisas diferentes sobre a
+ * mesma pessoa no mesmo minuto.
+ *
+ * Não são desfecho: dizem ONDE a visita está, não como ela terminou. Por isso
+ * ficam fora de `APPOINTMENT_OUTCOMES` e não entram na taxa de comparecimento.
+ */
+export const APPOINTMENT_PROGRESS = ['checked_in', 'in_progress'] as const
+export type AppointmentProgress = (typeof APPOINTMENT_PROGRESS)[number]
+
+export function isAppointmentProgress(
+  value: string,
+): value is AppointmentProgress {
+  return (APPOINTMENT_PROGRESS as readonly string[]).includes(value)
+}
+
+/**
+ * Chegada sai do que ainda não começou.
+ *
+ * `confirmed` entra porque confirmar e chegar são coisas diferentes, e
+ * `scheduled` também: a clínica que não usa confirmação recebe o paciente
+ * direto — a mesma razão pela qual `scheduled` está em `OUTCOME_FROM`.
+ */
+export const CHECK_IN_FROM: readonly AppointmentStatus[] = [
+  'scheduled',
+  'confirmed',
+]
+
+export function canCheckIn(status: AppointmentStatus): boolean {
+  return CHECK_IN_FROM.includes(status)
+}
+
+/**
+ * Início sai de qualquer estado anterior ao atendimento — inclusive `scheduled`.
+ *
+ * Parece frouxo e é deliberado: quando o atendimento começa, a pessoa está na
+ * sala, e isso é fato observado. Exigir a passagem por `checked_in` faria a
+ * agenda ficar presa em "Agendado" sempre que a chegada não tivesse sido
+ * carimbada — inclusive nos atendimentos criados antes desta fatia, que é a base
+ * inteira. A regra é auto-corretiva de propósito.
+ */
+export const IN_PROGRESS_FROM: readonly AppointmentStatus[] = [
+  'scheduled',
+  'confirmed',
+  'checked_in',
+]
+
+export function canStart(status: AppointmentStatus): boolean {
+  return IN_PROGRESS_FROM.includes(status)
+}
+
+/**
  * Confirmar sai de `scheduled`, e de mais lugar nenhum.
  *
  * Já confirmado não reconfirma — não é erro do usuário, é ausência de efeito, e
@@ -111,6 +168,8 @@ export function canTransition(
   if (from === to) return false
   if (isTerminal(from)) return false
   if (to === 'confirmed') return canConfirm(from)
+  if (to === 'checked_in') return canCheckIn(from)
+  if (to === 'in_progress') return canStart(from)
   if (isAppointmentOutcome(to)) return canRecordOutcome(from)
   return false
 }
@@ -126,6 +185,8 @@ export function allowedSourcesFor(
   to: AppointmentStatus,
 ): readonly AppointmentStatus[] {
   if (to === 'confirmed') return CONFIRMABLE_FROM
+  if (to === 'checked_in') return CHECK_IN_FROM
+  if (to === 'in_progress') return IN_PROGRESS_FROM
   if (isAppointmentOutcome(to)) return OUTCOME_FROM
   return []
 }
