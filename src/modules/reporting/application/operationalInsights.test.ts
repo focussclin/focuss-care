@@ -28,6 +28,7 @@ const period: PeriodReport = {
     { professionalId: 'professional-1', name: 'Dra. Ana', total: 8 },
     { professionalId: 'professional-2', name: 'Dr. Bruno', total: 2 },
   ],
+  queueTimes: { waiting: null, service: null, stillWaiting: 0, truncated: false },
   truncated: false,
 }
 

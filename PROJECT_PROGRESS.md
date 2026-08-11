@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2727 testes em 213 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2758 testes em 215 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -783,7 +783,7 @@ que não funciona:
 | Disponibilidade por profissional | `/agenda` | Convenção de `weekday` não verificável; adivinhar recusaria agendamento legítimo |
 | Escalas de trabalho | `/equipe` | Mesmo `weekday` de `work_schedules`: errar desloca a semana e põe alguém para trabalhar no dia errado |
 | Salário e CPF de funcionário | `/equipe` | Colunas existem; o produto não tem folha, e guardá-los agora seria acumular risco sem contrapartida |
-| Agenda seguir a fila de espera (`checked_in`, `in_progress`) | `/agenda`, `/atendimentos` | Quem move o paciente pela fila é `encounters`; carimbar `appointments.status` de lá exigiria um módulo compor o repositório de outro, e nenhum módulo do projeto faz isso hoje. Confirmação e desfecho existem (§8.34); os dois estados do meio, não |
+| ~~Agenda seguir a fila de espera (`checked_in`, `in_progress`)~~ | ~~`/agenda`, `/atendimentos`~~ | **Resolvido em §8.43.** A composição foi para `lib/`, onde `lib/notifications/operational.ts` já fazia o mesmo tipo de efeito entre módulos |
 
 ---
 
@@ -3635,6 +3635,96 @@ completa estão limpos. Teleatendimento continua fora do escopo.
 | Chamar o paciente não muda a agenda | `called` é estado da FILA (o painel da TV), não do agendamento: entre ser chamado e entrar na sala, o atendimento não começou. Um estado a mais na agenda para o mesmo minuto seria ruído |
 | A agenda não oferece "registrar chegada" | Quem observa a chegada é a recepção, na tela da fila. Um botão na agenda criaria uma segunda porta para o mesmo fato, sem a fila que a recepção usa para chamar |
 | `deleted_at` em `listProfessionals` | Segue de §8.33: profissional removido por fora do produto ainda aparece no seletor da agenda. É outro módulo e outra fatia |
+
+---
+
+## 8.44 Feature — Tempos da fila no relatório (11/08/2026)
+
+Reauditei os fluxos de menu ainda parciais. O que sobra em `/configuracoes`
+(marca, IA, fuso) e em `/financeiro` (emissão fiscal, repasse) continua preso a
+bloqueio externo ou a decisão de produto. Em `/relatorios`, a própria porta do
+módulo declarava uma ausência com a saída escrita no meio dela:
+
+> **Origem do paciente, motivo de cancelamento agrupado, tempo médio de espera.**
+> Não há coluna que os sustente hoje. Tempo de espera **seria derivável de
+> `waiting_queue`** (`arrived_at` → `called_at`), e entra quando houver volume
+> suficiente para a média significar alguma coisa.
+
+A coluna existia. O que faltava era decidir o que fazer com pouco volume — e
+essa não é uma condição que o código possa esperar acontecer sozinha.
+
+### O produto media e não lia
+
+`waiting_queue` guarda quatro carimbos, **todos escritos pelo servidor** desde
+E-01: chegada, chamada, início e encerramento. O relógio do navegador da recepção
+nunca decidiu nenhum deles, e é isso que torna a medição confiável. Nenhuma tela
+lia qualquer um dos quatro.
+
+O resultado é o número que uma clínica mais pede e nenhum sistema entrega
+honestamente: **quanto tempo o paciente espera na sala**.
+
+### Mediana, e a maior espera ao lado
+
+Uma pessoa que chegou três horas adiantada destrói a média do dia inteiro. A
+mediana descreve o que aconteceu com a maioria, que é a pergunta de quem
+gerencia a sala de espera.
+
+A **maior espera** aparece junto, e não é estatística: é um evento que aconteceu
+com uma pessoa, e é o número que revela o dia ruim que a mediana esconde.
+
+Com amostra par, a mediana é a média dos dois centrais. O atalho de pegar só o de
+baixo desloca o número justamente nas amostras pequenas — que são as que esta
+tela mais vai mostrar.
+
+### A amostra aparece sempre
+
+"Espera típica de 12 min" significa coisas diferentes apoiada em 4 ou em 400
+passagens, e quem lê o relatório decide escala em cima disso. O tamanho da
+amostra fica ao lado de todo número, e abaixo de cinco registros a tela **declara
+que aquilo descreve alguns atendimentos, não a rotina**.
+
+Declarar, e não esconder: omitir o número esconderia o que a clínica tem. É a
+resposta à condição que a porta deixou em aberto — o volume não é um portão, é
+contexto.
+
+### O que fica FORA da conta, e por quê
+
+| Caso | Decisão |
+| --- | --- |
+| Ainda não foi chamado | Fora da mediana, **contado à parte na tela**. A espera dessa pessoa não terminou: contá-la com o tempo até agora faria o número do período encolher a cada recarga, e contá-la como zero seria pior |
+| Chamado e ainda em atendimento | Entra na espera, fica fora da duração. Forçá-lo nas duas contas exigiria inventar um fim que não aconteceu |
+| Duração negativa | Descartada, não corrigida para zero. Os dois carimbos saem do relógio do servidor; uma linha ajustada à mão faria a mediana despencar sem explicação |
+| Período sem fila | `null`, e a tela diz "nenhuma passagem". **"0 min" seria a leitura mais errada possível**: diria que a clínica atende na hora |
+
+### A janela é a chegada, e o `reason` não sai do banco
+
+O recorte do período é `arrived_at`, e não `starts_at` do agendamento: encaixe
+tem `appointment_id` nulo, e ancorar na agenda deixaria de fora justamente quem
+chegou sem hora marcada — que é parte da espera real da sala.
+
+`waiting_queue.reason` fica fora do `select`. É texto livre que, numa recepção,
+costuma ser a queixa; o relatório não precisa dele para medir tempo, e trazê-lo
+poria conteúdo clínico num payload lido por `report.read` — que `finance` tem e
+`record.read` não.
+
+### Estado
+
+`reporting` passa a 69 testes em 7 arquivos, e o projeto a **2758 testes em 215
+arquivos** (+29, +2 arquivos). Typecheck, lint, build e suíte completa estão
+limpos. Teleatendimento continua fora do escopo.
+
+Aproveitei para riscar, na tabela de ausências declaradas da §8.8, a linha da
+agenda que não acompanhava a fila — §8.43 a resolveu, e a §9 manda o documento
+não discordar do código.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Tempos em `/indicadores` | Aquela tela é série mensal — a evolução, não a fotografia. Uma mediana por mês é outro recorte de leitura e outra decisão sobre amostra |
+| Espera por profissional | `waiting_queue.professional_id` é nulo em boa parte das chegadas: a fila aceita quem chega sem profissional definido, e um ranking apoiado na metade das linhas apontaria o dedo errado |
+| Fuso horário da clínica | `clinic_settings.timezone` existe e **nada o consome** — `lib/utils/date.ts` formata no fuso do runtime, que é UTC no servidor. Consertar isso é mudança transversal (toda data do produto) e precisa de fatia própria, não de um puxadinho neste relatório |
+| Origem do paciente e motivo de cancelamento agrupado | Seguem sem coluna que os sustente: `cancel_reason` é texto livre, e agrupar texto livre produz categoria inventada |
 
 ---
 

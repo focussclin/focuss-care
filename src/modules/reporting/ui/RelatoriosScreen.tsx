@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CalendarCheck,
+  Hourglass,
   Info,
   TrendingUp,
   UserRound,
@@ -16,6 +17,12 @@ import { cn } from '@/lib/utils/cn'
 import { formatShortDate } from '@/lib/utils/date'
 
 import type { PeriodReport } from '../domain/ClinicMetrics'
+import {
+  formatMinutes,
+  isRepresentative,
+  MIN_QUEUE_SAMPLE,
+  type QueueDuration,
+} from '../domain/QueueDurations'
 import { periodOptions, type ResolvedPeriod } from '../schemas/report.schema'
 
 export interface RelatoriosScreenProps {
@@ -214,6 +221,63 @@ export function RelatoriosScreen({
         </Card>
       </div>
 
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Tempos da fila de espera"
+          description="Medidos dos carimbos da recepção: chegada, chamada, início e encerramento."
+        />
+
+        {/*
+          Sem ninguem chamado E sem ninguem atendido, nao ha o que medir — e
+          "0 min" seria a leitura mais errada possivel: diria que a clinica
+          atende na hora.
+        */}
+        {report.queueTimes.waiting === null &&
+        report.queueTimes.service === null ? (
+          <EmptyState
+            icon={Hourglass}
+            title="Nenhuma passagem pela fila neste período."
+            description="Os tempos aparecem quando houver check-in e chamada registrados."
+          />
+        ) : (
+          <div className="grid gap-5 border-t border-border-card p-5 sm:grid-cols-2">
+            <QueueMetric
+              label="Espera até ser chamado"
+              duration={report.queueTimes.waiting}
+            />
+            <QueueMetric
+              label="Duração do atendimento"
+              duration={report.queueTimes.service}
+            />
+          </div>
+        )}
+
+        {report.queueTimes.truncated ? (
+          <p
+            role="alert"
+            className="flex items-start gap-2.5 border-t border-attention/30 bg-attention-surface px-5 py-3 text-label text-foreground"
+          >
+            <AlertTriangle aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+            A fila teve mais registros do que este relatório consegue ler de uma
+            vez. Os tempos abaixo são uma amostra; escolha um período menor para
+            consultar o total.
+          </p>
+        ) : null}
+
+        {/*
+          Quem ainda espera fica FORA da mediana, e a tela diz quantos sao.
+          Contar a espera em curso faria o numero do periodo encolher a cada
+          recarga; omitir a existencia dessas pessoas esconderia a fila de hoje.
+        */}
+        {report.queueTimes.stillWaiting > 0 ? (
+          <p className="border-t border-border-card px-5 py-3 text-label text-muted">
+            {report.queueTimes.stillWaiting === 1
+              ? '1 pessoa ainda não foi chamada e fica fora da conta: a espera dela não terminou.'
+              : `${report.queueTimes.stillWaiting} pessoas ainda não foram chamadas e ficam fora da conta: a espera delas não terminou.`}
+          </p>
+        ) : null}
+      </Card>
+
       <p className="flex items-start gap-2.5 text-label text-muted">
         <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
         Faturamento, recebimentos e glosas de convênio ainda não aparecem aqui —
@@ -221,6 +285,51 @@ export function RelatoriosScreen({
         essas informações ainda. Mostrar R$ 0,00 diria que a clínica não faturou,
         e não é isso que está acontecendo.
       </p>
+    </div>
+  )
+}
+
+/**
+ * Um tempo da fila — mediana, pior caso e o tamanho da amostra.
+ *
+ * A amostra aparece SEMPRE, e nao so quando e pequena: "espera tipica de 12 min"
+ * significa coisas diferentes apoiado em 4 ou em 400 passagens, e quem le o
+ * relatorio decide escala em cima disso.
+ */
+function QueueMetric({
+  label,
+  duration,
+}: {
+  label: string
+  duration: QueueDuration | null
+}) {
+  if (!duration) {
+    return (
+      <div>
+        <p className="text-label text-muted">{label}</p>
+        <p className="mt-1 text-aux text-muted">Sem registro no período.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <p className="text-label text-muted">{label}</p>
+      <p className="mt-1 text-metric font-semibold text-foreground tabular-nums">
+        {formatMinutes(duration.medianMinutes)}
+      </p>
+      <p className="mt-0.5 text-label text-muted">
+        Mediana de {duration.sample}{' '}
+        {duration.sample === 1 ? 'registro' : 'registros'} · maior:{' '}
+        {formatMinutes(duration.maxMinutes)}
+      </p>
+
+      {isRepresentative(duration) ? null : (
+        <p className="mt-1 text-label text-status-pending">
+          Amostra pequena: abaixo de {MIN_QUEUE_SAMPLE} registros o número
+          descreve alguns atendimentos, não a rotina da clínica.
+        </p>
+      )}
     </div>
   )
 }

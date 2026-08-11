@@ -13,6 +13,8 @@
  * `ReportingRepository`.
  */
 
+import type { QueueTimes } from './QueueDurations'
+
 /**
  * Comparecimento em um período.
  *
@@ -83,6 +85,14 @@ export interface PeriodReport {
   activePatients: number
   attendance: AttendanceRate | null
   byProfessional: readonly ProfessionalWorkload[]
+  /**
+   * Tempos da fila de espera no período — feature **T-02**.
+   *
+   * Vem do mesmo relatório, e não de uma tela própria, porque responde a mesma
+   * pergunta das outras linhas: como o período correu. `waiting_queue` guarda os
+   * carimbos desde E-01 e nada os lia.
+   */
+  queueTimes: QueueTimes
   /**
    * O período tem mais atendimentos do que o relatório conseguiu ler.
    *

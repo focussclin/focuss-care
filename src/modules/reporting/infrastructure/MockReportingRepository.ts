@@ -131,6 +131,18 @@ export class MockReportingRepository implements ReportingRepository {
       byProfessional: [...workload.entries()]
         .map(([professionalId, value]) => ({ professionalId, ...value }))
         .sort((a, b) => b.total - a.total),
+      /*
+       * Sem fila na demonstracao: `waiting_queue` nao tem equivalente em
+       * `clinic-data`, e inventar carimbos de chegada produziria uma "espera
+       * tipica" de uma sala que nunca existiu — numero que alguem usaria para
+       * decidir escala.
+       */
+      queueTimes: {
+        waiting: null,
+        service: null,
+        stillWaiting: 0,
+        truncated: false,
+      },
       // A demonstração é pequena por construção: nunca há o que truncar.
       truncated: false,
     }

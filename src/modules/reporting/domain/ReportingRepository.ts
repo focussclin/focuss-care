@@ -28,10 +28,10 @@ import type {
  *
  * **Glosas e repasses de convênio.** Mesma situação, com V-01 no lugar de B-01.
  *
- * **Origem do paciente, motivo de cancelamento agrupado, tempo médio de espera.**
- * Não há coluna que os sustente hoje. Tempo de espera seria derivável de
- * `waiting_queue` (`arrived_at` → `called_at`), e entra quando houver volume
- * suficiente para a média significar alguma coisa.
+ * **Origem do paciente, motivo de cancelamento agrupado.** Não há coluna que os
+ * sustente hoje. Os tempos da fila já são derivados de `waiting_queue`
+ * (`arrived_at` → `called_at` e `started_at` → `finished_at`) pelo relatório de
+ * período; origem e agrupamento de cancelamento continuam sem fonte confiável.
  */
 export interface ReportingRepository {
   /** O resumo do dia, para o topo do painel. */

@@ -484,3 +484,141 @@ describe('série mensal', () => {
     ).toBe(true)
   })
 })
+
+/**
+ * Tempos da fila — feature **T-02**.
+ *
+ * `waiting_queue` guarda os quatro carimbos desde E-01 e nenhum relatório os
+ * lia. O que se prova aqui é o recorte da consulta: qual janela, qual clínica e
+ * quais colunas — em especial as que NÃO saem do banco.
+ */
+describe('tempos da fila', () => {
+  const from = new Date(2026, 7, 1)
+  const to = new Date(2026, 7, 13)
+
+  function queueRow(overrides: Record<string, unknown> = {}) {
+    return {
+      arrived_at: '2026-08-11T13:00:00.000Z',
+      called_at: '2026-08-11T13:10:00.000Z',
+      started_at: '2026-08-11T13:12:00.000Z',
+      finished_at: '2026-08-11T13:42:00.000Z',
+      ...overrides,
+    }
+  }
+
+  it('a janela é a CHEGADA, e não o horário marcado', async () => {
+    /*
+     * `arrived_at` existe em toda passagem; `appointment_id` e nulo no encaixe.
+     * Ancorar no agendamento deixaria de fora justamente quem chegou sem hora
+     * marcada — que e parte da espera real da sala.
+     */
+    const fake = createFakeClient({
+      rows: (table) => (table === 'waiting_queue' ? [queueRow()] : []),
+    })
+
+    await new SupabaseReportingRepository(fake.client).periodReport(
+      CLINIC,
+      from,
+      to,
+    )
+
+    const queue = fake.calls.filter((call) => call.table === 'waiting_queue')
+
+    expect(queue).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(queue).toContainEqual(
+      expect.objectContaining({
+        method: 'gte',
+        args: ['arrived_at', from.toISOString()],
+      }),
+    )
+    expect(queue).toContainEqual(
+      expect.objectContaining({
+        method: 'lt',
+        args: ['arrived_at', to.toISOString()],
+      }),
+    )
+  })
+
+  it('não lê o motivo declarado na chegada', async () => {
+    /*
+     * `reason` e texto livre que, numa recepcao, costuma ser a queixa. O
+     * relatorio nao precisa dele para medir tempo, e traze-lo poria conteudo
+     * clinico num payload lido por `report.read` — que `finance` tem e
+     * `record.read` nao.
+     */
+    const fake = createFakeClient({
+      rows: (table) => (table === 'waiting_queue' ? [queueRow()] : []),
+    })
+
+    await new SupabaseReportingRepository(fake.client).periodReport(
+      CLINIC,
+      from,
+      to,
+    )
+
+    const columns = fake.calls
+      .filter((call) => call.table === 'waiting_queue' && call.method === 'select')
+      .map((call) => call.args[0] as string)
+
+    expect(columns.length).toBeGreaterThan(0)
+    for (const selected of columns) {
+      expect(selected).not.toContain('reason')
+      expect(selected).not.toContain('patient_id')
+      expect(selected).toContain('arrived_at')
+    }
+  })
+
+  it('o relatório traz os tempos agregados do período', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'waiting_queue'
+          ? [
+              queueRow(),
+              queueRow({ called_at: '2026-08-11T13:30:00.000Z' }),
+              // Ainda na sala de espera: fica fora da mediana.
+              queueRow({ called_at: null, started_at: null, finished_at: null }),
+            ]
+          : [],
+    })
+
+    const report = await new SupabaseReportingRepository(
+      fake.client,
+    ).periodReport(CLINIC, from, to)
+
+    expect(report.queueTimes.waiting).toEqual({
+      sample: 2,
+      medianMinutes: 20,
+      maxMinutes: 30,
+    })
+    expect(report.queueTimes.stillWaiting).toBe(1)
+  })
+
+  it('período sem fila devolve null, e não zero', async () => {
+    // "0 min" diria que a clinica atende na hora.
+    const fake = createFakeClient({ rows: () => [] })
+
+    const report = await new SupabaseReportingRepository(
+      fake.client,
+    ).periodReport(CLINIC, from, to)
+
+    expect(report.queueTimes.waiting).toBeNull()
+    expect(report.queueTimes.service).toBeNull()
+  })
+
+  it('sinaliza quando a leitura da fila atingiu o teto', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'waiting_queue'
+          ? Array.from({ length: 5000 }, () => queueRow())
+          : [],
+    })
+
+    const report = await new SupabaseReportingRepository(
+      fake.client,
+    ).periodReport(CLINIC, from, to)
+
+    expect(report.queueTimes.truncated).toBe(true)
+  })
+})

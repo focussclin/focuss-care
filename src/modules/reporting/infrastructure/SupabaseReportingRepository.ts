@@ -13,6 +13,8 @@ import type {
   PeriodReport,
   ProfessionalWorkload,
 } from '../domain/ClinicMetrics'
+import type { QueueTimes } from '../domain/QueueDurations'
+import { summarizeQueueTimes } from '../domain/QueueDurations'
 import type { ReportingRepository } from '../domain/ReportingRepository'
 
 type Client = SupabaseClient<Database>
@@ -91,17 +93,19 @@ export class SupabaseReportingRepository implements ReportingRepository {
      * contagens separadas poderiam pegar estados diferentes do banco entre uma
      * e outra e não fechar a soma.
      */
-    const [rowsResult, newPatients, activePatients] = await Promise.all([
-      this.client
-        .from('appointments')
-        .select('professional_id, status, professionals ( display_name )')
-        .eq('clinic_id', clinicId)
-        .gte('starts_at', from.toISOString())
-        .lt('starts_at', to.toISOString())
-        .limit(PERIOD_ROW_CAP),
-      this.countNewPatients(clinicId, from, to),
-      this.countActivePatients(clinicId),
-    ])
+    const [rowsResult, newPatients, activePatients, queueTimes] =
+      await Promise.all([
+        this.client
+          .from('appointments')
+          .select('professional_id, status, professionals ( display_name )')
+          .eq('clinic_id', clinicId)
+          .gte('starts_at', from.toISOString())
+          .lt('starts_at', to.toISOString())
+          .limit(PERIOD_ROW_CAP),
+        this.countNewPatients(clinicId, from, to),
+        this.countActivePatients(clinicId),
+        this.queueTimes(clinicId, from, to),
+      ])
 
     if (rowsResult.error) throw readFailure('periodReport', rowsResult.error)
 
@@ -154,7 +158,54 @@ export class SupabaseReportingRepository implements ReportingRepository {
       activePatients,
       attendance: toAttendanceRate(totals.completed, totals.noShow),
       byProfessional: [...workload.values()].sort((a, b) => b.total - a.total),
+      queueTimes,
       truncated: rows.length >= PERIOD_ROW_CAP,
+    }
+  }
+
+  /**
+   * Tempos da fila no período — feature **T-02**.
+   *
+   * # A janela é a CHEGADA, e não o agendamento
+   *
+   * `arrived_at` é o que existe em toda passagem pela fila; `appointment_id` é
+   * nulo no encaixe. Ancorar em `starts_at` do agendamento deixaria de fora
+   * justamente quem chegou sem hora marcada — que é parte da espera real da sala.
+   *
+   * # Quatro colunas, e só elas
+   *
+   * `reason` fica de fora: é texto livre que, numa recepção, costuma ser a
+   * queixa. Um relatório não precisa dele para medir tempo, e trazê-lo colocaria
+   * conteúdo clínico num payload lido por `report.read` — que `finance` tem e
+   * `record.read` não.
+   */
+  private async queueTimes(
+    clinicId: string,
+    from: Date,
+    to: Date,
+  ): Promise<QueueTimes> {
+    const { data, error } = await this.client
+      .from('waiting_queue')
+      .select('arrived_at, called_at, started_at, finished_at')
+      .eq('clinic_id', clinicId)
+      .gte('arrived_at', from.toISOString())
+      .lt('arrived_at', to.toISOString())
+      .limit(PERIOD_ROW_CAP)
+
+    if (error) throw readFailure('queueTimes', error)
+
+    const visits = (data ?? []).map((row) => ({
+      arrivedAt: new Date(row.arrived_at),
+      calledAt: row.called_at ? new Date(row.called_at) : null,
+      startedAt: row.started_at ? new Date(row.started_at) : null,
+      finishedAt: row.finished_at ? new Date(row.finished_at) : null,
+    }))
+
+    const summary = summarizeQueueTimes(visits)
+
+    return {
+      ...summary,
+      truncated: visits.length >= PERIOD_ROW_CAP,
     }
   }
 
