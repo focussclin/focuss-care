@@ -72,6 +72,28 @@ export interface Authorization {
   denialReason: string | null
 }
 
+/**
+ * A guia vista pela BUSCA GLOBAL.
+ *
+ * Não é `Authorization`, e a diferença é a razão de este tipo existir: a guia
+ * carrega os **procedimentos pedidos** (código TUSS e descrição) e o **motivo da
+ * negativa** escrito pela operadora. Os dois são informação clínica — dizem o
+ * que se pretendia fazer com aquela pessoa e por quê —, e a paleta é um campo de
+ * texto aberto em cima do cabeçalho de toda tela autenticada.
+ *
+ * O recorte não é feito na hora de montar o DTO: o adapter **não seleciona**
+ * essas colunas. O que não sai do banco não vaza de lugar nenhum.
+ */
+export interface AuthorizationSearchHit {
+  id: string
+  patientName: string
+  /** Número da operadora. Nulo enquanto a guia não foi respondida. */
+  authorizationNumber: string | null
+  status: AuthorizationStatus
+  providerName: string
+  requestedAt: Date
+}
+
 export interface NewProviderData {
   name: string
   ansCode: string | null

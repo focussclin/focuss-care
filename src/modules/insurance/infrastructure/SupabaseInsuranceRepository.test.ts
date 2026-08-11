@@ -85,6 +85,9 @@ function createFakeClient(results: {
       'neq',
       'in',
       'is',
+      // `ilike` entrou com a busca de guia — sem ele o duplo devolve
+      // `undefined` e o erro aparece como "não é uma função".
+      'ilike',
       'order',
       'limit',
       'update',
@@ -681,5 +684,166 @@ describe('glosas', () => {
     ).rejects.toMatchObject({ reason: 'claim-already-resolved' })
 
     spy.mockRestore()
+  })
+})
+
+describe('busca de guia', () => {
+  function searchRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: AUTHORIZATION,
+      authorization_number: '881234',
+      status: 'approved',
+      requested_at: '2026-08-10T12:00:00.000Z',
+      patients: { full_name: 'Marina Costa' },
+      patient_insurances: {
+        insurance_plans: { insurance_providers: { name: 'Unimed' } },
+      },
+      ...overrides,
+    }
+  }
+
+  it('procura pelo NÚMERO da operadora e pelo nome do paciente', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'insurance_authorizations'
+          ? [searchRow()]
+          : table === 'patients'
+            ? [{ id: PATIENT }]
+            : [],
+    })
+
+    const hits = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).searchAuthorizations(CLINIC, '881234', 8)
+
+    expect(hits).toHaveLength(1)
+    expect(hits[0].authorizationNumber).toBe('881234')
+
+    // As duas chaves saem na mesma busca: quem tem o papel na mao procura pelo
+    // numero; quem esta com o paciente na frente, pelo nome.
+    expect(fake.ofTable('insurance_authorizations')).toContainEqual(
+      expect.objectContaining({
+        method: 'ilike',
+        args: ['authorization_number', '%881234%'],
+      }),
+    )
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({
+        method: 'ilike',
+        args: ['full_name', '%881234%'],
+      }),
+    )
+  })
+
+  it('NÃO lê procedimento nem motivo de negativa', async () => {
+    /*
+     * Os dois sao o conteudo clinico da guia. A paleta e um campo aberto no
+     * cabecalho de toda tela autenticada — o recorte e feito no `select`, e nao
+     * na montagem do DTO: coluna que nao sai do banco nao vaza de lugar nenhum.
+     */
+    const fake = createFakeClient({
+      rows: (table) => (table === 'insurance_authorizations' ? [searchRow()] : []),
+    })
+
+    await new SupabaseInsuranceRepository(fake.client).searchAuthorizations(
+      CLINIC,
+      'Marina',
+      8,
+    )
+
+    const columns = fake
+      .ofTable('insurance_authorizations')
+      .filter((call) => call.method === 'select')
+      .map((call) => call.args[0] as string)
+
+    expect(columns.length).toBeGreaterThan(0)
+    for (const selected of columns) {
+      expect(selected).not.toContain('procedures')
+      expect(selected).not.toContain('denial_reason')
+      expect(selected).toContain('authorization_number')
+    }
+  })
+
+  it('filtra a clínica ativa em toda consulta', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'patients' ? [{ id: PATIENT }] : [searchRow()],
+    })
+
+    await new SupabaseInsuranceRepository(fake.client).searchAuthorizations(
+      CLINIC,
+      'Marina',
+      8,
+    )
+
+    const clinicFilters = fake.calls.filter(
+      (call) => call.method === 'eq' && call.args[0] === 'clinic_id',
+    )
+
+    // Duas em `insurance_authorizations` (numero e pacientes) e uma em
+    // `patients`: nenhuma das tres depende so da RLS.
+    expect(clinicFilters).toHaveLength(3)
+    expect(clinicFilters.every((call) => call.args[1] === CLINIC)).toBe(true)
+  })
+
+  it('a mesma guia achada pelas duas chaves aparece uma vez', async () => {
+    // Sem a deduplicacao, uma guia cujo numero E cujo paciente casam ocuparia
+    // duas das oito linhas da paleta com o mesmo registro.
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'patients' ? [{ id: PATIENT }] : [searchRow()],
+    })
+
+    const hits = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).searchAuthorizations(CLINIC, 'Marina', 8)
+
+    expect(hits).toHaveLength(1)
+  })
+
+  it('guia sem número continua achável pelo paciente', async () => {
+    const fake = createFakeClient({
+      rows: (table) =>
+        table === 'patients'
+          ? [{ id: PATIENT }]
+          : [searchRow({ authorization_number: null, status: 'requested' })],
+    })
+
+    const hits = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).searchAuthorizations(CLINIC, 'Marina', 8)
+
+    // Guia nasce sem numero: o numero e da operadora, e ela ainda nao respondeu.
+    expect(hits[0].authorizationNumber).toBeNull()
+    expect(hits[0].patientName).toBe('Marina Costa')
+  })
+
+  it('curinga de LIKE é saneado antes de virar consulta', async () => {
+    const fake = createFakeClient({ rows: () => [] })
+
+    await new SupabaseInsuranceRepository(fake.client).searchAuthorizations(
+      CLINIC,
+      'Ma%ri_na',
+      8,
+    )
+
+    expect(fake.ofTable('patients')).toContainEqual(
+      expect.objectContaining({
+        method: 'ilike',
+        args: ['full_name', '%Ma ri na%'],
+      }),
+    )
+  })
+
+  it('termo que vira vazio depois do saneamento não consulta nada', async () => {
+    // `%` sozinho traria a base inteira.
+    const fake = createFakeClient({ rows: () => [] })
+
+    const hits = await new SupabaseInsuranceRepository(
+      fake.client,
+    ).searchAuthorizations(CLINIC, '%%', 8)
+
+    expect(hits).toEqual([])
+    expect(fake.calls).toEqual([])
   })
 })

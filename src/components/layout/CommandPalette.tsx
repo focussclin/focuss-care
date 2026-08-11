@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/cn'
 import type { MembershipRole } from '@/lib/supabase/database.types'
 import { can } from '@/lib/auth/permissions'
 import { searchInvoicesAction } from '@/modules/billing/actions/searchInvoices.action'
+import { searchAuthorizationsAction } from '@/modules/insurance/actions/searchAuthorizations.action'
 import { searchPatientsAction } from '@/modules/patients/actions/searchPatients.action'
 import { searchAppointmentsAction } from '@/modules/scheduling/actions/searchAppointments.action'
 
@@ -18,6 +19,7 @@ import {
   moveHighlight,
   type Command,
 } from './commands'
+import { usePaletteSearch } from './usePaletteSearch'
 
 export interface CommandPaletteProps {
   open: boolean
@@ -32,16 +34,23 @@ export interface CommandPaletteProps {
  * # O que ela faz, e o que ela declara não fazer
  *
  * Navega entre telas, abre os dois formulários que abrem por URL e busca
- * pacientes, agendamentos e cobranças reais pelo nome do paciente a partir de
- * dois caracteres.
+ * pacientes, agendamentos, cobranças e guias de convênio reais a partir de dois
+ * caracteres.
  *
- * As buscas usam Server Actions com debounce e RLS no caminho. O resultado de
- * paciente abre a ficha; o resultado de agendamento leva à agenda.
- * Se a action não estiver disponível, o comando de fallback ainda leva a
- * `/pacientes?q=…`, onde o servidor consulta a mesma base.
+ * As buscas usam Server Actions com debounce e RLS no caminho, cada uma atrás da
+ * permissão da tela que ela alcança. O resultado de paciente abre a ficha; o de
+ * agendamento leva à agenda; o de guia, a `/convenios`. Se a action não estiver
+ * disponível, o comando de fallback ainda leva a `/pacientes?q=…`, onde o
+ * servidor consulta a mesma base.
  *
- * **Prontuário e guia não são pesquisados** — essas listagens ainda não têm
- * contrato de termo. O estado vazio deixa o limite explícito.
+ * A guia é a única fonte com chave própria: além do nome do paciente, ela é
+ * encontrada pelo **número da operadora**, que é o que a pessoa tem na mão
+ * quando vai procurá-la.
+ *
+ * **O prontuário não é pesquisado por termo.** Uma busca nele seria consulta a
+ * conteúdo clínico, e ela pede contrato próprio — quem pode ler, o que a
+ * resposta pode mostrar e como o acesso é registrado. O estado vazio deixa o
+ * limite explícito.
  *
  * # Acessibilidade
  *
@@ -63,141 +72,70 @@ export function CommandPalette({
   const listId = useId()
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
-  const [patientResults, setPatientResults] = useState<
-    readonly { id: string; name: string }[]
-  >([])
-  const [patientSearchPending, setPatientSearchPending] = useState(false)
-  const [patientSearchError, setPatientSearchError] = useState<string | null>(null)
-  const [appointmentResults, setAppointmentResults] = useState<
-    readonly {
-      id: string
-      patientName: string
-      professionalName: string
-      type: string
-      startsAt: string
-    }[]
-  >([])
-  const [appointmentSearchPending, setAppointmentSearchPending] = useState(false)
-  const [appointmentSearchError, setAppointmentSearchError] = useState<string | null>(null)
-  const [invoiceResults, setInvoiceResults] = useState<
-    readonly {
-      id: string
-      patientName: string
-      totalCents: number
-      paidCents: number
-      status: string
-      createdAt: string
-    }[]
-  >([])
-  const [invoiceSearchPending, setInvoiceSearchPending] = useState(false)
-  const [invoiceSearchError, setInvoiceSearchError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const term = query.trim()
-    const canSearchPatients = role !== undefined && role !== null && can(role, 'patient.read')
+  /**
+   * O papel alcança esta permissão?
+   *
+   * `undefined` é o modo de demonstração — sem sessão, nenhuma busca sai. Ele é
+   * tratado junto com `null` de propósito: os dois significam "não há papel", e
+   * ausência de papel nunca é papel neutro.
+   */
+  const allows = (permission: Parameters<typeof can>[1]) =>
+    role !== undefined && role !== null && can(role, permission)
 
-    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchPatients) return
+  const patients = usePaletteSearch({
+    open,
+    query,
+    enabled: allows('patient.read'),
+    action: searchPatientsAction,
+    failureMessage: 'Não foi possível buscar pacientes agora.',
+  })
 
-    let active = true
+  const appointments = usePaletteSearch({
+    open,
+    query,
+    enabled: allows('appointment.read'),
+    action: searchAppointmentsAction,
+    failureMessage: 'Não foi possível buscar atendimentos agora.',
+  })
 
-    const timeout = window.setTimeout(() => {
-      void searchPatientsAction({ query: term })
-        .then((result) => {
-          if (!active) return
-          if (result.ok) {
-            setPatientResults(result.data)
-            return
-          }
-          setPatientResults([])
-          setPatientSearchError(result.error.message)
-        })
-        .catch(() => {
-          if (!active) return
-          setPatientResults([])
-          setPatientSearchError('Não foi possível buscar pacientes agora.')
-        })
-        .finally(() => {
-          if (active) setPatientSearchPending(false)
-        })
-    }, 250)
+  const invoices = usePaletteSearch({
+    open,
+    query,
+    enabled: allows('invoice.read'),
+    action: searchInvoicesAction,
+    failureMessage: 'Não foi possível buscar cobranças agora.',
+  })
 
-    return () => {
-      active = false
-      window.clearTimeout(timeout)
-    }
-  }, [open, query, role])
+  /*
+   * Guias — `insurance.manage`, a mesma porta que `/convenios` exige.
+   *
+   * A paleta é atalho para uma tela que existe; atalho que alcança o que a tela
+   * recusa é porta lateral. `receptionist` e `professional` continuam sem
+   * convênio, como a matriz de I-05 decidiu.
+   */
+  const authorizations = usePaletteSearch({
+    open,
+    query,
+    enabled: allows('insurance.manage'),
+    action: searchAuthorizationsAction,
+    failureMessage: 'Não foi possível buscar guias agora.',
+  })
 
-  useEffect(() => {
-    const term = query.trim()
-    const canSearchInvoices =
-      role !== undefined && role !== null && can(role, 'invoice.read')
+  const searchPending =
+    patients.pending ||
+    appointments.pending ||
+    invoices.pending ||
+    authorizations.pending
 
-    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchInvoices) return
-
-    let active = true
-
-    const timeout = window.setTimeout(() => {
-      void searchInvoicesAction({ query: term })
-        .then((result) => {
-          if (!active) return
-          if (result.ok) {
-            setInvoiceResults(result.data)
-            return
-          }
-          setInvoiceResults([])
-          setInvoiceSearchError(result.error.message)
-        })
-        .catch(() => {
-          if (!active) return
-          setInvoiceResults([])
-          setInvoiceSearchError('Não foi possível buscar cobranças agora.')
-        })
-        .finally(() => {
-          if (active) setInvoiceSearchPending(false)
-        })
-    }, 250)
-
-    return () => {
-      active = false
-      window.clearTimeout(timeout)
-    }
-  }, [open, query, role])
-
-  useEffect(() => {
-    const term = query.trim()
-    const canSearchAppointments =
-      role !== undefined && role !== null && can(role, 'appointment.read')
-
-    if (!open || term.length < MIN_SEARCH_LENGTH || !canSearchAppointments) return
-
-    let active = true
-
-    const timeout = window.setTimeout(() => {
-      void searchAppointmentsAction({ query: term })
-        .then((result) => {
-          if (!active) return
-          if (result.ok) {
-            setAppointmentResults(result.data)
-            return
-          }
-          setAppointmentResults([])
-          setAppointmentSearchError(result.error.message)
-        })
-        .catch(() => {
-          if (!active) return
-          setAppointmentResults([])
-          setAppointmentSearchError('Não foi possível buscar atendimentos agora.')
-        })
-        .finally(() => {
-          if (active) setAppointmentSearchPending(false)
-        })
-    }, 250)
-
-    return () => {
-      active = false
-      window.clearTimeout(timeout)
-    }
-  }, [open, query, role])
+  /*
+   * A primeira falha, na ordem em que as fontes aparecem na lista.
+   *
+   * Mostrar as quatro empilharia mensagens sobre a mesma causa — quando o
+   * servidor não responde, nenhuma responde.
+   */
+  const searchError =
+    patients.error ?? appointments.error ?? invoices.error ?? authorizations.error
 
   /*
    * A lista inteira depende de papel E consulta: o comando de buscar paciente
@@ -210,37 +148,63 @@ export function CommandPalette({
       const searchCommand = commands.find(
         (command) => command.id === 'buscar-pacientes',
       )
-      const patientCommands = patientResults.map((patient) => ({
+      const patientCommands = patients.results.map((patient) => ({
         id: `patient-${patient.id}`,
         label: patient.name,
         href: `/pacientes/${patient.id}`,
         keywords: ['paciente', 'ficha'],
         group: 'Buscar' as const,
       }))
-      const appointmentCommands = appointmentResults.map((appointment) => ({
+      const appointmentCommands = appointments.results.map((appointment) => ({
         id: `appointment-${appointment.id}`,
         label: `${appointment.patientName} · ${formatAppointmentDate(appointment.startsAt)}`,
         href: '/agenda',
         keywords: ['agendamento', 'atendimento', appointment.type, appointment.professionalName],
         group: 'Buscar' as const,
       }))
-      const invoiceCommands = invoiceResults.map((invoice) => ({
+      const invoiceCommands = invoices.results.map((invoice) => ({
         id: `invoice-${invoice.id}`,
         label: `${invoice.patientName} · ${formatCents(invoice.totalCents)}`,
         href: '/financeiro',
         keywords: ['cobrança', 'financeiro', invoice.status],
         group: 'Buscar' as const,
       }))
+      /*
+       * A guia é reconhecida pelo NÚMERO, e por isso ele vem primeiro no rótulo.
+       *
+       * Quem abre a paleta para achar uma guia tem o papel na mão ou a operadora
+       * no telefone. Guia ainda não respondida não tem número — aí o rótulo diz
+       * isso, em vez de mostrar um traço que pareceria número faltando.
+       */
+      const authorizationCommands = authorizations.results.map(
+        (authorization) => ({
+          id: `authorization-${authorization.id}`,
+          label: `${
+            authorization.authorizationNumber ?? 'Guia sem número'
+          } · ${authorization.patientName} · ${authorization.providerName}`,
+          href: '/convenios',
+          keywords: ['guia', 'convênio', 'autorização', authorization.status],
+          group: 'Buscar' as const,
+        }),
+      )
 
       return [
         ...commands.filter((command) => command.id !== 'buscar-pacientes'),
         ...patientCommands,
         ...appointmentCommands,
         ...invoiceCommands,
+        ...authorizationCommands,
         ...(searchCommand ? [searchCommand] : []),
       ]
     },
-    [appointmentResults, invoiceResults, patientResults, query, role],
+    [
+      appointments.results,
+      authorizations.results,
+      invoices.results,
+      patients.results,
+      query,
+      role,
+    ],
   )
 
   /*
@@ -278,35 +242,15 @@ export function CommandPalette({
     router.push(command.href)
   }
 
+  /*
+   * Trocar o termo não limpa resultado nem apaga indicador: os dois são
+   * derivados do termo respondido, dentro de `usePaletteSearch`. Era daqui que
+   * saíam nove chamadas de `set*` cuja única obrigação era não esquecer nenhuma
+   * fonte.
+   */
   function updateQuery(value: string) {
-    const term = value.trim()
-    const canSearchPatients =
-      role !== undefined && role !== null && can(role, 'patient.read')
-
     setQuery(value)
     setHighlighted(0)
-    setPatientResults([])
-    setAppointmentResults([])
-    setInvoiceResults([])
-    setPatientSearchError(null)
-    setAppointmentSearchError(null)
-    setInvoiceSearchError(null)
-    setPatientSearchPending(
-      open && term.length >= MIN_SEARCH_LENGTH && canSearchPatients,
-    )
-    setAppointmentSearchPending(
-      open && term.length >= MIN_SEARCH_LENGTH &&
-      role !== undefined &&
-        role !== null &&
-        can(role, 'appointment.read'),
-    )
-    setInvoiceSearchPending(
-      open &&
-        term.length >= MIN_SEARCH_LENGTH &&
-        role !== undefined &&
-        role !== null &&
-        can(role, 'invoice.read'),
-    )
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -331,18 +275,11 @@ export function CommandPalette({
     <DialogPrimitive.Root
       open={open}
       onOpenChange={(next) => {
+        // Esvaziar a consulta zera as buscas: sem termo não há resultado
+        // corrente, e o indicador de carregamento desliga junto.
         if (!next) {
           setQuery('')
           setHighlighted(0)
-          setPatientResults([])
-          setAppointmentResults([])
-          setInvoiceResults([])
-          setPatientSearchPending(false)
-          setAppointmentSearchPending(false)
-          setInvoiceSearchPending(false)
-          setPatientSearchError(null)
-          setAppointmentSearchError(null)
-          setInvoiceSearchError(null)
         }
         onOpenChange(next)
       }}
@@ -377,25 +314,29 @@ export function CommandPalette({
           {results.length === 0 ? (
             <div className="px-4 py-6">
               <p className="text-aux text-foreground">
-                {patientSearchPending || appointmentSearchPending || invoiceSearchPending
+                {searchPending
                   ? 'Buscando registros…'
                   : 'Nenhuma tela ou ação com esse nome.'}
               </p>
-              {patientSearchError || appointmentSearchError || invoiceSearchError ? (
+              {searchError ? (
                 <p role="alert" className="mt-2 text-label text-danger">
-                  {patientSearchError ?? appointmentSearchError ?? invoiceSearchError}
+                  {searchError}
                 </p>
               ) : null}
               {/*
                 O estado vazio precisa dizer o que É pesquisável e o que não é.
 
-                Pacientes, agendamentos e cobranças são consultados por actions
-                server-side; prontuário e convênios ainda não têm busca por termo.
+                Paciente, agendamento e cobrança são achados pelo nome de quem
+                é atendido; a guia, também pelo número que a operadora devolveu.
+                O prontuário continua fora: uma busca por termo nele seria
+                consulta a conteúdo clínico, e ela pede contrato próprio — quem
+                pode ler, o que a resposta pode mostrar e como o acesso é
+                registrado.
               */}
               <p className="mt-1 text-label text-muted">
                 {query.trim().length < MIN_SEARCH_LENGTH
                   ? 'Digite pelo menos dois caracteres para buscar um paciente pelo nome.'
-                  : 'Pacientes, agendamentos e cobranças são pesquisados por aqui. Prontuários e guias ainda não são pesquisados pelo nome.'}
+                  : 'Pacientes, agendamentos, cobranças e guias (pelo número ou pelo paciente) são pesquisados por aqui. O prontuário não é pesquisado por termo.'}
               </p>
             </div>
           ) : (
@@ -455,7 +396,7 @@ export function CommandPalette({
             </ul>
           )}
 
-          {(patientSearchPending || appointmentSearchPending || invoiceSearchPending) && results.length > 0 ? (
+          {searchPending && results.length > 0 ? (
             <p role="status" className="border-t border-border-card px-4 py-2 text-label text-muted">
               Buscando registros…
             </p>

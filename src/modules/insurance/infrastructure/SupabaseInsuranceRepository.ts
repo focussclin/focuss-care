@@ -13,6 +13,7 @@ import type {
   Authorization,
   AuthorizationAnswer,
   AuthorizationProcedure,
+  AuthorizationSearchHit,
   ClaimDenial,
   ClaimDenialUpdate,
   ClaimInvoiceOption,
@@ -50,6 +51,24 @@ const AUTHORIZATION_SELECT = `
     card_number,
     insurance_plans (
       name,
+      insurance_providers ( name )
+    )
+  )
+`
+
+/**
+ * O recorte da BUSCA — sem `procedures` e sem `denial_reason`.
+ *
+ * Os dois são o conteúdo clínico da guia. Ver `searchAuthorizations`.
+ */
+const AUTHORIZATION_SEARCH_SELECT = `
+  id,
+  authorization_number,
+  status,
+  requested_at,
+  patients ( full_name ),
+  patient_insurances (
+    insurance_plans (
       insurance_providers ( name )
     )
   )
@@ -107,6 +126,20 @@ interface AuthorizationRow {
     card_number: string
     insurance_plans: {
       name: string
+      insurance_providers: { name: string } | null
+    } | null
+  } | null
+}
+
+/** A linha da busca: os mesmos campos do `select` reduzido, e só eles. */
+interface AuthorizationSearchRow {
+  id: string
+  authorization_number: string | null
+  status: AuthorizationStatus
+  requested_at: string
+  patients: { full_name: string } | null
+  patient_insurances: {
+    insurance_plans: {
       insurance_providers: { name: string } | null
     } | null
   } | null
@@ -251,6 +284,88 @@ export class SupabaseInsuranceRepository implements InsuranceRepository {
     if (error) throw readFailure('listAuthorizations', error)
 
     return (data as unknown as AuthorizationRow[]).map(toAuthorization)
+  }
+
+  /**
+   * Busca de guia — por número da operadora ou por nome do paciente.
+   *
+   * # O que esta consulta NÃO lê
+   *
+   * `procedures` e `denial_reason` ficam fora do `select`. São o que a guia tem
+   * de clínico: o primeiro diz o que se pretendia fazer com a pessoa, o segundo
+   * é o texto da operadora sobre isso. A paleta é um campo aberto no cabeçalho
+   * de toda tela autenticada, e o recorte é feito aqui — não na montagem do DTO,
+   * porque coluna que não sai do banco não vaza de lugar nenhum.
+   *
+   * # Duas consultas, e nenhuma delas é `or()` entre tabelas
+   *
+   * O PostgREST não filtra por coluna de tabela embutida dentro de um `or` sem
+   * transformar a leitura em algo que a RLS avalia de forma diferente. Duas
+   * consultas independentes — uma pelo número, outra pelos pacientes cujo nome
+   * casa — são previsíveis e mantêm o `clinic_id` explícito nas duas.
+   *
+   * A união é feita aqui, deduplicada por id: uma guia cujo número casa E cujo
+   * paciente casa apareceria duas vezes na paleta, ocupando duas linhas do teto
+   * com o mesmo registro.
+   */
+  async searchAuthorizations(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<AuthorizationSearchHit[]> {
+    /*
+     * Curinga de LIKE, gramática do PostgREST e parênteses saem do termo.
+     * Mesmo saneamento das outras buscas do produto — `%` sozinho traria a base
+     * inteira, e `,` quebraria a lista de filtros.
+     */
+    const cleanQuery = query.replace(/[\\%_*(),]/g, ' ').trim()
+    if (!cleanQuery) return []
+
+    const cap = Math.min(Math.max(Math.trunc(limit) || 1, 1), 20)
+
+    const [byNumber, patients] = await Promise.all([
+      this.client
+        .from('insurance_authorizations')
+        .select(AUTHORIZATION_SEARCH_SELECT)
+        .eq('clinic_id', clinicId)
+        .ilike('authorization_number', `%${cleanQuery}%`)
+        .order('requested_at', { ascending: false })
+        .limit(cap),
+      this.client
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .ilike('full_name', `%${cleanQuery}%`)
+        .limit(Math.min(Math.max(cap * 2, 1), 32)),
+    ])
+
+    if (byNumber.error) throw readFailure('searchAuthorizations', byNumber.error)
+    if (patients.error) throw readFailure('searchAuthorizations', patients.error)
+
+    const rows = [...((byNumber.data ?? []) as unknown as AuthorizationSearchRow[])]
+    const patientIds = (patients.data ?? []).map((patient) => patient.id)
+
+    if (patientIds.length > 0) {
+      const { data, error } = await this.client
+        .from('insurance_authorizations')
+        .select(AUTHORIZATION_SEARCH_SELECT)
+        .eq('clinic_id', clinicId)
+        .in('patient_id', patientIds)
+        .order('requested_at', { ascending: false })
+        .limit(cap)
+
+      if (error) throw readFailure('searchAuthorizations', error)
+
+      rows.push(...((data ?? []) as unknown as AuthorizationSearchRow[]))
+    }
+
+    const unique = new Map<string, AuthorizationSearchRow>()
+    for (const row of rows) unique.set(row.id, row)
+
+    return [...unique.values()]
+      .map(toAuthorizationSearchHit)
+      .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime())
+      .slice(0, cap)
   }
 
   async listClaimDenials(
@@ -894,6 +1009,21 @@ function toAuthorization(row: AuthorizationRow): Authorization {
     answeredAt: row.answered_at ? new Date(row.answered_at) : null,
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     denialReason: row.denial_reason,
+  }
+}
+
+function toAuthorizationSearchHit(
+  row: AuthorizationSearchRow,
+): AuthorizationSearchHit {
+  return {
+    id: row.id,
+    patientName: row.patients?.full_name ?? 'Paciente',
+    authorizationNumber: row.authorization_number,
+    status: row.status,
+    providerName:
+      row.patient_insurances?.insurance_plans?.insurance_providers?.name ??
+      'Operadora',
+    requestedAt: new Date(row.requested_at),
   }
 }
 

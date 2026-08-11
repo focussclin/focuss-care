@@ -25,6 +25,7 @@ const push = vi.fn()
 const searchInvoicesAction = vi.fn()
 const searchPatientsAction = vi.fn()
 const searchAppointmentsAction = vi.fn()
+const searchAuthorizationsAction = vi.fn()
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
@@ -42,6 +43,11 @@ vi.mock('@/modules/scheduling/actions/searchAppointments.action', () => ({
   searchAppointmentsAction: (input: unknown) => searchAppointmentsAction(input),
 }))
 
+vi.mock('@/modules/insurance/actions/searchAuthorizations.action', () => ({
+  searchAuthorizationsAction: (input: unknown) =>
+    searchAuthorizationsAction(input),
+}))
+
 beforeEach(() => {
   push.mockClear()
   searchInvoicesAction.mockReset()
@@ -50,6 +56,8 @@ beforeEach(() => {
   searchPatientsAction.mockResolvedValue({ ok: true, data: [] })
   searchAppointmentsAction.mockReset()
   searchAppointmentsAction.mockResolvedValue({ ok: true, data: [] })
+  searchAuthorizationsAction.mockReset()
+  searchAuthorizationsAction.mockResolvedValue({ ok: true, data: [] })
 })
 
 /*
@@ -235,6 +243,77 @@ describe('busca inline de pacientes', () => {
     expect(push).toHaveBeenCalledWith('/financeiro')
   })
 
+  it('acha a guia pelo NÚMERO e retorna para convênios', async () => {
+    /*
+     * O número vem primeiro no rótulo porque é por ele que se procura: quem abre
+     * a paleta atrás de uma guia tem o papel na mão ou a operadora no telefone.
+     */
+    searchAuthorizationsAction.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'auth-1',
+          patientName: 'Maria Souza',
+          authorizationNumber: '881234',
+          status: 'approved',
+          providerName: 'Unimed',
+          requestedAt: '2026-08-09T13:00:00.000Z',
+        },
+      ],
+    })
+
+    renderPalette()
+    fireEvent.change(input(), { target: { value: '881234' } })
+
+    const authorization = await screen.findByRole('option', {
+      name: /881234.*Maria Souza.*Unimed/,
+    })
+    expect(searchAuthorizationsAction).toHaveBeenCalledWith({ query: '881234' })
+
+    fireEvent.click(authorization)
+    expect(push).toHaveBeenCalledWith('/convenios')
+  })
+
+  it('guia ainda sem número diz isso, em vez de um traço', async () => {
+    // Guia nasce `requested` e sem número — o número é da operadora. Um traço
+    // no lugar pareceria número faltando por erro de cadastro.
+    searchAuthorizationsAction.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'auth-2',
+          patientName: 'João da Silva',
+          authorizationNumber: null,
+          status: 'requested',
+          providerName: 'Bradesco Saúde',
+          requestedAt: '2026-08-09T13:00:00.000Z',
+        },
+      ],
+    })
+
+    renderPalette()
+    fireEvent.change(input(), { target: { value: 'João' } })
+
+    expect(
+      await screen.findByRole('option', { name: /Guia sem número.*João da Silva/ }),
+    ).toBeTruthy()
+  })
+
+  it('quem não alcança convênios não busca guia', async () => {
+    /*
+     * `professional` tem `patient.read` e não tem `insurance.manage`: a paleta é
+     * atalho para `/convenios`, e atalho que alcança o que a tela recusa é porta
+     * lateral.
+     */
+    renderPalette({ role: 'professional' })
+    fireEvent.change(input(), { target: { value: 'Maria' } })
+
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    expect(searchAuthorizationsAction).not.toHaveBeenCalled()
+    expect(searchPatientsAction).toHaveBeenCalledWith({ query: 'Maria' })
+  })
+
   it('não consulta o banco no modo demonstração', async () => {
     renderPalette({ role: undefined })
     fireEvent.change(input(), { target: { value: 'Maria' } })
@@ -243,6 +322,7 @@ describe('busca inline de pacientes', () => {
     expect(searchPatientsAction).not.toHaveBeenCalled()
     expect(searchAppointmentsAction).not.toHaveBeenCalled()
     expect(searchInvoicesAction).not.toHaveBeenCalled()
+    expect(searchAuthorizationsAction).not.toHaveBeenCalled()
     expect(screen.getByRole('option', { name: /buscar pacientes por/i })).toBeTruthy()
   })
 })
@@ -333,10 +413,14 @@ describe('estado vazio', () => {
      * A ressalva e o ponto: sem ela, quem digitasse o nome de um atendimento
      * leria "nenhum resultado" e concluiria que ele nao existe — quando ninguem
      * chegou a procurar.
+     *
+     * A guia saiu da lista de exclusoes nesta fatia; o prontuario continua nela,
+     * e continua declarado.
      */
     expect(
-      screen.getByText(/ainda não são pesquisados pelo nome/),
+      screen.getByText(/O prontuário não é pesquisado por termo/),
     ).toBeTruthy()
+    expect(screen.getByText(/guias \(pelo número ou pelo paciente\)/)).toBeTruthy()
   })
 
   it('com menos de dois caracteres, ensina o mínimo', () => {

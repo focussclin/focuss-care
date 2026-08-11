@@ -8,7 +8,7 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2501 testes em 196 arquivos · `typecheck`,
+**Validação atual (11/08/2026):** 2631 testes em 207 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
 **Atualização do banco (09/08/2026):** o schema local foi consultado com
@@ -610,8 +610,9 @@ não expõe observações, dados clínicos ou detalhes além do necessário para
 seleção.
 
 Foram adicionados schema, estados de loading/erro, debounce, testes do repositório
-Supabase e teste de integração da paleta. Prontuários, cobranças e guias seguem
-explicitamente fora da busca até existir um contrato de consulta próprio.
+Supabase e teste de integração da paleta. Naquele momento, prontuários, cobranças
+e guias seguiam explicitamente fora da busca; cobranças e guias foram concluídas
+em fatias posteriores.
 
 Validação desta fatia: suíte com 1041 testes em 97 arquivos, lint, typecheck,
 build Next.js com 42 rotas e OpenNext Cloudflare limpos.
@@ -658,8 +659,9 @@ valor, valor pago, status e data de criação. O resultado retorna para
 `/financeiro`; nenhuma observação financeira ou dado clínico entra no DTO.
 
 O contrato inclui limite, debounce, sanitização do termo, loading/erro, mock
-explícito para demonstração e testes do repositório, schema e componente. A
-paleta continua declarando que prontuários e guias não possuem busca por termo.
+explícito para demonstração e testes do repositório, schema e componente. Na
+data desta fatia, a paleta ainda declarava que prontuários e guias não possuíam
+busca por termo; a busca de guias foi adicionada em §8.41.
 
 Validação desta fatia: suíte com 1050 testes em 98 arquivos, lint, typecheck,
 build Next.js com 42 rotas e OpenNext Cloudflare limpos.
@@ -3318,6 +3320,98 @@ migration for aplicada.
 | Leitura clínica em outras rotas | `/atendimentos` mostra queixa principal e `/portal-profissional` mostra a agenda própria. Nenhuma lê fonte clínica pelos acessores conhecidos hoje — quando ler, o guard cobra |
 | Retenção e consulta por paciente | A trilha é append-only e paginada por clínica; não há tela que responda "todos os acessos ao prontuário desta paciente" em uma consulta. É fatia própria, e depende de P-P6 antes de valer alguma coisa |
 | Assinatura clínica e anexos | Seguem como em §8.39: certificado externo e bucket de Storage, os dois bloqueios de fora |
+
+---
+
+## 8.41 Feature — Busca de guias na paleta de comandos (11/08/2026)
+
+Reauditei as pendências. As de prontuário e auditoria estão fechadas; o que
+sobra registrado depende de bloqueio externo — P-P6, bucket de Storage,
+certificado de assinatura, as 18 migrations — ou é decisão adiada por outro
+motivo (grupo documental do paciente, nome social transversal em nove módulos).
+
+Uma pendência local sobrou, e estava escrita duas vezes, em §4.22 e §4.25: *"a
+paleta continua declarando que prontuários e guias não possuem busca por termo"*.
+Metade dela fecha aqui.
+
+### O contrato da guia não é o das outras buscas
+
+Paciente, agendamento e cobrança são achados pelo **nome de quem é atendido** —
+nenhum dos três tem identificador que alguém decore. A guia tem: o número que a
+operadora devolve ao autorizar é o que está no papel em cima do balcão e o que a
+atendente dita no telefone.
+
+Buscar guia só por nome de paciente teria copiado o contrato errado, e obrigaria
+a lembrar de quem era a guia para achar a guia. As duas chaves saem na mesma
+consulta.
+
+**Guia ainda não respondida não tem número** — ela nasce assim, porque o número é
+da operadora. Essas continuam sendo achadas pelo nome, e o rótulo diz "Guia sem
+número" em vez de um traço, que pareceria cadastro incompleto.
+
+### O que a busca NÃO lê
+
+`procedures` e `denial_reason` ficam fora do `select`. São o conteúdo clínico da
+guia: o primeiro diz o que se pretendia fazer com a pessoa, o segundo é o texto
+da operadora sobre isso. A paleta é um campo aberto no cabeçalho de **toda** tela
+autenticada.
+
+O recorte é feito no adapter, e não na montagem do DTO — coluna que não sai do
+banco não vaza de lugar nenhum. O teste do DTO trava o contrato dos dois lados:
+se alguém voltar a lê-las, a chave nova precisa passar por uma revisão que
+pergunta por quê.
+
+### `insurance.manage`, a mesma porta de `/convenios`
+
+Não é permissão nova. A paleta é atalho para uma tela que existe, e atalho que
+alcança o que a tela recusa é a definição de porta lateral. `receptionist` e
+`professional` continuam sem convênio, como a matriz de I-05 decidiu — e o teste
+trava os cinco papéis.
+
+### A quarta cópia que não foi escrita
+
+A paleta consultava três fontes com três efeitos praticamente idênticos: três
+`setTimeout`, três flags `active`, nove pedaços de estado e mais três linhas em
+cada um dos dois pontos de limpeza. A quarta fonte seria a quarta cópia.
+
+`usePaletteSearch` recolhe o padrão, e a mudança que ele traz não é só de
+tamanho: **`pending` e `error` passaram a ser derivados**. O estado guarda o
+termo que produziu a resposta, e "está carregando" é *termo pedido ≠ termo
+respondido* — o mesmo desenho do seletor de vínculo e do histórico de versões.
+Com um booleano à parte, era preciso apagá-lo em todo caminho de saída, e é
+exatamente aí que nasce o indicador que nunca desliga.
+
+O resultado da consulta anterior some no instante em que o termo muda, porque ele
+não é "o que está guardado" e sim "o que está guardado para este termo". Sem
+isso, apertar Enter durante a digitação abriria o registro de uma busca que já
+não está no campo.
+
+A action é passada como função, e não como callback montado no render: um arrow
+inline mudaria a cada tecla, refaria o efeito, e o debounce nunca chegaria ao
+fim.
+
+### O limite que continua declarado
+
+**O prontuário não é pesquisado por termo, e o estado vazio diz isso.** Uma busca
+nele seria consulta a conteúdo clínico, e ela pede contrato próprio: quem pode
+ler, o que a resposta pode mostrar e como o acesso é registrado — as três
+perguntas que §8.40 acabou de responder para a ficha, e que uma caixa de texto no
+cabeçalho não responde sozinha.
+
+### Estado
+
+O projeto passa a **2631 testes em 207 arquivos** (+38, +3 arquivos). Typecheck,
+lint, build e suíte completa estão limpos. Teleatendimento continua fora do
+escopo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por que não entrou |
+| --- | --- |
+| Busca no prontuário | Precisa de contrato próprio de consulta clínica — quem lê, o que a resposta mostra, como o acesso entra na trilha. É fatia de produto, não extensão da paleta |
+| Glosa na busca | `claim_denials` tem código e motivo da recusa, que é texto da operadora sobre o atendimento. Vale a mesma pergunta da guia, e a resposta pode ser diferente: a glosa não tem número que alguém decore |
+| Resultado da guia abre `/convenios` sem filtro | Como cobrança e agendamento: a rota ainda não aceita um id na URL para destacar a linha. É melhoria transversal das quatro fontes, não da guia |
+| Nome social nas outras telas | Segue de §8.35: `patients ( full_name )` em nove módulos. Propagar pela metade é pior que não propagar |
 
 ---
 

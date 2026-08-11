@@ -3,6 +3,7 @@ import type { AuthorizationStatus } from '@/lib/supabase/database.types'
 import type {
   Authorization,
   AuthorizationAnswer,
+  AuthorizationSearchHit,
   InsurancePlan,
   InsuranceProvider,
   InsuranceSummary,
@@ -40,6 +41,24 @@ export interface InsuranceRepository {
 
   /** Guias mais recentes primeiro. */
   listAuthorizations(clinicId: string, limit: number): Promise<Authorization[]>
+
+  /**
+   * Guias por NÚMERO da operadora ou por nome do paciente.
+   *
+   * As duas chaves, e não uma: quem procura uma guia quase sempre tem o número
+   * na mão — no papel que a operadora mandou, ou na ligação em que ela o dita.
+   * As outras buscas do produto partem do nome do paciente porque cobrança e
+   * agendamento não têm identificador que alguém decore; a guia tem, e ignorá-lo
+   * obrigaria a lembrar de quem era a guia para achar a guia.
+   *
+   * Guia ainda não respondida **não tem número** e só é encontrada pelo nome —
+   * é o estado em que ela nasce, e a tela não promete o contrário.
+   */
+  searchAuthorizations(
+    clinicId: string,
+    query: string,
+    limit: number,
+  ): Promise<AuthorizationSearchHit[]>
 
   /** Carteirinhas ativas, para abrir uma guia. */
   listPatientInsurances(clinicId: string): Promise<PatientInsuranceOption[]>

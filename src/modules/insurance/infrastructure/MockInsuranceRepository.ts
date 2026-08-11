@@ -1,5 +1,6 @@
 import type {
   Authorization,
+  AuthorizationSearchHit,
   ClaimDenial,
   ClaimInvoiceOption,
   InsurancePlan,
@@ -27,6 +28,18 @@ export class MockInsuranceRepository implements InsuranceRepository {
   }
 
   async listAuthorizations(): Promise<Authorization[]> {
+    return []
+  }
+
+  /**
+   * Sem guia na demonstração — e a paleta nem chega aqui.
+   *
+   * Sem sessão não há papel, e a busca só dispara para quem tem
+   * `insurance.manage`. O método existe porque a porta o exige; devolver uma
+   * guia de exemplo daria um número de autorização que não existe em operadora
+   * nenhuma, e é com esse número que alguém ligaria para cobrar.
+   */
+  async searchAuthorizations(): Promise<AuthorizationSearchHit[]> {
     return []
   }
 
