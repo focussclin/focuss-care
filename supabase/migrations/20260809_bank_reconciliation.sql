@@ -112,56 +112,46 @@ create policy "bank_accounts_select"
   on public.bank_accounts
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_accounts_insert" on public.bank_accounts;
 create policy "bank_accounts_insert"
   on public.bank_accounts
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_accounts_update" on public.bank_accounts;
 create policy "bank_accounts_update"
   on public.bank_accounts
   for update to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_transactions_select" on public.bank_transactions;
 create policy "bank_transactions_select"
   on public.bank_transactions
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_transactions_insert" on public.bank_transactions;
 create policy "bank_transactions_insert"
   on public.bank_transactions
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_transactions_update" on public.bank_transactions;
 create policy "bank_transactions_update"
   on public.bank_transactions
   for update to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- `pending` ↔ `ignored` é um UPDATE comum, e não precisa de função.
 --
@@ -180,18 +170,14 @@ create policy "bank_reconciliations_select"
   on public.bank_reconciliations
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_reconciliations_insert" on public.bank_reconciliations;
 create policy "bank_reconciliations_insert"
   on public.bank_reconciliations
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- Não há UPDATE nem DELETE: uma conciliação é uma evidência; correções devem
 -- nascer como novo lançamento de ajuste, não apagar o histórico.

@@ -150,9 +150,7 @@ create policy "clinic_tasks_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_tasks_insert" on public.clinic_tasks;
 create policy "clinic_tasks_insert"
@@ -160,9 +158,7 @@ create policy "clinic_tasks_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_tasks_update" on public.clinic_tasks;
 create policy "clinic_tasks_update"
@@ -170,13 +166,9 @@ create policy "clinic_tasks_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 -- Sem policy de DELETE: tarefa sai por `status = 'canceled'`, que preserva o
 -- registro de que alguem decidiu nao fazer.

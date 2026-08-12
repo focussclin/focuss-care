@@ -92,9 +92,7 @@ create policy "inventory_items_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 drop policy if exists "inventory_items_insert" on public.inventory_items;
@@ -104,7 +102,7 @@ create policy "inventory_items_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "inventory_items_update" on public.inventory_items;
@@ -114,11 +112,11 @@ create policy "inventory_items_update"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   )
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "inventory_movements_select" on public.inventory_movements;
@@ -128,9 +126,7 @@ create policy "inventory_movements_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 -- A escrita direta existe so como rede: o caminho da aplicacao e a RPC
@@ -142,9 +138,7 @@ create policy "inventory_movements_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 create or replace function public.record_inventory_movement(

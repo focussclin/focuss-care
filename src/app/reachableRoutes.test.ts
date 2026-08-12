@@ -36,22 +36,19 @@ const APP_DIR = join(process.cwd(), 'src', 'app')
  * feature devia ser exposta ou removida, não registrada.
  */
 const BUILT_BUT_HIDDEN: Record<string, string> = {
-  '/crm':
-    'Depende de `supabase/migrations/20260809_clinic_leads.sql`, escrita e revisada mas não aplicada. A tela declara a pendência e mantém o item bloqueado até a persistência do pipeline existir.',
+  /*
+   * SETE ENTRADAS SAÍRAM DAQUI EM 12/08/2026 — e a saída é o teste funcionando.
+   *
+   * `/crm`, `/formularios`, `/estoque`, `/compras`, `/conciliacao`,
+   * `/salas-e-recursos` e `/tarefas` diziam a mesma frase com nomes diferentes:
+   * "a migration está escrita e revisada, mas não aplicada". As 40 migrations
+   * subiram no projeto novo naquele dia, as tabelas existem, e a linha 154 deste
+   * arquivo cobrou a remoção — exatamente como o comentário abaixo prometia.
+   *
+   * A dívida fechou; não virou comentário velho.
+   */
   '/inbox':
     'A leitura usa conversations e messages reais, mas a ingestão e o envio dependem do provedor de WhatsApp/worker ainda não configurado. O item permanece bloqueado para não prometer uma caixa de entrada operacional incompleta.',
-  '/formularios':
-    'O builder e a camada de escrita estão preparados, mas clinic_forms ainda depende da migration 20260809_clinic_forms.sql. O item permanece bloqueado até a persistência real existir.',
-  '/estoque':
-    'O cadastro e a movimentação atômica estão preparados, mas inventory_items e inventory_movements ainda dependem da migration 20260809_inventory.sql. O item permanece bloqueado até a persistência real existir.',
-  '/compras':
-    'Fornecedores, pedidos e recebimento atômico estão preparados, mas dependem da migration 20260809_purchases.sql aplicada depois de 20260809_inventory.sql. O item permanece bloqueado até o saldo persistir de verdade.',
-  '/conciliacao':
-    'A conciliação manual está preparada, mas bank_accounts, bank_transactions e bank_reconciliations dependem da migration 20260809_bank_reconciliation.sql. O item permanece bloqueado até contas e vínculos persistirem.',
-  '/salas-e-recursos':
-    'Depende de `supabase/migrations/20260809_rooms.sql`, escrita e revisada mas não aplicada. Com a tabela ausente a tela mostra o estado pendente; habilitar o item prometeria persistência que o banco não sustenta.',
-  '/tarefas':
-    'Depende de `supabase/migrations/20260809_clinic_tasks.sql`, escrita e revisada mas não aplicada. Mesmo motivo de `/salas-e-recursos`: a tela declara a pendência em vez de prometer que a tarefa fica salva.',
 }
 
 /**

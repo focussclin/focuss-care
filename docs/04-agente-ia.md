@@ -1,7 +1,9 @@
 # Focuss Care AI — Recepcionista Digital Autônoma
 
-> **Proposta técnica. Nenhuma migration executada.** Aguardando aprovação.
-> Levantamento feito contra o banco real e o código atual em 07/08/2026.
+> **Proposta técnica para o agente.** A conexão Evolution por QR foi entregue em
+> 12/08/2026; envio, webhook, worker e IA continuam fora desta fatia.
+> O levantamento estrutural abaixo foi feito em 07/08/2026; os tipos do banco
+> foram regenerados em 12/08/2026 e agora descrevem 75 tabelas.
 
 ---
 
@@ -13,8 +15,8 @@
 |---|---|
 | Next.js 16.3 + React 19 + TS | ✅ operacional |
 | Supabase Auth (e-mail + Google OAuth) | ✅ operacional, fonte única |
-| RLS | ✅ **56/56 objetos protegidos**, verificado |
-| Tipos do banco | ✅ gerados (`npm run db:types`), 55 tabelas |
+| RLS | ✅ **56/56 objetos protegidos**, verificado no levantamento de 07/08 |
+| Tipos do banco | ✅ gerados (`npm run db:types`), 75 tabelas na versão atual |
 | Repositórios com porta/adapter | ✅ `patients`, `appointments` |
 | Telas | ✅ login, dashboard, agenda, pacientes |
 | `proxy.ts` | ✅ protege rotas privadas |
@@ -23,7 +25,7 @@
 
 | Item | Estado |
 |---|---|
-| Evolution API | ❌ nenhuma linha de código, nenhuma env var |
+| Evolution API | ✅ conexão por QR em `/whatsapp`; envio e webhook ainda ausentes |
 | Redis / fila | ❌ nenhuma dependência instalada |
 | Provedor LLM | ❌ nenhuma dependência instalada |
 | Worker / processo longo | ❌ só há o app Next |
@@ -67,9 +69,9 @@ aceita ser avisado se abrir. São conceitos distintos e precisam de tabelas dist
 
 ## 3. Análise da Evolution API
 
-Não há integração alguma no código. O que existe é a **preparação no schema**:
-`channel_provider` já contempla `evolution`, e `provider_config jsonb` guarda a
-configuração por clínica sem exigir migration futura.
+Existe agora o adapter de conexão por QR, mantendo a mesma preparação do schema:
+`channel_provider` contempla `evolution`, e `provider_config jsonb` guarda apenas
+metadados da instância por clínica — a API key permanece no cofre cifrado.
 
 ### Decisão: uma instância Evolution por clínica
 
@@ -93,7 +95,8 @@ Configurações → WhatsApp → Conectar
   → POST /instance/create        (nosso backend → Evolution)
   → GET  /instance/connect       → QR Code (base64)
   → UI exibe QR + polling de status
-  → webhook CONNECTION_UPDATE    → grava connected_at, phone_number
+  → pareamento confirmado         → grava connected_at, phone_number
+  → webhook CONNECTION_UPDATE     → ainda pendente para eventos futuros
 ```
 
 Estados exibidos: `disconnected · connecting · connected · error`, com

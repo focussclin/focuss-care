@@ -209,9 +209,7 @@ create policy "patient_portal_invites_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[])
   );
 
 /*
@@ -242,9 +240,7 @@ create policy "patient_portal_accounts_select"
     user_id = auth.uid()
     or (
       clinic_id = public.current_clinic_id()
-      and public.has_clinic_role(
-        array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-      )
+      and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[])
     )
   );
 
@@ -431,9 +427,7 @@ begin
   end if;
 
   -- Mesma lista de `patient.write`. Quem edita o cadastro pode dar acesso a ele.
-  if not public.has_clinic_role(
-    array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-  ) then
+  if not public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 
@@ -506,9 +500,7 @@ as $$
 declare
   v_clinic_id uuid := public.current_clinic_id();
 begin
-  if v_clinic_id is null or not public.has_clinic_role(
-    array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-  ) then
+  if v_clinic_id is null or not public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 

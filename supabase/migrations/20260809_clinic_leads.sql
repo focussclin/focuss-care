@@ -85,9 +85,7 @@ create policy "clinic_leads_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_leads_insert" on public.clinic_leads;
 create policy "clinic_leads_insert"
@@ -95,9 +93,7 @@ create policy "clinic_leads_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_leads_update" on public.clinic_leads;
 create policy "clinic_leads_update"
@@ -105,13 +101,9 @@ create policy "clinic_leads_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "lead_events_select" on public.lead_events;
 create policy "lead_events_select"
@@ -119,9 +111,7 @@ create policy "lead_events_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "lead_events_insert" on public.lead_events;
 create policy "lead_events_insert"
@@ -129,9 +119,7 @@ create policy "lead_events_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 -- Nao ha DELETE: perder um lead e uma decisao de negocio, nao limpeza tecnica.
 
@@ -183,9 +171,7 @@ begin
 
   -- Criar paciente e ato de `patient.write`, e nao de `team.read`: converter
   -- escreve no cadastro clinico, nao so no funil.
-  if not public.has_clinic_role(
-    array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-  ) then
+  if not public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 

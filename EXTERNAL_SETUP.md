@@ -8,13 +8,14 @@
 
 ---
 
-## Estado atualizado — 11/08/2026
+## Estado atualizado — 12/08/2026
 
-`npm run db:types` foi executado com segurança contra o projeto configurado e
-confirmou que as migrations dos módulos preparados ainda não estão refletidas
-integralmente no schema remoto. Não foi executado DDL remoto neste ambiente.
-As rotas existentes continuam declarando `schema-not-ready` e mantendo as
-escritas desabilitadas até a aplicação confirmada das migrations.
+Os tipos locais foram regenerados com segurança e atualmente descrevem 75
+tabelas e 39 enums. Esta leitura foi somente de schema; não foi executado DDL
+remoto neste ambiente. As rotas podem ser abertas, mas cada escrita continua
+dependendo de a migration correspondente existir no projeto Supabase escolhido:
+quando não existe, o backend responde `schema-not-ready` e a UI mantém a escrita
+desabilitada.
 
 O build local também foi validado no runtime OpenNext Cloudflare com
 `npx opennextjs-cloudflare build`; ele passou sem o erro de middleware Node.js.
@@ -26,12 +27,10 @@ Management API e está vazio, sem tabelas. O checklist completo de chaves,
 callbacks, integrações e troca de VPS está em
 [`PROJECT_KEYS_AND_INTEGRATIONS.md`](./PROJECT_KEYS_AND_INTEGRATIONS.md).
 
-**Nova exceção desta etapa (09/08/2026):** a migration
-`supabase/migrations/20260809_rooms.sql` ainda não foi aplicada. A implementação
-de salas e recursos já está no código, mas o menu permanece bloqueado até a
-tabela `rooms`, a coluna `appointments.room_id` e a constraint de conflito de
-recurso existirem no projeto remoto. Depois de aplicar, execute
-`npm run db:types` e publique os tipos regenerados.
+**Rotas preparadas:** salas, CRM, tarefas, conciliação, estoque, compras e
+formulários já possuem UI, actions e persistência versionadas. O menu as exibe
+quando o contrato de rota está disponível; se o projeto remoto ainda não tiver
+a tabela, a tela informa `schema-not-ready` em vez de simular uma operação.
 
 **Tarefas (09/08/2026):** a migration
 `supabase/migrations/20260809_clinic_tasks.sql` também ainda não foi aplicada.
@@ -143,10 +142,33 @@ Para habilitar o cofre em cada ambiente:
 5. Cadastre a credencial no card do provedor. Depois de salvar, os campos são
    apagados e a tela mostra apenas “Configurado” e a data.
 
-O cofre prepara o armazenamento seguro; ele não finge que um provedor já está
-operacional. Evolution, DeepSeek e calendários ainda precisam de seus adapters,
-OAuth/webhooks e workers antes de enviar mensagens, chamar modelos ou
-sincronizar agenda. A tela mostra esse estado em separado.
+O cofre prepara o armazenamento seguro. A conexão do WhatsApp pela Evolution
+API agora possui adapter server-side e fluxo de QR em `/whatsapp`; o QR não é
+persistido nem auditado, e o estado conectado é refletido em `whatsapp_channels`.
+O envio de mensagens, webhook de recebimento e worker continuam fora desta
+fatia e ainda dependem de configuração/execução externa.
+
+DeepSeek e calendários ainda precisam de seus adapters, OAuth e workers antes de
+chamar modelos ou sincronizar agenda. A tela mostra esses estados em separado.
+
+### 0.2 Evolution API — conexão por QR
+
+Para cada clínica, cadastre no cofre de `/configuracoes`:
+
+- `baseUrl`: URL HTTPS da instância Evolution;
+- `apiKey`: chave da Evolution, somente no formulário server-side;
+- `instanceName`: nome exclusivo da instância da clínica.
+
+O backend usa `GET /instance/connectionState/{instanceName}`,
+`POST /instance/create`, `GET /instance/connect/{instanceName}`,
+`GET /instance/fetchInstances` e `DELETE /instance/logout/{instanceName}`.
+O painel mostra o QR por até 60 segundos, verifica o pareamento a cada 3
+segundos e mascara o número conectado.
+
+Como validar: salve a credencial, abra `/whatsapp`, clique em **Conectar
+WhatsApp**, leia o QR em WhatsApp → Aparelhos conectados e confirme que o estado
+muda para **Conectado**. Se a instância já existir, o app renova o QR em vez de
+tentar recriá-la.
 
 Não coloque tokens de GitHub, Cloudflare, Coolify/VPS ou Hostinger neste painel.
 Eles controlam a infraestrutura e devem ser cadastrados como secrets do
@@ -344,7 +366,7 @@ Registrado para que ninguém saia procurando:
 
 | Serviço | Situação |
 |---|---|
-| Provedor de WhatsApp (Evolution, Cloud API) | **Cofre preparado, adapter ainda não operacional.** A credencial pode ser armazenada cifrada em `/configuracoes`, mas nenhum envio, webhook ou worker lê essa credencial ainda. `/whatsapp` mostra o estado de conexão vindo de `whatsapp_channels` e declara o que falta |
+| Provedor de WhatsApp (Evolution, Cloud API) | **Conexão Evolution por QR operacional.** A credencial é lida do cofre cifrado por clínica e o estado conectado é refletido em `whatsapp_channels`; envio, webhook e worker continuam pendentes |
 | Redis / worker de fila | **Não existe.** Previsto para W-01, sem código no repositório |
 | Provedor de IA | **Cofre preparado, adapter ainda não operacional.** A credencial DeepSeek pode ser armazenada cifrada, mas nenhuma chamada sai daqui; `/chat-ia` mostra que não há provedor ativo e declara a regra P9 |
 | Gateway de pagamento | **Não existe.** B-01 registra pagamento recebido, não processa cobrança |

@@ -67,7 +67,20 @@ export interface NavItem {
    * o item não é `availability: 'setup'`: a função principal funciona.
    */
   disabled?: boolean
-  /** A tela pode ser revisada, mas ainda depende de migration ou setup externo. */
+  /**
+   * A tela pode ser revisada, mas ainda depende de migration ou setup externo.
+   *
+   * **Sete itens saíram desta lista em 12/08/2026**: salas, CRM, tarefas,
+   * conciliação, estoque, compras e formulários. Todos eram `setup` pela mesma
+   * causa — a migration que cria as tabelas nunca havia sido aplicada — e as 40
+   * migrations subiram no projeto novo naquele dia. Manter o marcador depois
+   * disso inverteria o propósito dele: em vez de avisar o que não funciona,
+   * passaria a desencorajar o uso do que funciona.
+   *
+   * `/inbox` **continua** marcado, e por um motivo diferente do dos outros: as
+   * tabelas dele sempre existiram: o que falta é o provedor externo de envio.
+   * Nenhuma migration resolve isso.
+   */
   availability?: 'setup'
   /**
    * Permissão exigida pela ROTA para renderizar.
@@ -106,9 +119,9 @@ export const navItems: readonly NavItem[] = [
    * que uma só. A fila está em `/atendimentos`, e o painel dela em `/display`.
    */
 
-  { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', permission: 'clinic.settings', availability: 'setup' },
+  { label: 'Salas e recursos', href: '/salas-e-recursos', icon: Building2, section: 'care', permission: 'clinic.settings' },
 
-  { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', permission: 'team.read', availability: 'setup' },
+  { label: 'CRM e Leads', href: '/crm', icon: UserSearch, section: 'relationship', permission: 'team.read' },
   { label: 'Inbox de atendimento', href: '/inbox', icon: Inbox, section: 'relationship', permission: 'encounter.read', availability: 'setup' },
   { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle, section: 'relationship' },
   /*
@@ -125,7 +138,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Chat IA', href: '/chat-ia', icon: Sparkles, section: 'intelligence' },
   { label: 'Automações', href: '/automacoes', icon: Workflow, section: 'intelligence' },
   { label: 'Insights proativos', href: '/insights', icon: BarChart3, section: 'intelligence', permission: 'report.read' },
-  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', permission: 'team.read', availability: 'setup' },
+  { label: 'Tarefas', href: '/tarefas', icon: CheckSquare2, section: 'intelligence', permission: 'team.read' },
 
   /*
    * "Pagamentos" e "Caixa" foram REMOVIDOS daqui, e não adiados.
@@ -135,7 +148,7 @@ export const navItems: readonly NavItem[] = [
    * nem fechar o caixa — sobre um recurso que está funcionando uma tela ao lado.
    */
   { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'invoice.read' },
-  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'invoice.read', availability: 'setup' },
+  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'invoice.read' },
   { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance', permission: 'insurance.manage' },
   /*
    * Sem `permission`: o catalogo e a lista da propria clinica, e quem agenda
@@ -143,13 +156,13 @@ export const navItems: readonly NavItem[] = [
    * PRECO, omitido no servidor — nao a rota.
    */
   { label: 'Catálogo de serviços', href: '/servicos', icon: Tags, section: 'finance' },
-  { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', permission: 'invoice.read', availability: 'setup' },
-  { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', permission: 'invoice.read', availability: 'setup' },
+  { label: 'Estoque', href: '/estoque', icon: Package, section: 'finance', permission: 'invoice.read' },
+  { label: 'Compras', href: '/compras', icon: ShoppingCart, section: 'finance', permission: 'invoice.read' },
 
   { label: 'Equipe e permissões', href: '/equipe', icon: UserRoundCog, section: 'management', permission: 'team.read' },
   { label: 'Relatórios', href: '/relatorios', icon: FileBarChart, section: 'management', permission: 'report.read' },
   { label: 'Documentos', href: '/documentos', icon: FilePenLine, section: 'management', permission: 'patient.read' },
-  { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', permission: 'clinic.settings', availability: 'setup' },
+  { label: 'Formulários digitais', href: '/formularios', icon: FormInput, section: 'management', permission: 'clinic.settings' },
   { label: 'Assinaturas', href: '/assinaturas', icon: FileSignature, section: 'management', permission: 'clinic.settings' },
   { label: 'Auditoria', href: '/auditoria', icon: Archive, section: 'management', permission: 'audit.read' },
 

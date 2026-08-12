@@ -185,7 +185,7 @@ create policy "rooms_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "rooms_update" on public.rooms;
@@ -195,7 +195,7 @@ create policy "rooms_update"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 -- Sem policy de DELETE, de proposito: sala sai por `deleted_at`, porque
@@ -420,9 +420,7 @@ create policy "clinic_tasks_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_tasks_insert" on public.clinic_tasks;
 create policy "clinic_tasks_insert"
@@ -430,9 +428,7 @@ create policy "clinic_tasks_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_tasks_update" on public.clinic_tasks;
 create policy "clinic_tasks_update"
@@ -440,13 +436,9 @@ create policy "clinic_tasks_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 -- Sem policy de DELETE: tarefa sai por `status = 'canceled'`, que preserva o
 -- registro de que alguem decidiu nao fazer.
@@ -582,9 +574,7 @@ create policy "clinic_leads_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_leads_insert" on public.clinic_leads;
 create policy "clinic_leads_insert"
@@ -592,9 +582,7 @@ create policy "clinic_leads_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_leads_update" on public.clinic_leads;
 create policy "clinic_leads_update"
@@ -602,13 +590,9 @@ create policy "clinic_leads_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "lead_events_select" on public.lead_events;
 create policy "lead_events_select"
@@ -616,9 +600,7 @@ create policy "lead_events_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "lead_events_insert" on public.lead_events;
 create policy "lead_events_insert"
@@ -626,9 +608,7 @@ create policy "lead_events_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 -- Nao ha DELETE: perder um lead e uma decisao de negocio, nao limpeza tecnica.
 
@@ -680,9 +660,7 @@ begin
 
   -- Criar paciente e ato de `patient.write`, e nao de `team.read`: converter
   -- escreve no cadastro clinico, nao so no funil.
-  if not public.has_clinic_role(
-    array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-  ) then
+  if not public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 
@@ -831,9 +809,7 @@ create policy "clinic_forms_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_forms_insert" on public.clinic_forms;
 create policy "clinic_forms_insert"
@@ -841,7 +817,7 @@ create policy "clinic_forms_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_forms_update" on public.clinic_forms;
 create policy "clinic_forms_update"
@@ -849,9 +825,9 @@ create policy "clinic_forms_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "clinic_form_responses_select" on public.clinic_form_responses;
 create policy "clinic_form_responses_select"
@@ -859,9 +835,7 @@ create policy "clinic_form_responses_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_form_responses_insert" on public.clinic_form_responses;
 create policy "clinic_form_responses_insert"
@@ -869,9 +843,7 @@ create policy "clinic_form_responses_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "clinic_form_responses_update" on public.clinic_form_responses;
 create policy "clinic_form_responses_update"
@@ -879,13 +851,9 @@ create policy "clinic_form_responses_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 commit;
 
@@ -969,9 +937,7 @@ create policy "patient_tags_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "patient_tag_links_select" on public.patient_tag_links;
 create policy "patient_tag_links_select"
@@ -986,9 +952,7 @@ create policy "patient_tag_links_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 drop policy if exists "patient_tag_links_delete" on public.patient_tag_links;
 create policy "patient_tag_links_delete"
@@ -996,9 +960,7 @@ create policy "patient_tag_links_delete"
   for delete
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 create or replace function public.add_patient_tag(
   p_clinic_id uuid,
@@ -1164,9 +1126,7 @@ create policy "patient_documents_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[]));
 
 insert into storage.buckets (
   id, name, public, file_size_limit, allowed_mime_types
@@ -1210,9 +1170,7 @@ create policy "patient_documents_storage_insert"
   with check (
     bucket_id = 'patient-documents'
     and (storage.foldername(name))[1] = public.current_clinic_id()::text
-    and public.has_clinic_role(
-      array['owner', 'admin', 'professional', 'receptionist']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'professional', 'receptionist']::membership_role[])
   );
 
 commit;
@@ -1396,56 +1354,46 @@ create policy "bank_accounts_select"
   on public.bank_accounts
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_accounts_insert" on public.bank_accounts;
 create policy "bank_accounts_insert"
   on public.bank_accounts
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_accounts_update" on public.bank_accounts;
 create policy "bank_accounts_update"
   on public.bank_accounts
   for update to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "bank_transactions_select" on public.bank_transactions;
 create policy "bank_transactions_select"
   on public.bank_transactions
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_transactions_insert" on public.bank_transactions;
 create policy "bank_transactions_insert"
   on public.bank_transactions
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_transactions_update" on public.bank_transactions;
 create policy "bank_transactions_update"
   on public.bank_transactions
   for update to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- `pending` ↔ `ignored` é um UPDATE comum, e não precisa de função.
 --
@@ -1464,18 +1412,14 @@ create policy "bank_reconciliations_select"
   on public.bank_reconciliations
   for select to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "bank_reconciliations_insert" on public.bank_reconciliations;
 create policy "bank_reconciliations_insert"
   on public.bank_reconciliations
   for insert to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- Não há UPDATE nem DELETE: uma conciliação é uma evidência; correções devem
 -- nascer como novo lançamento de ajuste, não apagar o histórico.
@@ -1680,9 +1624,7 @@ create policy "inventory_items_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 drop policy if exists "inventory_items_insert" on public.inventory_items;
@@ -1692,7 +1634,7 @@ create policy "inventory_items_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "inventory_items_update" on public.inventory_items;
@@ -1702,11 +1644,11 @@ create policy "inventory_items_update"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   )
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "inventory_movements_select" on public.inventory_movements;
@@ -1716,9 +1658,7 @@ create policy "inventory_movements_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 -- A escrita direta existe so como rede: o caminho da aplicacao e a RPC
@@ -1730,9 +1670,7 @@ create policy "inventory_movements_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    )
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[])
   );
 
 create or replace function public.record_inventory_movement(
@@ -2019,9 +1957,7 @@ create policy "purchase_suppliers_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_insert" on public.purchase_suppliers;
 create policy "purchase_suppliers_insert"
@@ -2029,7 +1965,7 @@ create policy "purchase_suppliers_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_update" on public.purchase_suppliers;
 create policy "purchase_suppliers_update"
@@ -2037,9 +1973,9 @@ create policy "purchase_suppliers_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_orders_select" on public.purchase_orders;
 create policy "purchase_orders_select"
@@ -2047,9 +1983,7 @@ create policy "purchase_orders_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_orders_insert" on public.purchase_orders;
 create policy "purchase_orders_insert"
@@ -2057,9 +1991,7 @@ create policy "purchase_orders_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_orders_update" on public.purchase_orders;
 create policy "purchase_orders_update"
@@ -2067,13 +1999,9 @@ create policy "purchase_orders_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_select" on public.purchase_order_items;
 create policy "purchase_order_items_select"
@@ -2081,9 +2009,7 @@ create policy "purchase_order_items_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_insert" on public.purchase_order_items;
 create policy "purchase_order_items_insert"
@@ -2091,9 +2017,7 @@ create policy "purchase_order_items_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_update" on public.purchase_order_items;
 create policy "purchase_order_items_update"
@@ -2101,13 +2025,9 @@ create policy "purchase_order_items_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- -----------------------------------------------------------------------------
 -- RPCs atômicas

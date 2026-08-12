@@ -9,6 +9,13 @@ import { IntegrationStatusCard } from './IntegrationStatusCard'
 export interface WhatsappScreenProps {
   status: WhatsappStatus
   /**
+   * O pareamento por QR code, montado pela ROTA.
+   *
+   * Vem primeiro na tela porque é a ação: quem abre esta página com o canal
+   * fora do ar veio conectá-lo, não ler contadores.
+   */
+  connectionSlot?: ReactNode
+  /**
    * A biblioteca de modelos, montada pela ROTA.
    *
    * Chega como slot porque ela FUNCIONA — é a única parte desta tela que não
@@ -35,7 +42,11 @@ function maskPhone(phone: string): string {
  * chegar, o inbox nasce por cima de uma base que já sabe distinguir "sem canal"
  * de "canal cadastrado e desligado".
  */
-export function WhatsappScreen({ status, templatesSlot }: WhatsappScreenProps) {
+export function WhatsappScreen({
+  status,
+  connectionSlot,
+  templatesSlot,
+}: WhatsappScreenProps) {
   const channel = status.channel
 
   return (
@@ -45,6 +56,8 @@ export function WhatsappScreen({ status, templatesSlot }: WhatsappScreenProps) {
         title="WhatsApp"
         description="O canal da clínica com o paciente."
       />
+
+      {connectionSlot}
 
       <IntegrationStatusCard
         title="Canal de WhatsApp"

@@ -139,7 +139,7 @@ create policy "rooms_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "rooms_update" on public.rooms;
@@ -149,7 +149,7 @@ create policy "rooms_update"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 -- Sem policy de DELETE, de proposito: sala sai por `deleted_at`, porque

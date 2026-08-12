@@ -13,7 +13,9 @@ import { isMessageTemplateError } from '@/modules/integrations/domain/MessageTem
 import { getMessageTemplateSource } from '@/modules/integrations/infrastructure/message-template-repository'
 import { getIntegrationRepository } from '@/modules/integrations/infrastructure/repository'
 import { messageTemplateMessages } from '@/modules/integrations/schemas/messageTemplate.schema'
+import type { WhatsappConnectionDto } from '@/modules/integrations/schemas/whatsappConnection.schema'
 import { MessageTemplatesPanel } from '@/modules/integrations/ui/MessageTemplatesPanel'
+import { WhatsappConnectionPanel } from '@/modules/integrations/ui/WhatsappConnectionPanel'
 import { WhatsappScreen } from '@/modules/integrations/ui/WhatsappScreen'
 
 export const metadata: Metadata = {
@@ -53,9 +55,42 @@ export default async function WhatsappPage() {
         : messageTemplateMessages.unavailable
   }
 
+  /*
+   * Estado inicial da conexão, lido no SERVIDOR.
+   *
+   * Sem isto o painel abriria em "desconectado" e só se corrigiria depois da
+   * primeira consulta do cliente — quem tem o canal no ar leria, por um
+   * instante, que ele está fora. A leitura é do provedor, então não pode
+   * derrubar a página: se falhar, a tela abre em desconectado e o botão
+   * devolve o erro real.
+   */
+  let channelConnection: WhatsappConnectionDto = {
+    state: 'disconnected',
+    qrCode: null,
+    phoneNumber: null,
+  }
+
+  if (source.isLive && can(role, 'clinic.settings')) {
+    const { whatsappStatusAction } = await import(
+      '@/modules/integrations/actions/whatsappConnection.action'
+    )
+
+    const result = await whatsappStatusAction()
+    if (result.ok) channelConnection = result.data
+  }
+
   return (
     <WhatsappScreen
       status={overview.whatsapp}
+      connectionSlot={
+        can(role, 'clinic.settings') ? (
+          <WhatsappConnectionPanel
+            initial={channelConnection}
+            canManage
+            isLive={source.isLive}
+          />
+        ) : null
+      }
       templatesSlot={
         <MessageTemplatesPanel
           templates={templates.map(toMessageTemplateDto)}

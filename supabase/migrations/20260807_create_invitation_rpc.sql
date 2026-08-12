@@ -49,7 +49,7 @@ declare
 begin
   -- Quem convida precisa administrar a clinica. `owner` e `admin` batem com a
   -- permissao `team.manage` da matriz em src/lib/auth/permissions.ts.
-  if not public.has_clinic_role(array['owner', 'admin']) then
+  if not public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 

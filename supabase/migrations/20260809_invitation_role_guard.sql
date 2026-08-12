@@ -13,7 +13,7 @@
 -- `src/lib/auth/permissions.ts` exclui `admin` de CLINICAL como controle de
 -- LGPD, com a razão escrita: "administrar a clínica não é cuidar do paciente".
 -- Mas `admin` tem `team.manage`, e a função original checava só
--- `has_clinic_role(array['owner','admin'])` antes de inserir `p_role`
+-- `has_clinic_role(variadic array['owner','admin']::membership_role[])` antes de inserir `p_role`
 -- literalmente.
 --
 -- Consequência: um `admin` emitia um convite de `owner` para um endereço que
@@ -49,6 +49,33 @@
 
 begin;
 
+-- =============================================================================
+-- A versão de 07/08 precisa SAIR, não ser substituída.
+--
+-- `create or replace` só substitui quando a assinatura é idêntica. A função de
+-- 07/08 recebe um terceiro parâmetro (`p_expires_in interval default 7 days`),
+-- então o `create` abaixo não a substituiu: criou uma SOBRECARGA ao lado dela.
+--
+-- Com as duas no banco, a chamada da aplicação — que passa `p_email` e `p_role`
+-- — casa igualmente bem com as duas, e o Postgres recusa antes de executar:
+--
+--   ERROR 42725: function public.create_invitation(...) is not unique
+--   HINT: Could not choose a best candidate function.
+--
+-- Ou seja: convidar alguém para a equipe falhava por completo. O defeito passou
+-- despercebido porque nenhuma das duas migrations chegou a ser aplicada até
+-- 12/08/2026 — o erro exige as duas versões vivas no mesmo banco.
+--
+-- A que fica é esta, de dois parâmetros: é a que a aplicação chama e a única com
+-- o guard contra escalonamento de papel. A expiração de sete dias, que era
+-- parâmetro, virou constante no corpo — nenhum caminho do produto a variava.
+-- =============================================================================
+drop function if exists public.create_invitation(
+  text,
+  public.membership_role,
+  interval
+);
+
 create or replace function public.create_invitation(
   p_email text,
   p_role public.membership_role
@@ -63,12 +90,12 @@ declare
   v_token     text;
 begin
   -- Quem convida precisa administrar a clinica.
-  if not public.has_clinic_role(array['owner', 'admin']) then
+  if not public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
 
   -- NOVO: e ninguem concede o papel que nao tem. Ver o cabecalho.
-  if p_role = 'owner' and not public.has_clinic_role(array['owner']) then
+  if p_role = 'owner' and not public.has_clinic_role(variadic array['owner']::membership_role[]) then
     raise exception 'role escalation' using errcode = '42501';
   end if;
 
@@ -93,6 +120,37 @@ begin
   return query select v_token, (now() + interval '7 days')::timestamptz;
 end;
 $$;
+
+-- =============================================================================
+-- Quem pode EXECUTAR — o `create` não herda isto da função anterior.
+--
+-- Função nova nasce com `execute` para `public`, e `anon` faz parte de `public`:
+-- sem o revoke, uma sessão não autenticada alcança uma função `security definer`.
+-- Aqui ela pararia em `current_clinic_id() is null`, mas depender do corpo para
+-- barrar quem nem devia chegar até ele inverte a ordem das defesas.
+--
+-- A migration de 07/08 fazia isto para a assinatura de três parâmetros; ao
+-- recriar com outra assinatura, a concessão ficou para trás.
+-- =============================================================================
+revoke all on function public.create_invitation(text, public.membership_role)
+  from public;
+
+/*
+ * `anon` precisa ser revogado À PARTE — e isto não é redundância.
+ *
+ * O Supabase mantém `alter default privileges` no schema `public` para `anon`,
+ * `authenticated` e `service_role`. Toda função nova nasce com `execute`
+ * concedido DIRETAMENTE a esses papéis, e um grant direto não é alcançado por
+ * `revoke ... from public`. Verificável no catálogo:
+ *
+ *   select proacl from pg_proc where proname = 'create_invitation';
+ *   -- anon=X/postgres  <- grant direto, sobrevive ao revoke de public
+ */
+revoke all on function public.create_invitation(text, public.membership_role)
+  from anon;
+
+grant execute on function public.create_invitation(text, public.membership_role)
+  to authenticated;
 
 commit;
 

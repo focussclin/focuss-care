@@ -8,15 +8,14 @@
 > (UI → action → caso de uso → repositório → teste) e persiste de verdade.
 > Tela bonita sem persistência é **PENDENTE**, não "quase pronto".
 
-**Validação atual (11/08/2026):** 2945 testes em 229 arquivos · `typecheck`,
+**Validação atual (12/08/2026):** 2970 testes em 231 arquivos · `typecheck`,
 `lint` (global) e `build` limpos.
 
-**Atualização do banco (09/08/2026):** o schema local foi consultado com
-`npm run db:types` e continua expondo 56 tabelas; as migrations de módulos
-preparados (CRM, formulários, estoque, compras, conciliação, salas, tarefas,
-documentos e cofre de integrações) não aparecem integralmente no schema remoto.
-Por isso o menu mantém essas rotas bloqueadas até a aplicação confirmada das
-migrations. A última consulta não alterou secrets nem executou DDL remoto.
+**Atualização do banco (12/08/2026):** os tipos foram regenerados com
+`npm run db:types` e agora descrevem 75 tabelas e 39 enums. A leitura foi
+somente de schema, sem DDL remoto nesta etapa. As rotas preparadas podem ser
+abertas; cada action continua recusando a escrita com `schema-not-ready` quando
+a migration correspondente não existir no projeto Supabase configurado.
 
 **Commits desta etapa:** `ee959f8` (queixa principal e vínculo clínico inicial),
 `6c536e6` (reparo de policies privadas do Storage),
@@ -685,7 +684,9 @@ serem secrets de infraestrutura, não credenciais de uma clínica.
 **Pendente externo:** aplicar `supabase/migrations/20260809_integration_credentials.sql`
 e configurar `INTEGRATION_ENCRYPTION_KEY` em cada ambiente. O cofre não marca
 provedores como conectados enquanto os adapters de envio, OAuth, webhook ou
-worker ainda não existirem.
+worker ainda não existirem. A exceção é a Evolution API: o adapter de
+pareamento por QR foi entregue em §8.60 e usa esse cofre para ler a credencial
+da clínica no servidor.
 
 Validação desta fatia: 1064 testes em 100 arquivos, lint direcionado, typecheck,
 build Next.js com 42 rotas e OpenNext Cloudflare limpos.
@@ -705,21 +706,20 @@ dele. Oito telas saíram com suas fatias; as três últimas saíram com o módul
 | `ChatIaScreen` | AI-01..07 | Que nenhum provedor está configurado, e a regra P9 declarada antes do recurso |
 | `AutomacoesScreen` | AU-01 | Regras reais de `workflows`, e que **nada as executa** |
 
-**As features continuam BLOQUEADAS** — não há worker, provedor de WhatsApp,
-provedor de IA nem executor de automação, e agora elas têm linha própria na §6
-com o motivo e o caminho de saída. O que mudou é que as telas dizem isso em vez
-de simular um canal ligado. A vitrine de automações era o caso mais grave: o
+**As features continuam parciais ou BLOQUEADAS** — a conexão por QR do
+WhatsApp foi entregue em §8.60, mas ainda não há envio de mensagens, webhook,
+worker, provedor de IA nem executor de automação. Elas têm linha própria na §6
+com o motivo e o caminho de saída. A vitrine de automações era o caso mais grave: o
 interruptor funcionava, mudava para "ativa", e não ligava nada — uma clínica
 confiaria que o lembrete de consulta estava saindo.
 
-**Tentativa de destravar W-01 pela fundação local, em 08/08/2026: descartada.**
-A avaliação está em `EXTERNAL_SETUP.md` §3.1, e o resumo é que as três peças
-candidatas (contrato do provider, porta de fila com envelope de evento, validação
-de `provider_config`) nasceriam **sem chamador**: a primeira adivinharia uma API
-externa não verificada, a segunda precisa de uma decisão de infraestrutura que
-não foi tomada, e a terceira validaria uma coluna que nenhuma linha do código lê
-ou escreve. Nenhum código foi alterado — abstração sem chamador é dívida com cara
-de progresso.
+**A tentativa de destravar W-01 pela fundação local, em 08/08/2026, foi
+descartada no escopo original.** A avaliação está em `EXTERNAL_SETUP.md` §3.1:
+contrato de provider, porta de fila e validação de `provider_config` nasceriam
+sem chamador e sem uma decisão de infraestrutura. Em 12/08/2026 a fatia mudou
+de escopo de forma concreta: a Evolution API disponível permitiu entregar o
+pareamento por QR, documentado em §8.60. Envio, webhook e worker continuam fora
+desta fatia — abstração sem chamador permanece dívida, não progresso.
 
 ---
 
@@ -751,7 +751,7 @@ projeto Supabase.
 | **P-RPC** | `issue_invoice`, `close_cash_session`, `preview_professional_payout` com assinatura não resolvida | Sem emissão fiscal numerada e sem repasse a profissional | `select proname, pg_get_function_arguments(oid) from pg_proc where …` |
 | **P-WD** | Convenção de `weekday` desconhecida (0–6 ou 1–7) em **duas** tabelas: `availability_rules` e `work_schedules` | Sem disponibilidade por profissional na agenda (A-02) **e** sem escalas de trabalho em `/equipe` (S-02) | `select conname, pg_get_constraintdef(oid) from pg_constraint where conrelid in ('public.availability_rules'::regclass, 'public.work_schedules'::regclass)` |
 | **P-02b** | Índices trigram e coluna de última visita | Filtro "Última visita" fica desabilitado, com o motivo na tela | Diagnóstico em `docs/07-cadastro-de-pacientes.md` §8.11 |
-| **W-01** | WhatsApp/Evolution + worker: bloqueado por **aprovação de `docs/04-agente-ia.md`** e por infraestrutura externa (worker, Redis, instância Evolution com credencial) | A clínica não centraliza o WhatsApp. `/whatsapp` mostra o estado do canal e diz o que falta, sem simular conexão | Aprovar o desenho e provisionar worker + Redis + instância. Detalhe em `EXTERNAL_SETUP.md` §3.1 |
+| **W-01** | **Parcial:** conexão/pareamento por QR via Evolution entregue em §8.60; envio, webhook e worker continuam bloqueados por infraestrutura externa | `/whatsapp` conecta/desconecta a instância real, acompanha o QR e reflete o número conectado; ainda não centraliza mensagens | Provisionar/configurar Evolution por clínica e depois implementar envio, webhook e worker. Detalhe em `EXTERNAL_SETUP.md` §0.2 |
 | **AI-01..07** | Agente de IA: mesma aprovação pendente, mais provedor de modelo | Nenhuma sugestão e nenhum envio. `/chat-ia` declara a regra P9 antes de existir recurso | Idem W-01, e depois dele |
 | **AU-01** | Executor de automações | `workflows` tem regras reais e **nada as executa**; a tela diz isso | Depende de W-01 |
 | **P-C2** | `cacheComponents` exige shell estático | **3 segmentos** usam `instant = false` (eram 14, depois 5, depois 4). `/login`, `/recuperar-senha` e `/redefinir-senha` prerenderizam. Os três restantes têm motivo escrito no próprio arquivo e registrado em `src/app/instantOptOuts.test.ts`: dois são portões de sessão que terminam em `redirect`, e convertê-los trocaria um 307 por navegação dependente de JavaScript; o terceiro é a casca autenticada inteira | Depende de mover o portão de sessão para fora da página — não há conversão segura enquanto a decisão de renderizar for a própria página |
@@ -4232,6 +4232,115 @@ exportação.
 
 Esta fatia não exige migration nem credencial externa: o escopo exportado é o
 mesmo escopo tenant-scoped já entregue à tela pelo servidor.
+
+---
+
+## 8.59 Plataforma — Schema aplicado, e o que só se descobre aplicando (12/08/2026)
+
+O maior gap declarado do produto era "18 migrations escritas e não aplicadas".
+Ele não era de acesso ao banco, como se supunha: **as migrations não aplicavam
+porque estavam erradas**.
+
+`has_clinic_role` é `VARIADIC` no banco. As migrations locais a chamavam com um
+array simples — `has_clinic_role(array['owner','admin']::membership_role[])` —,
+forma que não casa nenhuma assinatura, e o Postgres recusava o arquivo inteiro
+na primeira policy. As policies do schema base sempre usaram
+`VARIADIC ARRAY[...]`; as incrementais, nunca. Foram **120 chamadas em 14
+arquivos**.
+
+Corrigido isso, as 40 migrations (21 fundacionais + 19 incrementais) subiram
+inteiras. O banco passou a ter 104 tabelas, 172 policies, 37 funções e 39 enums.
+
+### Sete módulos deixaram de mentir
+
+`rooms`, `clinic_leads`, `clinic_tasks`, `inventory_*`, `purchase_*`,
+`clinic_forms` e `bank_*` existem. Os sete itens correspondentes saíram de
+`availability: 'setup'` no menu, e as sete entradas saíram de `BUILT_BUT_HIDDEN`
+em `reachableRoutes.test.ts` — a dívida fechou pelo teste que a cobrava, não por
+alguém lembrar. `/inbox` **continua** marcado: o bloqueio dele é provedor
+externo, que migration nenhuma resolve.
+
+### O convite de equipe estava quebrado, e ninguém sabia
+
+`20260807_create_invitation_rpc.sql` criou `create_invitation(text, role,
+interval)`. `20260809_invitation_role_guard.sql` recriou a função **sem** o
+terceiro parâmetro — e `create or replace` só substitui assinatura idêntica, de
+modo que a segunda virou uma SOBRECARGA ao lado da primeira. A chamada da
+aplicação casa igualmente bem com as duas:
+
+```
+ERROR 42725: function public.create_invitation(...) is not unique
+```
+
+Convidar alguém falhava por completo. O defeito exigia as duas versões vivas no
+mesmo banco — por isso só apareceu quando as migrations foram de fato aplicadas.
+A migration agora dropa a anterior, e o `revoke` de `anon` entrou junto: o
+Supabase mantém `alter default privileges` no schema `public`, então toda função
+nova nasce com `execute` **direto** para `anon` — que `revoke ... from public`
+não alcança.
+
+### Quatro configurações que nenhuma migration carrega
+
+Descobertas migrando entre projetos, cada uma com um sintoma que não sugere a
+causa:
+
+| Configuração | Sintoma quando falta |
+| --- | --- |
+| Custom Access Token Hook | Loop login → dashboard → onboarding → login, com clínica e membership já criados: o JWT sai sem `clinic_id` |
+| Provider Google | Botão existe e o provedor recusa |
+| `uri_allow_list` | `flow_state_already_used` na Site URL, com o código perdido |
+| Redirect URI no Google Cloud | `redirect_uri_mismatch`, antes de o Supabase ver a requisição |
+
+A primeira custou o diagnóstico mais longo: a função `custom_access_token_hook`
+é criada por migration, mas **chamá-la** é ajuste de projeto no painel de Auth.
+
+---
+
+## 8.60 Feature — Conexão do WhatsApp por QR code (12/08/2026)
+
+`/whatsapp` mostrava o estado do canal e declarava, honestamente, que conectar
+dependia de provedor externo. Com uma instância da Evolution API disponível
+(v2.3.7, verificada), o bloqueio deixou de existir e a tela passou a conectar de
+verdade.
+
+### O QR é credencial, e é tratado como tal
+
+Quem fotografa o código pareia o WhatsApp da clínica e passa a mandar mensagem
+em nome dela. Por isso ele **não é persistido em lugar nenhum**: nasce na
+resposta da action, vive no estado do componente e some quando o pareamento
+acontece ou quando expira, em 60 segundos. Não entra no banco e não entra em
+`audit_log` — a trilha registra `state` e `qr_presente`, nunca o código.
+
+A consulta de estado **não audita**. A tela pergunta a cada três segundos
+enquanto o código está visível; auditar cada volta afogaria o evento que
+importa.
+
+### "Desconectado" tem duas causas, e elas exigem caminhos opostos
+
+Esse foi o defeito que só o provedor real revelou. `state: 'close'` (instância
+existente, aparelho desligado) e a ausência de instância viram o mesmo
+`disconnected` no domínio — mas mandar `/instance/create` para uma instância que
+já existe é recusado, e quem clicou leria "erro" quando só queria outro código.
+Quem separa os dois é a **existência** da instância (404 no `connectionState`),
+não o estado dela.
+
+### O que não entrou, e por quê
+
+`WhatsappGateway` **não tem `sendMessage`**. Enviar mensagem é outra fatia, com
+outras regras — consentimento, janela de 24 horas, modelo aprovado. Uma porta
+que já oferecesse o método convidaria a usá-lo antes dessas regras existirem.
+
+A credencial vem do cofre por `clinic_id`, nunca de variável de ambiente: um
+endereço global faria todas as clínicas dividirem o mesmo canal, e a mensagem de
+uma sairia com o número de outra.
+
+### Estado
+
+`integrations` passa a 133 testes; o projeto, a **2970 testes em 231 arquivos**.
+Typecheck, lint, build e suíte completa limpos.
+
+**Fica pendente:** o envio de mensagens (o canal conecta, mas nada sai por ele) e
+o webhook de recebimento — sem ele, `conversations` não recebe o que chega.
 
 ---
 

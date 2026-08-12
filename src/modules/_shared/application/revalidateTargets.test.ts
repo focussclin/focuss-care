@@ -426,12 +426,20 @@ describe('nenhuma action revalida rota que não alimenta', () => {
        * não quebrar nada.
        */
       /*
-       * `integrations` grava duas coisas em telas diferentes: credencial de
-       * canal, que so `/configuracoes` mostra, e regra de automacao, que so
-       * `/automacoes` mostra. Nenhuma das duas alimenta painel ou relatorio —
-       * regra que nao executa nao produz numero para lugar nenhum.
+       * `integrations` grava tres coisas em telas diferentes: credencial de
+       * canal, que so `/configuracoes` mostra; regra de automacao, que so
+       * `/automacoes` mostra; e o CANAL de WhatsApp pareado, que `/whatsapp`
+       * le de `whatsapp_channels`.
+       *
+       * `/whatsapp` entrou em 12/08/2026, com a conexao por QR code: conectar e
+       * desconectar mudam `is_active`, `phone_number` e `connected_at`, e a tela
+       * mostra os tres. Consultar o estado NAO revalida — e leitura, e a
+       * resposta ja volta para o componente que perguntou.
+       *
+       * Nenhuma das tres alimenta painel ou relatorio — regra que nao executa
+       * nao produz numero para lugar nenhum.
        */
-      integrations: ['/configuracoes', '/automacoes'],
+      integrations: ['/configuracoes', '/automacoes', '/whatsapp'],
       tasks: ['/tarefas'],
       team: ['/equipe'],
     }

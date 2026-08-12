@@ -120,9 +120,7 @@ create policy "purchase_suppliers_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_insert" on public.purchase_suppliers;
 create policy "purchase_suppliers_insert"
@@ -130,7 +128,7 @@ create policy "purchase_suppliers_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_suppliers_update" on public.purchase_suppliers;
 create policy "purchase_suppliers_update"
@@ -138,9 +136,9 @@ create policy "purchase_suppliers_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]))
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[]));
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[]));
 
 drop policy if exists "purchase_orders_select" on public.purchase_orders;
 create policy "purchase_orders_select"
@@ -148,9 +146,7 @@ create policy "purchase_orders_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_orders_insert" on public.purchase_orders;
 create policy "purchase_orders_insert"
@@ -158,9 +154,7 @@ create policy "purchase_orders_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_orders_update" on public.purchase_orders;
 create policy "purchase_orders_update"
@@ -168,13 +162,9 @@ create policy "purchase_orders_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_select" on public.purchase_order_items;
 create policy "purchase_order_items_select"
@@ -182,9 +172,7 @@ create policy "purchase_order_items_select"
   for select
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_insert" on public.purchase_order_items;
 create policy "purchase_order_items_insert"
@@ -192,9 +180,7 @@ create policy "purchase_order_items_insert"
   for insert
   to authenticated
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 drop policy if exists "purchase_order_items_update" on public.purchase_order_items;
 create policy "purchase_order_items_update"
@@ -202,13 +188,9 @@ create policy "purchase_order_items_update"
   for update
   to authenticated
   using (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ))
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]))
   with check (clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(
-      array['owner', 'admin', 'finance']::membership_role[]
-    ));
+    and public.has_clinic_role(variadic array['owner', 'admin', 'finance']::membership_role[]));
 
 -- -----------------------------------------------------------------------------
 -- RPCs atômicas

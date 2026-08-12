@@ -46,7 +46,7 @@ create policy "clinic_integration_credentials_select"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "clinic_integration_credentials_insert" on public.clinic_integration_credentials;
@@ -56,7 +56,7 @@ create policy "clinic_integration_credentials_insert"
   to authenticated
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 drop policy if exists "clinic_integration_credentials_update" on public.clinic_integration_credentials;
@@ -66,11 +66,11 @@ create policy "clinic_integration_credentials_update"
   to authenticated
   using (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   )
   with check (
     clinic_id = public.current_clinic_id()
-    and public.has_clinic_role(array['owner', 'admin']::membership_role[])
+    and public.has_clinic_role(variadic array['owner', 'admin']::membership_role[])
   );
 
 -- Sem DELETE: substituir a credencial é uma rotação. A linha permanece para
