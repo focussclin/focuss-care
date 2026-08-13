@@ -4344,6 +4344,402 @@ o webhook de recebimento — sem ele, `conversations` não recebe o que chega.
 
 ---
 
+## 8.61 Auditoria — Os sete módulos destravados, verificados contra o banco (12/08/2026)
+
+Aplicar as migrations liberou sete telas que nunca haviam rodado contra tabela
+real. "Deveria funcionar" não é verificação, então cada camada foi conferida
+contra o banco aplicado — não contra o tipo gerado, que não enxerga nada disso.
+
+| O que foi conferido | Método | Resultado |
+| --- | --- | --- |
+| 18 RPCs chamadas pelo código | `pg_proc` × `.rpc('…')` | todas existem |
+| Nomes dos parâmetros | assinatura × objeto passado | todos batem |
+| Colunas de todo `.select()` | `information_schema.columns` | nenhuma divergência |
+| Policies das 20 tabelas novas | `pg_policy` por comando | escrita coerente |
+
+As três primeiras varreduras existem porque **string não é verificada por
+compilador nenhum**: `.rpc('nome', { p_x })` e `.select('a, b, c')` são texto, e
+uma divergência só aparece quando a tela carrega. Foi assim que o `VARIADIC` e a
+ambiguidade de `create_invitation` apareceram.
+
+Dez tabelas não têm policy de `UPDATE`, e isso está **certo**: `lead_events`,
+`inventory_movements`, `bank_reconciliations`, `patient_documents` e
+`patient_tag_links` são append-only por desenho. O que importava era outra
+pergunta — se algum adapter escreve onde não pode. Não escreve: as duas escritas
+diretas nessas tabelas são `INSERT`, e ambas têm policy de `INSERT`.
+
+`patient_portal_accounts` e `patient_portal_invites` só têm `SELECT` porque toda
+escrita passa por RPC `security definer`, que roda acima da RLS.
+
+## 8.62 Consistência — Data e dinheiro passam a ter um formato só (12/08/2026)
+
+`lib/utils/date.ts` (doze funções) e `lib/utils/money.ts` existem desde o
+começo, e cinco telas formatavam por conta própria assim mesmo:
+
+| Onde | O que aparecia | O que o resto do produto mostra |
+| --- | --- | --- |
+| Inbox, bolha da conversa | `12/08/2026, 14:30:07` | `12/08 · 14:30` |
+| CRM, próxima ação | `12/08/2026` | `12/08` |
+| Tarefas, dica do vencimento | com segundos | `12/08 às 14:30` |
+| CRM, valor do lead | `Intl` próprio, idêntico ao de `money.ts` | `formatCents` |
+| CRM, campo de valor | `12.34`, com ponto | `12,34`, como no financeiro |
+
+Nenhuma delas quebrava teste, build ou lint — é divergência que só aparece com
+duas telas lado a lado, e que se multiplica porque cada tela nova copia a
+vizinha.
+
+O campo de pagamento do financeiro **continua** formatando à mão, e está certo:
+é entrada de digitação, sem símbolo de moeda. A diferença entre os dois casos é
+o que o guard novo precisa saber distinguir.
+
+### O guard, que é o que faz a correção durar
+
+`src/lib/utils/formattingConsistency.test.ts` varre `src/modules` e recusa
+`toLocaleDateString`, `toLocaleTimeString`, `toLocale*` sobre `new Date(...)` e
+`style: 'currency'` fora de `money.ts`. Exceções exigem entrada com motivo — a
+lista nasce vazia, para que a primeira precise ser escrita por extenso em vez de
+aparecer sozinha num diff.
+
+`toLocaleString` sobre número segue permitido: não há helper central para
+contadores e o formato não varia entre telas.
+
+### Estado
+
+O projeto passa a **2973 testes em 232 arquivos**. Typecheck, lint, build e
+suíte completa limpos.
+
+---
+
+## 8.63 Feature — Atendimento por IA no WhatsApp, com OpenAI (12/08/2026)
+
+O bloqueio **AI-01** caiu: há credencial da OpenAI e uma instância da Evolution
+API. A cadeia inteira passou a existir — paciente escreve, o webhook registra, a
+IA responde o que pode, e o resto vai para gente.
+
+### O experimento que definiu o desenho
+
+Antes de escrever o adapter, a pergunta "vocês atendem sábado?" foi feita à API
+real sem nenhum dado da clínica no contexto:
+
+| Modelo | Resposta |
+| --- | --- |
+| `gpt-5.4-mini` | "Atendemos sim, com horário reduzido aos sábados." |
+| `gpt-4.1-mini` | "Sim, atendemos aos sábados das 8h às 12h." |
+
+Os dois inventaram, com confiança e sem hesitar. Numa clínica isso não é ruído
+de qualidade: é o paciente aparecendo num sábado em que ninguém trabalha. Todo o
+resto deste desenho decorre disso — o modelo **recebe os fatos** e é instruído a
+não afirmar nada fora deles.
+
+Com o prompt do domínio, a mesma pergunta virou "atendemos de segunda a sexta,
+das 8h às 18h; sobre sábado, vou confirmar com a equipe". Endereço e preço, que
+a clínica não cadastrou, viraram "vou confirmar" em vez de invenção.
+
+### Cinco freios, e a ordem entre eles
+
+1. **A conversa é registrada antes de tudo.** Se todo o resto falhar, a mensagem
+   do paciente está no inbox e uma pessoa a vê.
+2. **Filtro local**, antes do modelo: assunto clínico e urgência nem chegam à
+   OpenAI. É regra, não instrução em prompt — não depende de o modelo obedecer.
+3. **`clinic_settings.ai_enabled`**, o interruptor da clínica. Já existia no
+   schema e não estava sendo lido: uma clínica que desligasse a IA continuaria
+   tendo respostas enviadas em seu nome. Ausência de configuração conta como
+   desligado.
+4. **`conversations.is_ai_handled`**, o interruptor da conversa. O que a recepção
+   assumiu não volta para a máquina.
+5. **Só contato com paciente vinculado.** Número desconhecido vai para humano.
+
+Qualquer falha — rede, chave recusada, resposta vazia — vira **escalonamento**,
+nunca silêncio.
+
+### O filtro clínico tinha dois buracos, e o teste os achou
+
+A primeira versão terminava cada termo em `\b`:
+
+| Mensagem | O que acontecia |
+| --- | --- |
+| "a ferida está inflamada" | passava — `inflama` seguido de `d` não é fronteira de palavra |
+| "posso tomar dipirona?" | passava — a lista tinha "remédio" e "dose", não o nome comercial |
+
+O primeiro virou raiz sem `\b` final (`inflama`, `sangra`, `vomit`); o segundo
+virou padrão de **intenção** (`poss[oa] (tomar|usar…)`), porque a lista de nomes
+de medicamento nunca estaria completa. `tomar` sozinho gera falso positivo
+("tomar um café") e é um preço aceitável: escalar demais custa o tempo de ler
+uma mensagem; escalar de menos custa uma orientação sobre remédio dada por uma
+máquina em nome da clínica.
+
+### `message_direction` ganhou `internal`
+
+O motivo do escalonamento não tinha onde ficar: como `outbound` seria enviado ao
+paciente ("Assunto clínico — apenas a equipe responde"); como `inbound`, seria
+palavra posta na boca dele. Ficava só no log do servidor, onde a clínica não
+olha — e "possível urgência" chegava à fila indistinguível de "dúvida de
+horário".
+
+Agora é nota interna, renderizada no inbox centralizada e com aviso explícito de
+que **não foi enviada ao paciente**. Sem esse ramo na UI, ela cairia no `else` e
+apareceria como fala do paciente.
+
+### Estado
+
+`integrations` passa a 151 testes; o projeto, a **2997 testes em 234 arquivos**.
+Typecheck, lint, build e suíte completa limpos. Webhook publicado e verificado em
+produção: recusa sem segredo e com segredo errado (404, sem confirmar que
+existe), aceita o legítimo.
+
+**Fica pendente, com motivo:**
+
+| O quê | Por quê |
+| --- | --- |
+| `cost_usd_micros` fica zero | A API devolve tokens, não custo. Converter exige tabela de preço por modelo, que muda com o tempo; um número que não bate com a fatura é pior que nenhum. Os tokens reais ficam registrados |
+| Endereço e telefone nos fatos | `clinics` não tem as colunas e `branding` guarda identidade visual. Enquanto não existirem, a IA responde que confirma — que é verdade |
+| Recibo de entrega | O webhook só trata `messages.upsert`. `messages.update` traria `delivered`/`read` para as mensagens enviadas |
+
+---
+
+## 8.64 Feature — O interruptor da IA sai do banco e vai para a tela (12/08/2026)
+
+A fatia anterior entregou a IA respondendo paciente e leu
+`clinic_settings.ai_enabled` como trava mais externa. Faltava o óbvio: **não
+havia como ligar ou desligar sem rodar SQL**. Quem quisesse parar a IA por uma
+tarde teria de apagar a credencial da OpenAI e reconfigurar a integração para
+voltar.
+
+### O que passou a existir
+
+`setAiEnabled` na porta de configurações, action própria com auditoria, e um
+painel em `/whatsapp` — ao lado da conexão, que é onde a pessoa está quando
+pensa no assunto.
+
+O painel **diz o que a IA não faz** antes de oferecer o botão: não responde
+sintoma nem remédio, não mexe na agenda, não inventa horário, só fala com quem
+tem cadastro, e urgência vai direto para humano. Sem isso, quem liga espera um
+atendente completo e lê a primeira resposta "vou confirmar com a equipe" como
+defeito, em vez de política.
+
+**Autorizada e configurada são coisas diferentes**: sem credencial da OpenAI, o
+botão de ligar fica indisponível com a explicação, em vez de ligar um assistente
+que falharia na primeira mensagem.
+
+### Duas regras de arquitetura cobraram desvio, e as duas tinham razão
+
+`integrations/ui` importando a action de `settings` quebrou a **regra 4**. A
+correção é o padrão que o módulo já usava em `MessageTemplatesPanel`: a ROTA
+injeta a action como prop, e `integrations` segue sem saber como `settings`
+guarda as coisas.
+
+O guard `revalidateTargets` recusou `settings -> /whatsapp` até o motivo ser
+escrito: a preferência mora em configurações, mas quem a exibe é a tela do
+canal — e ligar sem revalidar deixaria o painel dizendo "Desligado" logo depois
+de a pessoa ligar.
+
+### A suíte ficou instável, e a causa não era o código
+
+`preferred-name` passa isolado em 1,6s e falhava dentro da suíte por estourar os
+5s padrão: os guards de varredura leem centenas de arquivos, e com os workers
+disputando I/O o tempo passa do teto. O `testTimeout` foi para 20s.
+
+Teste que falha por carga da máquina é pior que teste lento — ensina a equipe a
+reexecutar a suíte em vez de ler o que quebrou, e o dia em que a falha for real
+ela vai parecer mais uma dessas.
+
+### Estado
+
+O projeto passa a **2997 testes em 234 arquivos**. Typecheck, lint, build e
+suíte completa limpos.
+
+**Pendência fechada em 8.65**, logo abaixo: `/chat-ia` declarava AI-01 bloqueada,
+o que deixou de ser verdade para o atendimento no WhatsApp.
+
+---
+
+## 8.65 Regra — P9 delimitada, e a tela que a declara (12/08/2026)
+
+`/chat-ia` afirmava três coisas que a fatia anterior tornou falsas: "nenhum
+provedor de IA está configurado", "nenhuma chamada sai deste código" e "os
+números valem zero". Uma tela que nega o que a clínica vê funcionando na tela ao
+lado perde a autoridade de tudo o mais que afirma — e o que ela afirma é o
+limite da IA.
+
+### A contradição que precisava ser resolvida, não escondida
+
+P9 do roadmap dizia, sem qualificação: **IA sugere, humano assina**. O
+atendimento no WhatsApp responde paciente **sem** revisão humana. Não adianta
+chamar isso de detalhe: como escrita, a regra foi contrariada.
+
+A regra não foi abandonada — foi **delimitada**, e o limite é o assunto:
+
+| Assunto | Quem responde |
+| --- | --- |
+| Prontuário, sintoma, remédio, exame, resultado, conduta | Pessoa, sempre. P9 integral |
+| Marcar, remarcar, cancelar | Pessoa, sempre |
+| Horário, endereço, convênio — para paciente cadastrado | A IA, sozinha, sem afirmar nada fora dos fatos recebidos |
+
+A formulação que sobrevive: a IA responde sem revisão apenas o que a clínica já
+publicaria num cartaz na recepção. Tudo que exige julgamento sobre cuidado
+continua com quem responde por ele.
+
+### O que a tela passou a fazer
+
+Mostra primeiro o que EXISTE — atendimento no WhatsApp, com o estado real lido
+de `clinic_settings` e link para o controle. Depois declara o que **não** existe:
+o assistente interno, que leria dados da clínica para responder a equipe e
+continua sem desenho aprovado. E fecha com o limite, em linguagem de clínica.
+
+O rodapé dos números também mudou: eles deixaram de ser "zero por construção" e
+passaram a contar consumo real — com a ressalva de que o custo em reais não
+aparece, e por quê.
+
+### Estado
+
+**2997 testes em 234 arquivos**; typecheck, lint, build e suíte limpos.
+
+---
+
+## 8.66 Feature — Recibo de entrega do WhatsApp (12/08/2026)
+
+Toda mensagem enviada ficava `sent` para sempre. A recepção não tinha como saber
+se chegou — e, na dúvida, manda de novo, que é o comportamento que transforma
+lembrete de consulta em incômodo.
+
+O webhook passou a tratar `messages.update` além de `messages.upsert`. Os dois
+caminhos são separados logo na entrada: recibo **não** é mensagem, e tratá-lo
+como tal faria a IA responder ao próprio recibo, em laço.
+
+### A regra que a implementação ingênua erra
+
+Recibos chegam fora de ordem, e o provedor reenvia os antigos depois de
+reconectar. Aplicar cada um na chegada faria uma mensagem já lida voltar para
+"entregue" — e a recepção concluiria que o paciente não viu.
+
+Por isso o status só **avança**: `queued` < `sent` < `delivered` < `read`, com
+`failed` terminal. `PLAYED` (áudio ouvido) conta como lido; `PENDING` e
+`SERVER_ACK` não acrescentam nada, porque a mensagem já nasce `sent` no envio.
+
+A regra vive no domínio (`messageReceipt`), e não na rota: ordem de status é
+regra de negócio, e dentro de uma rota não seria testável nem reaproveitável
+quando outro provedor mandar recibo. Dez testes cobrem, incluindo os dois casos
+que só aparecem em produção — recibo atrasado e recibo repetido.
+
+### Estado
+
+O projeto passa a **3007 testes em 235 arquivos**. Typecheck, lint, build e
+suíte limpos. A instância da Evolution passou a enviar `MESSAGES_UPDATE`.
+
+---
+
+## 8.67 Feature — Linha do tempo do paciente (12/08/2026)
+
+A ficha tinha oito painéis — alergias, contatos, consentimentos, prescrições,
+prontuário, sinais vitais, tags, portal —, cada um listando o próprio recorte em
+ordem própria. Nenhum respondia a pergunta de quem abre a ficha sem saber o que
+procura: **o que aconteceu com esta pessoa, em ordem?**
+
+Isso era reconstruído de cabeça, cruzando painéis. É o trabalho que a máquina faz
+melhor — e que, feito com pressa, deixa passar a consulta de três meses atrás
+onde a queixa era a mesma.
+
+### Nenhuma tabela nova
+
+A alternativa seria uma `patient_events` alimentada por trigger: mais rápida de
+ler e uma **segunda verdade** para divergir da primeira. Lendo das seis fontes em
+paralelo, a timeline não pode discordar dos painéis, porque lê as mesmas linhas.
+
+Fonte que falha some da lista, com o motivo no log — mostrar cinco fontes é
+melhor que derrubar a ficha porque uma das seis não voltou.
+
+### A timeline é ÍNDICE, não conteúdo
+
+Não mostra o texto da evolução, o medicamento da receita nem o valor da pressão.
+Diz que aconteceu, quando e por quem; o painel correspondente guarda o resto,
+cada um com a permissão e a auditoria que já tem. Repetir o conteúdo aqui criaria
+uma segunda via fora dessas travas.
+
+### Quem vê o quê sai do PAPEL, no domínio
+
+`eventKindsFor` decide a partir das permissões: sem `record.read`, a lista vem
+sem evolução, prescrição, sinais vitais e sem a queixa do atendimento — a mesma
+regra que `toEncounterDto` aplica em `/atendimentos`. Se essa decisão vivesse na
+consulta, cada fonte nova teria de lembrar de aplicá-la, e a que esquecesse
+vazaria registro clínico.
+
+E a tela **declara a lacuna**: quem não tem acesso clínico lê "evoluções,
+prescrições e sinais vitais não aparecem nesta lista". Sem o aviso, a ausência
+passaria por "não houve nada".
+
+### Ordem estável, porque empate acontece
+
+Atendimento encerrado e evolução assinada no mesmo segundo é rotina. Sem
+desempate, a ordem entre eles mudaria a cada carregamento — e uma lista que se
+reordena sozinha faz quem lê duvidar do que viu. O desempate é por tipo, na ordem
+em que as coisas acontecem numa consulta, e por id em último caso.
+
+### Estado
+
+O projeto passa a **3015 testes em 236 arquivos**. Typecheck, lint, build e suíte
+limpos.
+
+**Correção de rumo registrada:** a busca global entrou nesta lista como pendente
+e **já existia** — o `CommandPalette` busca pacientes, agendamentos, cobranças e
+guias, cada uma sob a permissão do papel. A informação vinha do
+`FOCUS_CARE_GAP_ANALYSIS.md`, levantado em 10/08 e desatualizado desde então.
+Vale para as próximas leituras daquele documento: ele descreve o repositório
+daquele dia, não o de hoje.
+
+---
+
+## 8.68 Feature — Contato e endereço da clínica (13/08/2026)
+
+Quem apontou a falta foi a IA: perguntada onde a clínica fica, ela respondia "vou
+confirmar com a equipe" — porque **não havia onde ler**. `clinics` guardava
+identidade (nome, CNPJ, fuso) e nenhuma forma de alguém chegar até ela.
+
+Três lugares sentiam: o assistente do WhatsApp, os documentos que saem em nome da
+clínica sem dizer onde ela fica, e o convite por e-mail sem telefone para quem
+desconfia.
+
+### Telefone e e-mail são colunas; endereço é `jsonb`
+
+Telefone e e-mail são valores únicos e às vezes filtráveis — coluna resolve.
+Endereço é um agregado de sete campos que só fazem sentido juntos e cujo
+preenchimento varia (número 's/n', complemento ausente); espalhá-lo em sete
+colunas encheria `clinics` de campos quase sempre nulos.
+
+A forma do `jsonb` é **fechada em Zod com `.strict()`** e relida na leitura —
+mesmo desenho de `patients.emergency_contact`. Conteúdo irreconhecível vira
+endereço vazio, não erro: o cadastro da clínica não pode deixar de abrir porque
+alguém gravou algo estranho na coluna por outro caminho.
+
+### A frase que o assistente usa
+
+`formatClinicAddress` monta uma linha só — 'Rua das Flores, 120, sala 3 — Centro,
+São Paulo/SP, 01000-000' — e devolve `null` quando não há nada. O `null` importa
+tanto quanto a frase: é ele que faz a IA dizer que confirma com a equipe em vez
+de mandar pontuação solta. Com endereço parcial (só rua e cidade), a montagem
+ingênua produziria 'Rua das Flores,  — , São Paulo/, '; o teste cobre exatamente
+isso.
+
+### O contrato ficou tolerante à ausência
+
+Os campos entraram como obrigatórios e quebraram os testes de schema que chamavam
+o parse sem eles. O sinal estava certo: contato é opcional, e exigir a chave
+faria toda chamada anterior ao formulário falhar por um campo que a clínica nem
+precisa preencher. Ausente, vazio e nulo terminam no mesmo estado.
+
+### Estado
+
+O projeto passa a **3035 testes em 242 arquivos**. Typecheck, lint, build e suíte
+limpos. Migration aplicada nos dois projetos.
+
+**Nota de coordenação:** durante esta fatia, um teste de agenda escrito por outro
+agente (`AgendaScreen.transport.test.tsx`, ainda não commitado) quebrou a suíte
+usando `toHaveTextContent` — matcher de `@testing-library/jest-dom`, que este
+projeto não instala. O próprio autor corrigiu antes de eu tocar no arquivo. Fica
+o registro: **este projeto não tem jest-dom**; asserções de DOM usam
+`.textContent` e `toBeTruthy()`.
+
+---
+
 ## 9. Como este documento é mantido
 
 Atualizado **na mesma fatia** que muda o estado — nunca depois. Se uma linha
