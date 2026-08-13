@@ -85,6 +85,51 @@ function textOf(event: EvolutionEvent): string | null {
   return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null
 }
 
+type AdminClient = ReturnType<typeof createSupabaseAdminClient>
+
+type TenantHandle =
+  | { ok: true; admin: AdminClient; clinicId: string }
+  | { ok: false; response: NextResponse }
+
+/**
+ * Abre o tenant da instância — a trava 2, para os DOIS caminhos.
+ *
+ * O recibo passava por fora desta verificação: escrevia por `provider_message_id`
+ * apenas, com o cliente administrativo, que ignora RLS. O segredo do webhook é um
+ * só para todas as clínicas, então bastava o provedor de uma clínica mandar um
+ * `messages.update` com o id de outra para carimbar a mensagem alheia. Estado de
+ * entrega é pouco dado, mas atravessar o tenant é o invariante que este produto
+ * não abre (P3) — e a RLS não pode defender o que roda como service role.
+ *
+ * `createSupabaseAdminClient()` **lança** quando falta a chave; não devolve nulo.
+ * Sem o try, ambiente mal configurado virava 500, e 500 faz a Evolution reenviar
+ * a mensagem — exatamente a duplicação que responder 200 evita.
+ */
+async function openTenant(instance: string): Promise<TenantHandle> {
+  let admin: AdminClient
+
+  try {
+    admin = createSupabaseAdminClient()
+  } catch {
+    console.error('[webhook] cliente administrativo indisponivel')
+    return {
+      ok: false,
+      response: NextResponse.json({ ignored: 'unavailable' }, { status: 503 }),
+    }
+  }
+
+  const clinicId = await clinicOfInstance(admin, instance)
+  if (!clinicId) {
+    console.warn('[webhook] instancia desconhecida', { instance })
+    return {
+      ok: false,
+      response: NextResponse.json({ ignored: 'unknown-instance' }),
+    }
+  }
+
+  return { ok: true, admin, clinicId }
+}
+
 export async function POST(request: NextRequest) {
   const expected = process.env.WHATSAPP_WEBHOOK_SECRET?.trim()
 
@@ -111,6 +156,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ignored: 'invalid-json' })
   }
 
+  const isReceipt = event.event === 'messages.update'
+
+  if (!isReceipt && event.event !== 'messages.upsert') {
+    return NextResponse.json({ ignored: 'other-event' })
+  }
+
+  const instance = event.instance?.trim()
+  if (!instance) {
+    return NextResponse.json({ ignored: 'unsupported-message' })
+  }
+
   /*
    * Recibo de entrega — outro caminho, e por isso vem antes.
    *
@@ -118,42 +174,37 @@ export async function POST(request: NextRequest) {
    * chegou ou foi lida. Tratá-lo como mensagem faria a IA responder ao próprio
    * recibo, em laço.
    */
-  if (event.event === 'messages.update') {
-    return NextResponse.json({ outcome: await applyReceipt(event) })
+  if (isReceipt) {
+    const tenant = await openTenant(instance)
+    if (!tenant.ok) return tenant.response
+
+    return NextResponse.json({
+      outcome: await applyReceipt(tenant.admin, tenant.clinicId, event),
+    })
   }
 
-  if (event.event !== 'messages.upsert') {
-    return NextResponse.json({ ignored: 'other-event' })
-  }
-
-  // Mensagem que a própria clínica enviou volta no webhook. Responder a ela
-  // seria a IA conversando consigo mesma, em laço.
+  /*
+   * As recusas baratas vêm antes de abrir o tenant: `openTenant` lê e decifra
+   * uma credencial por clínica, e o eco da própria mensagem enviada é boa parte
+   * do tráfego do webhook. Responder a ela seria a IA conversando consigo mesma,
+   * em laço.
+   */
   if (event.data?.key?.fromMe) {
     return NextResponse.json({ ignored: 'own-message' })
   }
 
-  const instance = event.instance?.trim()
   const phone = phoneFromJid(event.data?.key?.remoteJid)
   const text = textOf(event)
 
-  if (!instance || !phone || !text) {
+  if (!phone || !text) {
     return NextResponse.json({ ignored: 'unsupported-message' })
   }
 
-  const admin = createSupabaseAdminClient()
-  if (!admin) {
-    console.error('[webhook] cliente administrativo indisponivel')
-    return NextResponse.json({ ignored: 'unavailable' }, { status: 503 })
-  }
+  const tenant = await openTenant(instance)
+  if (!tenant.ok) return tenant.response
 
-  const clinicId = await clinicOfInstance(admin, instance)
-  if (!clinicId) {
-    console.warn('[webhook] instancia desconhecida', { instance })
-    return NextResponse.json({ ignored: 'unknown-instance' })
-  }
-
-  const outcome = await handleIncomingWhatsapp(admin, {
-    clinicId,
+  const outcome = await handleIncomingWhatsapp(tenant.admin, {
+    clinicId: tenant.clinicId,
     instanceName: instance,
     fromPhone: phone,
     contactName: event.data?.pushName ?? null,
@@ -171,21 +222,36 @@ export async function POST(request: NextRequest) {
  * ordem de status é regra de negócio, e dentro de uma rota ela não seria
  * testável nem reaproveitável pelo dia em que outro provedor mandar recibo.
  */
-async function applyReceipt(event: EvolutionEvent): Promise<string> {
+async function applyReceipt(
+  admin: AdminClient,
+  clinicId: string,
+  event: EvolutionEvent,
+): Promise<string> {
   const providerMessageId =
     event.data?.keyId ?? event.data?.messageId ?? event.data?.key?.id
   const status = receiptStatusOf(event.data?.status)
 
   if (!providerMessageId || !status) return 'receipt-ignored'
 
-  const admin = createSupabaseAdminClient()
-  if (!admin) return 'unavailable'
-
-  const { data: message } = await admin
+  /*
+   * `clinic_id` nas DUAS consultas, e não só na leitura: quem escreve aqui é o
+   * service role, para quem a RLS não vale. O id do provedor é único por
+   * instância, não globalmente — sem o recorte, o recibo de uma clínica
+   * alcançaria a linha de outra.
+   */
+  const { data: message, error: readError } = await admin
     .from('messages')
     .select('id, status')
+    .eq('clinic_id', clinicId)
     .eq('provider_message_id', providerMessageId)
     .maybeSingle()
+
+  if (readError) {
+    console.error('[webhook] recibo nao localizado', {
+      code: readError.code ?? null,
+    })
+    return 'receipt-failed'
+  }
 
   // Recibo de mensagem que não é nossa (ou anterior à integração): nada a fazer.
   if (!message) return 'receipt-unknown-message'
@@ -200,6 +266,7 @@ async function applyReceipt(event: EvolutionEvent): Promise<string> {
         ? { delivered_at: new Date().toISOString() }
         : { read_at: new Date().toISOString() }),
     })
+    .eq('clinic_id', clinicId)
     .eq('id', message.id)
 
   if (error) {
@@ -220,11 +287,9 @@ async function applyReceipt(event: EvolutionEvent): Promise<string> {
  * segredo — a chave é).
  */
 async function clinicOfInstance(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
+  admin: AdminClient,
   instance: string,
 ): Promise<string | null> {
-  if (!admin) return null
-
   const { data, error } = await admin
     .from('clinic_integration_credentials')
     .select('clinic_id, encrypted_payload')
