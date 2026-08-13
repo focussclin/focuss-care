@@ -7,6 +7,7 @@ import {
   isValidTotpCode,
   normalizeTotpCode,
   pendingFactors,
+  requiresSecondFactor,
   type EnrolledFactor,
 } from '@/lib/security/mfa'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
@@ -50,6 +51,50 @@ export interface MfaActionResult {
 }
 
 /**
+ * Esta sessão pode MEXER nos fatores da conta?
+ *
+ * # A escalada que isto fecha
+ *
+ * Quem tem a senha entra em `aal1`. O desvio de `app/(app)/layout.tsx` o barra
+ * na navegação, mas Server Action é endpoint POST próprio: `enroll` seguido de
+ * `verify` era alcançável por chamada direta. Cadastrar um aparelho **novo** e
+ * confirmá-lo com o código do próprio atacante levaria a sessão a `aal2` sem
+ * nunca tocar o fator da vítima — a senha roubada compraria o acesso inteiro, e
+ * o segundo fator não teria servido para nada.
+ *
+ * O provedor provavelmente já recusa parte disso, e a documentação do
+ * `unenroll` afirma que sim. Esta guarda não depende dessa afirmação: ela é
+ * barata, e "o outro lado cuida" é a premissa que transforma uma mudança de
+ * versão do provedor em brecha silenciosa.
+ *
+ * # Por que `requiresSecondFactor` responde sozinho
+ *
+ * `nextLevel === 'aal2'` só acontece quando há fator VERIFICADO na conta, e
+ * `currentLevel === 'aal1'` quando esta sessão não o apresentou. O primeiro
+ * cadastro da vida — nenhum fator verificado — devolve `nextLevel: 'aal1'` e
+ * passa direto, que é o comportamento necessário: exigir código de quem ainda
+ * não tem aparelho trancaria todo mundo para fora do recurso.
+ */
+async function blockedFromChangingFactors(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
+): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    return requiresSecondFactor(data ?? { currentLevel: null, nextLevel: null })
+  } catch (cause) {
+    /*
+     * Falha de leitura NÃO bloqueia — mesma política do resto do produto: nível
+     * indisponível não pode trancar a pessoa para fora da própria conta. O que
+     * protege o caso perigoso continua sendo o provedor.
+     */
+    console.error('[mfa] nivel de garantia indisponivel', {
+      kind: cause instanceof Error ? cause.name : typeof cause,
+    })
+    return false
+  }
+}
+
+/**
  * Começa o cadastro de um fator TOTP.
  *
  * Devolve QR e segredo **uma única vez**: nada disso é guardado por este código,
@@ -61,6 +106,10 @@ export async function enrollTotpAction(
 ): Promise<EnrollResult> {
   const supabase = await createSupabaseServerClient()
   if (!supabase) return { ok: false, error: mfaMessages.unavailable }
+
+  if (await blockedFromChangingFactors(supabase)) {
+    return { ok: false, error: mfaMessages.stepUpRequired }
+  }
 
   const name = friendlyName.trim().slice(0, 60)
   if (name.length < 2) return { ok: false, error: mfaMessages.nameRequired }
@@ -134,6 +183,21 @@ export async function unenrollFactorAction(
 ): Promise<MfaActionResult> {
   const supabase = await createSupabaseServerClient()
   if (!supabase) return { ok: false, error: mfaMessages.unavailable }
+
+  /*
+   * A guarda NÃO vai em `verifyTotpAction`, e a diferença é o ponto.
+   *
+   * Verificar é o que a tela `/verificacao` faz, e ali a sessão está
+   * legitimamente em `aal1` — é o estado que ela existe para resolver. Bloquear
+   * lá trancaria todo mundo para fora. O que fecha a escalada é o `enroll`: sem
+   * fator novo, não há o que confirmar, e confirmar o fator da vítima exige o
+   * aparelho dela.
+   *
+   * Remover, por outro lado, é a jogada direta de quem só tem a senha.
+   */
+  if (await blockedFromChangingFactors(supabase)) {
+    return { ok: false, error: mfaMessages.stepUpRequired }
+  }
 
   const { error } = await supabase.auth.mfa.unenroll({ factorId })
 

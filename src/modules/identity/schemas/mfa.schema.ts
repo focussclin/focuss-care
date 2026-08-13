@@ -27,6 +27,15 @@ export const mfaMessages = {
     'Não foi possível iniciar o cadastro do segundo fator. Se o problema continuar, confira se a verificação em duas etapas está habilitada no projeto.',
   unenrollFailed:
     'Não foi possível remover este aparelho. Verifique se a sessão atual já passou pela verificação em duas etapas.',
+  /**
+   * Mexer nos fatores exige ter apresentado um fator.
+   *
+   * A conta já tem segundo fator e esta sessão não o apresentou. É o estado de
+   * quem entrou só com a senha — e é justamente quem não pode cadastrar um
+   * aparelho novo nem remover o que existe.
+   */
+  stepUpRequired:
+    'Confirme o código do aplicativo autenticador antes de alterar os aparelhos desta conta.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   /** Exibido quando a listagem falha — a tela não finge "sem fator". */
   listUnavailable:
