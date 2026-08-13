@@ -3,6 +3,10 @@
 > Levantado contra o código em **10/08/2026**, branch `feat/telas-e-camada-supabase`,
 > a partir do commit `c461cab`. Método na §0. Nenhuma linha foi escrita para
 > produzir este documento — é leitura do repositório e do schema tipado.
+>
+> **§5 revisada em 13/08/2026.** O resto do documento continua descrevendo o
+> commit `c461cab`; os módulos e bloqueios não mudaram, mas a lista de defeitos
+> mudou muito — leia a §5 antes de agir sobre qualquer coisa aqui.
 
 ## 0. Como cada linha foi classificada
 
@@ -158,15 +162,39 @@ O que existe de verdade e merece atenção:
 
 ## 5. PRECISA CORREÇÃO — defeitos reais identificados
 
+> **Revisado em 13/08/2026.** A lista original foi levantada no commit `c461cab`
+> e envelheceu: cinco dos sete itens já estavam resolvidos por commits
+> posteriores, e um nunca foi defeito. Cada linha abaixo foi reconferida contra
+> o código, não contra a versão anterior deste documento.
+
+| # | Defeito | Estado | Evidência |
+| --- | --- | --- | --- |
+| C1 | `listProfessionals` filtra `is_active` mas não `deleted_at` | **CORRIGIDO** (13/08) | `.is('deleted_at', null)` + 3 testes em `SupabaseAppointmentRepository.test.ts` |
+| C2 | `agendaColor` preenchido pela action e ignorado pelo adapter | **NÃO É DEFEITO** | Decisão registrada em `professional.schema.ts`, com teste que exige `agenda_color` ausente do insert. Campo morto **por escrito** — a tela explica que a agenda colore por status |
+| C3 | `checked_in` / `in_progress` inalcançáveis | **CORRIGIDO** | `lib/scheduling/appointment-progress.ts` liga fila e agenda por `markProgress` |
+| C4 | Sem rate limiting | **PARCIAL** | `lib/security/login-throttle.ts` cobre login. Busca e demais rotas seguem sem — o caminho é regra no edge da Cloudflare |
+| C5 | Sem 2FA | **CORRIGIDO** | TOTP por Supabase Auth: `lib/security/mfa.ts`, `/verificacao`, portão no layout **e no `createAction`** (13/08) |
+| C6 | Policies de **escrita** nunca verificadas | **ABERTO — bloqueio humano** | 13 tabelas. Exige acesso ao projeto Supabase; nenhuma linha de TypeScript resolve |
+| C7 | `revalidateTargets` cego a caminhos vindos de função | **CORRIGIDO** | `ROUTE_HELPERS` + teste regressivo em `revalidateTargets.test.ts` |
+
+### 5.1 Defeitos encontrados em 13/08/2026 — todos corrigidos
+
+Levantados por revisão do código mais recente (webhook, IA e pipeline), que a
+varredura original não alcançava porque ainda não existia.
+
 | # | Defeito | Onde | Impacto |
 | --- | --- | --- | --- |
-| C1 | `listProfessionals` filtra `is_active` mas **não** `deleted_at` | `SupabaseAppointmentRepository.ts` | Profissional removido fora do produto reaparece na agenda |
-| C2 | `NewProfessionalData.agendaColor` é preenchido pela action e **ignorado** pelo adapter | `team/` | Campo morto; engana quem mexer depois |
-| C3 | `checked_in` / `in_progress` inalcançáveis | `scheduling` × `encounters` | Agenda e fila discordam do mesmo paciente |
-| C4 | Sem rate limiting em nenhuma rota | global | Login e busca expostos a força bruta |
-| C5 | Sem 2FA | `identity` | Requisito para dado de saúde |
-| C6 | Policies de **escrita** nunca verificadas | 13 tabelas | Escrita pode falhar em silêncio; o código já trata (`write-forbidden`) mas o estado real é desconhecido |
-| C7 | `revalidateTargets` não enxerga caminhos vindos de função | guard | Já contornado, mas o guard segue cego para esse formato |
+| D1 | Segundo fator exigido só na NAVEGAÇÃO | `createAction.ts` | Server Action é endpoint POST próprio: sessão `aal1` alcançava as 118 actions por chamada direta. O 2FA ficava anulado contra senha vazada — a ameaça que ele existe para deter |
+| D2 | `enroll`/`unenroll` de fator sem exigir fator apresentado | `mfa.action.ts` | Com a senha, cadastrar o próprio TOTP e confirmá-lo subia a sessão para `aal2` sem tocar o fator da vítima |
+| D3 | Recibo do WhatsApp escrevia sem recorte de clínica | `api/webhooks/whatsapp/route.ts` | Cliente administrativo ignora RLS; o segredo do webhook é um só para todas as clínicas. O provedor de uma alcançava a mensagem de outra |
+| D4 | `createSupabaseAdminClient()` **lança**, e o guarda `if (!admin)` era código morto | idem | Deploy sem chave respondia 500, e 500 faz a Evolution reenviar — a duplicação de mensagem que responder 200 existe para evitar |
+| D5 | Erro de `maybeSingle` ignorado no recibo | idem | Filtro que casasse duas linhas viraria "mensagem não é nossa", e o recibo sumiria em silêncio |
+| D6 | `unread_count` gravado como `1` fixo | `whatsapp-inbound.ts` | A caixa desenha o contador como número com "9+": sete mensagens apareciam como uma, e o "9+" era inalcançável |
+
+**Cobertura criada junto:** as três superfícies mais sensíveis do produto — o
+único endpoint público, o módulo em que uma máquina fala com paciente, e o
+pipeline por onde passam as 118 actions — não tinham teste nenhum. Agora somam
+73 (3035 → 3108).
 
 ## 6. NÃO EXISTE — e é o gap estratégico
 
@@ -214,7 +242,7 @@ Lista deliberada, para impedir reescrita:
 | PARCIAL | 8 módulos |
 | MOCK (migration pendente) | 7 módulos |
 | NÃO EXISTE (declarado na tela) | 3 módulos |
-| PRECISA CORREÇÃO | 7 defeitos |
+| PRECISA CORREÇÃO | **1 defeito** (C6, bloqueio humano) — 12 corrigidos, 1 nunca foi defeito |
 
 **A conclusão que importa:** o produto não sofre de falta de telas. Sofre de
 **18 migrations não aplicadas** e de **quatro bloqueios externos** (P-RPC, P-WD,
