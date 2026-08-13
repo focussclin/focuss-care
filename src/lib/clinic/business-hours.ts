@@ -271,3 +271,79 @@ export function describeOutsideHours(verdict: OutsideHoursVerdict): string {
 
   return `${label}: a clínica atende das ${verdict.day.opensAt} às ${verdict.day.closesAt}.`
 }
+
+/** Nomes curtos, para frases que listam vários dias seguidos. */
+const shortWeekdayLabels: Record<Weekday, string> = {
+  1: 'segunda',
+  2: 'terça',
+  3: 'quarta',
+  4: 'quinta',
+  5: 'sexta',
+  6: 'sábado',
+  7: 'domingo',
+}
+
+/**
+ * O expediente inteiro em UMA frase.
+ *
+ * # Para que isto existe
+ *
+ * O assistente de WhatsApp precisa afirmar o horário sem inventá-lo. Testado
+ * contra a API real, um modelo sem esse dado responde "atendemos das 8h às 12h"
+ * com toda a confiança — e o paciente aparece num sábado em que a clínica está
+ * fechada.
+ *
+ * Dias seguidos com o MESMO horário viram faixa ('segunda a sexta'), porque a
+ * alternativa — sete linhas — ocupa o contexto do modelo com repetição e sai
+ * pior quando ele resume por conta própria.
+ *
+ * Devolve `null` quando a clínica não atende em nenhum dia: melhor a IA dizer
+ * que confirma com a equipe do que anunciar que está sempre fechada.
+ */
+export function describeBusinessHours(hours: BusinessHours): string | null {
+  const abertos = WEEKDAYS.map((weekday) =>
+    hours.find((day) => day.weekday === weekday),
+  ).filter((day): day is BusinessDay => !!day && !day.closed)
+
+  if (abertos.length === 0) return null
+
+  const faixas: { inicio: Weekday; fim: Weekday; opensAt: string; closesAt: string }[] =
+    []
+
+  for (const day of abertos) {
+    const ultima = faixas.at(-1)
+
+    // Continua a faixa só se for o dia seguinte E o mesmo horário: um pulo no
+    // meio da semana (fecha na quarta) precisa virar duas faixas, senão a frase
+    // afirma um dia de atendimento que não existe.
+    if (
+      ultima &&
+      ultima.fim === day.weekday - 1 &&
+      ultima.opensAt === day.opensAt &&
+      ultima.closesAt === day.closesAt
+    ) {
+      ultima.fim = day.weekday
+      continue
+    }
+
+    faixas.push({
+      inicio: day.weekday,
+      fim: day.weekday,
+      opensAt: day.opensAt,
+      closesAt: day.closesAt,
+    })
+  }
+
+  return faixas
+    .map((faixa) => {
+      const periodo =
+        faixa.inicio === faixa.fim
+          ? shortWeekdayLabels[faixa.inicio]
+          : faixa.fim === faixa.inicio + 1
+            ? `${shortWeekdayLabels[faixa.inicio]} e ${shortWeekdayLabels[faixa.fim]}`
+            : `${shortWeekdayLabels[faixa.inicio]} a ${shortWeekdayLabels[faixa.fim]}`
+
+      return `${periodo}, das ${faixa.opensAt} às ${faixa.closesAt}`
+    })
+    .join('; ')
+}

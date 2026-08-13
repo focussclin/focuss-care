@@ -19,6 +19,7 @@ import { SelectField } from '@/components/ui/select-field'
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { TextField } from '@/components/ui/text-field'
 import { cn } from '@/lib/utils/cn'
+import { formatShortDate, formatTime } from '@/lib/utils/date'
 
 import type { ConversationStatus } from '@/lib/supabase/database.types'
 
@@ -313,12 +314,49 @@ function ConversationDetail({
 
 function MessageBubble({ message }: { message: InboxMessageDto }) {
   const outbound = message.direction === 'outbound'
+
+  /*
+    NOTA INTERNA — não é fala de ninguém, e por isso não é bolha.
+
+    `internal` entrou no enum para o assistente registrar por que calou
+    ("Possível urgência", "Assunto clínico"). Sem este ramo, a nota caía no
+    `else` e aparecia à esquerda, no lugar da mensagem do paciente — como se ele
+    tivesse escrito "Assunto clínico — apenas a equipe responde".
+
+    Centralizada, discreta e com aviso explícito: quem lê precisa saber, em um
+    olhar, que aquilo NÃO foi enviado ao paciente.
+  */
+  if (message.direction === 'internal') {
+    return (
+      <div className="flex justify-center">
+        <p className="max-w-[min(90%,36rem)] rounded-card border border-dashed border-border-card bg-background px-3.5 py-2 text-center text-label text-muted">
+          <span className="font-semibold">Nota interna</span> · não enviada ao
+          paciente
+          <br />
+          {message.body}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className={cn('flex', outbound ? 'justify-end' : 'justify-start')}>
       <div className={cn('max-w-[min(90%,36rem)] rounded-card px-4 py-3 text-aux shadow-card', outbound ? 'bg-brand text-brand-foreground' : 'border border-border-card bg-surface text-foreground')}>
         {message.isFromAi ? <p className="mb-1 text-label font-semibold opacity-80">Resposta da IA</p> : null}
         {message.body ? <p className="whitespace-pre-wrap">{message.body}</p> : <p className="italic opacity-70">{message.contentType === 'image' ? 'Imagem' : 'Anexo'}</p>}
-        <p className="mt-1 text-right text-[11px] opacity-70">{new Date(message.sentAt ?? message.createdAt).toLocaleString('pt-BR')}</p>
+        {/*
+          Hora da mensagem, no formato do resto do produto.
+
+          `toLocaleString` trazia segundos ("12/08/2026, 14:30:07") dentro de uma
+          bolha de conversa — precisão que ninguém usa e que rouba a linha do
+          texto que importa.
+        */}
+        <p className="mt-1 text-right text-[11px] opacity-70">
+          {(() => {
+            const sentAt = new Date(message.sentAt ?? message.createdAt)
+            return `${formatShortDate(sentAt)} · ${formatTime(sentAt)}`
+          })()}
+        </p>
       </div>
     </div>
   )

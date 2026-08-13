@@ -43,18 +43,35 @@ export interface WhatsappConnection {
   phoneNumber: string | null
 }
 
+/** O que o provedor devolve quando aceita uma mensagem para envio. */
+export interface WhatsappSendResult {
+  /** Id da mensagem no provedor, para casar o recibo de entrega depois. */
+  providerMessageId: string | null
+}
+
 /**
  * PORTA do provedor de WhatsApp.
  *
  * Existe para que a Evolution API seja um detalhe substituível: `zapi` e
  * `cloud_api` já estão no enum `channel_provider` do banco, e nenhum deles deve
  * exigir mudança em action ou tela.
- *
- * **Não há `sendMessage`.** Enviar mensagem é outra fatia, com outras regras
- * (consentimento, janela de 24h, modelo aprovado). Uma porta que já oferecesse
- * o método convidaria a usá-lo antes dessas regras existirem.
  */
 export interface WhatsappGateway {
+  /**
+   * Envia texto para um número.
+   *
+   * # Esta porta NÃO decide se a mensagem pode ser enviada
+   *
+   * Ela transporta. Quem decide é a camada acima: se há conversa aberta, se o
+   * paciente não pediu para parar, se o horário permite. Misturar as duas
+   * responsabilidades faria a regra viajar junto com o adapter, e trocar de
+   * provedor passaria a exigir reescrever a política de contato.
+   */
+  sendText(
+    instanceName: string,
+    phone: string,
+    text: string,
+  ): Promise<WhatsappSendResult>
   /**
    * Garante a instância no provedor e devolve o QR quando houver.
    *

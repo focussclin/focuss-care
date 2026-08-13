@@ -1,0 +1,35 @@
+-- =============================================================================
+-- Nota interna na conversa: `message_direction` ganha 'internal'
+--
+-- # O problema
+--
+-- `message_direction` tinha dois valores: 'inbound' e 'outbound'. Quando a IA
+-- do WhatsApp decide calar — assunto clínico, urgência, falha técnica —, o
+-- motivo não tinha onde ficar:
+--
+--   * como 'outbound', o texto seria ENVIADO ao paciente, que leria
+--     "Assunto clínico — apenas a equipe responde" como resposta da clínica;
+--   * como 'inbound', seria palavra posta na boca do paciente.
+--
+-- O motivo acabava só no log do servidor, onde a recepção não olha. Ela via a
+-- conversa pendente sem saber por quê — e o "por quê" é o que faz priorizar
+-- uma possível urgência à frente de uma dúvida de horário.
+--
+-- # Por que ADD VALUE e não uma coluna nova
+--
+-- Nota interna é mensagem: tem autor, horário e lugar na linha do tempo da
+-- conversa. Uma coluna `escalation_reason` em `conversations` guardaria só a
+-- última, e perderia a ordem em relação ao que o paciente escreveu.
+--
+-- `add value if not exists` é idempotente e roda em transação no PG 12+, desde
+-- que o valor não seja USADO na mesma transação — por isso esta migration só
+-- declara. O primeiro uso vem do código, depois.
+--
+-- Verificar depois de aplicar:
+--
+--   select enumlabel from pg_enum
+--     join pg_type on pg_type.oid = pg_enum.enumtypid
+--    where typname = 'message_direction' order by enumsortorder;
+-- =============================================================================
+
+alter type public.message_direction add value if not exists 'internal';

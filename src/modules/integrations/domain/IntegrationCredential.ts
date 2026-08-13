@@ -27,9 +27,26 @@ export const INTEGRATION_CREDENTIAL_DEFINITIONS = [
     ],
   },
   {
+    provider: 'openai',
+    label: 'OpenAI',
+    description:
+      'Provedor de IA do atendimento automático no WhatsApp e dos recursos que forem habilitados.',
+    fields: [
+      { name: 'apiKey', label: 'API key', type: 'password', required: true },
+      /*
+       * O modelo é da CLÍNICA, não do código.
+       *
+       * Fixá-lo numa constante obrigaria um deploy a cada troca — e a escolha
+       * entre um modelo mais barato e um mais capaz é decisão de quem paga a
+       * conta. Vazio cai no padrão da aplicação.
+       */
+      { name: 'model', label: 'Modelo (opcional)', type: 'text', required: false },
+    ],
+  },
+  {
     provider: 'deepseek',
     label: 'DeepSeek',
-    description: 'Provedor de IA para recursos que forem habilitados.',
+    description: 'Provedor de IA alternativo, para clínicas que já o usem.',
     fields: [
       { name: 'apiKey', label: 'API key', type: 'password', required: true },
       { name: 'baseUrl', label: 'URL base (opcional)', type: 'url', required: false },

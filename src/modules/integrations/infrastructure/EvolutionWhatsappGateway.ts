@@ -5,6 +5,7 @@ import {
   type WhatsappConnection,
   type WhatsappConnectionState,
   type WhatsappGateway,
+  type WhatsappSendResult,
 } from '../domain/WhatsappConnection'
 
 /**
@@ -159,6 +160,39 @@ export class EvolutionWhatsappGateway implements WhatsappGateway {
       phoneNumber:
         connection === 'connected' ? await this.ownerNumber(instanceName) : null,
     }
+  }
+
+  /**
+   * Envia texto pela instância da clínica.
+   *
+   * `number` vai só com dígitos: a Evolution aceita JID completo, mas montá-lo
+   * aqui exigiria adivinhar o domínio (`@s.whatsapp.net` para pessoa,
+   * `@g.us` para grupo) — e errar isso manda a mensagem para o lugar errado.
+   * Com dígitos, o provedor resolve.
+   */
+  async sendText(
+    instanceName: string,
+    phone: string,
+    text: string,
+  ): Promise<WhatsappSendResult> {
+    const digits = phone.replace(/\D/g, '')
+
+    if (digits.length < 8) {
+      throw new WhatsappGatewayError(
+        'unexpected',
+        'numero de destino invalido para envio',
+      )
+    }
+
+    const sent = await this.request(
+      'POST',
+      `/message/sendText/${encodeURIComponent(instanceName)}`,
+      { number: digits, text },
+    )
+
+    const id = pick(sent, 'key', 'id')
+
+    return { providerMessageId: typeof id === 'string' ? id : null }
   }
 
   async disconnect(instanceName: string): Promise<void> {
