@@ -272,11 +272,21 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
     return (data as unknown as AppointmentJoinRow[]).map(toAppointment)
   }
 
+  /**
+   * `deleted_at is null` além de `is_active`: são exclusões diferentes.
+   *
+   * Desativar tira da operação e é reversível pela tela de equipe; apagar
+   * logicamente é remoção, feita por fora do produto (a aplicação não tem
+   * método para isso). Sem esta linha, quem foi removido do banco voltava a
+   * aparecer no seletor da agenda, da fila e das configurações — as três telas
+   * que chamam este método. `team` e `subscription` já filtravam as duas.
+   */
   async listProfessionals(clinicId: string): Promise<Professional[]> {
     const { data, error } = await this.client
       .from('professionals')
       .select('id, display_name, specialties')
       .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
       .eq('is_active', true)
       .order('display_name', { ascending: true })
 

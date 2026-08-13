@@ -61,6 +61,8 @@ function createFakeClient(results: {
   searchRows?: unknown[]
   /** Linhas devolvidas pelas consultas de INTERVALO (`gte` + `lt`). */
   rangeRows?: unknown[]
+  /** Linhas devolvidas pelo seletor de profissionais da agenda. */
+  professionals?: unknown[]
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
@@ -89,6 +91,7 @@ function createFakeClient(results: {
       'limit',
       'ilike',
       'in',
+      'is',
       'order',
       'update',
       'insert',
@@ -178,6 +181,8 @@ function createFakeClient(results: {
           ? { data: results.searchPatients ?? [], error: null }
           : table === 'appointments' && calls.some((call) => call.method === 'in')
             ? { data: results.searchRows ?? [], error: null }
+        : table === 'professionals'
+          ? { data: results.professionals ?? [], error: null }
         : isHistory
           ? { data: null, error: null }
           : { data: [], error: null }
@@ -764,5 +769,69 @@ describe('listByProfessionalRange', () => {
     ).listByProfessionalRange(CLINIC, PROFESSIONAL, FROM, TO)
 
     expect(rows).toEqual([])
+  })
+})
+
+/**
+ * Seletor de profissionais (C1).
+ *
+ * Alimenta agenda, fila de atendimento e configurações. `is_active` sozinho não
+ * bastava: quem foi apagado logicamente por fora do produto continuava
+ * selecionável, e marcar consulta com ele criaria atendimento órfão.
+ */
+describe('listProfessionals', () => {
+  it('exclui profissional apagado logicamente, além do inativo', async () => {
+    const fake = createFakeClient({ professionals: [] })
+
+    await new SupabaseAppointmentRepository(fake.client).listProfessionals(CLINIC)
+
+    const chamadas = fake.ofTable('professionals')
+
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'is', args: ['deleted_at', null] }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['is_active', true] }),
+    )
+  })
+
+  it('recorta pela clínica no banco, e não na memória', async () => {
+    const fake = createFakeClient({ professionals: [] })
+
+    await new SupabaseAppointmentRepository(fake.client).listProfessionals(CLINIC)
+
+    expect(fake.ofTable('professionals')).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+  })
+
+  it('mostra a primeira especialidade e tolera cadastro sem nenhuma', async () => {
+    const fake = createFakeClient({
+      professionals: [
+        {
+          id: PROFESSIONAL,
+          display_name: 'Dra. Helena',
+          specialties: ['Cardiologia', 'Clínica geral'],
+        },
+        {
+          id: '33333333-3333-4333-8333-333333333333',
+          display_name: 'Dr. Nuno',
+          specialties: [],
+        },
+      ],
+    })
+
+    const rows = await new SupabaseAppointmentRepository(
+      fake.client,
+    ).listProfessionals(CLINIC)
+
+    expect(rows).toEqual([
+      { id: PROFESSIONAL, name: 'Dra. Helena', specialty: 'Cardiologia' },
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        name: 'Dr. Nuno',
+        specialty: '',
+      },
+    ])
   })
 })
