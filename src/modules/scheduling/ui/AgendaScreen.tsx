@@ -363,6 +363,10 @@ export function AgendaScreen({
       )
       closeDetails()
       router.refresh()
+    } catch {
+      // Falha de transporte não é cancelamento. O modal permanece aberto para
+      // que a recepção possa tentar novamente sem perder a confirmação.
+      setCancelError(scheduleMessages.unexpectedCancel)
     } finally {
       setCanceling(false)
     }
@@ -391,6 +395,7 @@ export function AgendaScreen({
     appointment: Appointment,
     call: () => Promise<{ ok: boolean; data?: AppointmentDto; message?: string }>,
     demoStatus: Appointment['status'],
+    transportMessage: string,
   ) {
     if (!isLive) {
       setAppointments((current) =>
@@ -424,6 +429,11 @@ export function AgendaScreen({
       // O modal continua aberto: o selo de status precisa refletir o novo estado.
       setSelected(updated)
       router.refresh()
+    } catch {
+      // A action pode falhar antes de devolver um Result (queda de rede, por
+      // exemplo). Traduzir aqui mantém a transição visível como pendente, em vez
+      // de deixar uma rejeição sem feedback e um botão que parece não responder.
+      setLifecycleError(transportMessage)
     } finally {
       setUpdatingLifecycle(false)
     }
@@ -441,6 +451,7 @@ export function AgendaScreen({
           : { ok: false, message: result.error.message }
       },
       'confirmed',
+      scheduleMessages.unexpectedConfirm,
     )
   }
 
@@ -460,6 +471,7 @@ export function AgendaScreen({
           : { ok: false, message: result.error.message }
       },
       outcome,
+      scheduleMessages.unexpectedOutcome,
     )
   }
 
