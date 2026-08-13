@@ -9,6 +9,7 @@ import type { ZodType } from 'zod'
 
 import { recordAuditEvent, type AuditEvent } from '@/lib/audit/audit-log'
 import { canWrite, writeBlockedMessage } from '@/lib/clinic/clinic-status'
+import { requiresSecondFactor, type AssuranceState } from '@/lib/security/mfa'
 import { getSessionState } from '@/lib/auth/session'
 import type { CacheTag } from '@/lib/cache/tags'
 import { describeCause } from '@/lib/observability/describe-cause'
@@ -20,8 +21,8 @@ import { err, type ActionResult, type AppErrorCode } from '../domain/Result'
 /**
  * O pipeline unico de mutacao (P5 de docs/roadmap.md):
  *
- *   autenticar -> clinica ativa -> autorizar papel -> validar Zod
- *              -> use case -> revalidar -> auditar
+ *   autenticar -> clinica ativa -> segundo fator -> autorizar papel
+ *              -> validar Zod -> use case -> revalidar -> auditar
  *
  * Enquanto toda escrita passar por aqui, nao ha como esquecer um passo de
  * seguranca: os quatro primeiros acontecem ANTES do handler receber qualquer
@@ -205,6 +206,39 @@ const defaultMessages: Record<AppErrorCode, string> = {
 }
 
 /**
+ * Sessão em `aal1` com fator cadastrado.
+ *
+ * Texto próprio, e não o 'forbidden' genérico: "você não tem permissão" mandaria
+ * a pessoa procurar quem lhe dê acesso, quando o que falta é o código que ela
+ * mesma tem no aparelho. Segue o padrão de `writeBlockedMessage` — o código do
+ * erro é o genérico, a mensagem diz o que fazer.
+ */
+const SECOND_FACTOR_REQUIRED =
+  'Confirme o segundo fator para continuar. Atualize a página e informe o código do aplicativo autenticador.'
+
+/**
+ * O nível de garantia da sessão, ou "não sei".
+ *
+ * Devolver níveis nulos é a resposta honesta para toda falha de leitura, e
+ * `requiresSecondFactor` a trata como "não exigir". Ver a política em 2b.
+ */
+async function readAssurance(
+  supabase: SupabaseClient<Database>,
+): Promise<AssuranceState> {
+  const unknown: AssuranceState = { currentLevel: null, nextLevel: null }
+
+  try {
+    const { data } =
+      (await supabase.auth?.mfa?.getAuthenticatorAssuranceLevel?.()) ?? {}
+
+    return data ?? unknown
+  } catch (cause) {
+    console.error('[action] nivel de garantia indisponivel', describeCause(cause))
+    return unknown
+  }
+}
+
+/**
  * Monta uma Server Action a partir de um caso de uso.
  *
  * A funcao devolvida recebe `unknown` de proposito: quem chama e o navegador, e
@@ -235,6 +269,42 @@ export function createAction<TInput, TOutput, F extends string = string>(
         return err<F>('unauthenticated', message('unauthenticated'))
       case 'active':
         break
+    }
+
+    const supabase = await createSupabaseServerClient()
+    if (!supabase) return err<F>('unavailable', message('unavailable'))
+
+    /*
+     * 2b. O SEGUNDO FATOR — e o motivo de ele estar aqui, e nao so na casca.
+     *
+     * `app/(app)/layout.tsx` desvia para `/verificacao` quem tem fator cadastrado
+     * e nao o apresentou. Layout, porem, so roda em NAVEGACAO: Server Action e
+     * endpoint POST proprio, enderecavel pelo id que vai no bundle do cliente.
+     * Quem tivesse a senha entrava em `aal1`, era barrado na tela — e continuava
+     * alcancando as 118 actions por chamada direta, inclusive as que leem
+     * prontuario. Isso anulava o segundo fator justamente contra a ameaca que ele
+     * existe para deter: senha vazada.
+     *
+     * Fica no pipeline, e nao em cada action, pelo mesmo motivo do estado
+     * comercial da clinica: a regra e uma so para as 118, e espalha-la garantiria
+     * que a proxima action nascesse sem ela.
+     *
+     * Vem ANTES do papel: uma sessao que nao terminou de se autenticar nao deve
+     * receber resposta sobre o que o papel dela permite.
+     *
+     * Nivel indisponivel NAO tranca — `requiresSecondFactor` devolve falso com
+     * nivel nulo. Provedor sem MFA habilitado, ou leitura que falhou, nao podem
+     * virar clinica inteira parada. Mesma escolha da cota e do estado comercial.
+     *
+     * O `catch` e parte dessa politica, e nao zelo: a leitura REJEITA quando o
+     * provedor esta fora do ar, e esta linha roda fora do try que protege o
+     * handler. Sem ele, uma indisponibilidade momentanea do Supabase Auth
+     * derrubaria as 118 actions com excecao nao tratada, em vez de degradar.
+     */
+    const assurance = await readAssurance(supabase)
+
+    if (requiresSecondFactor(assurance)) {
+      return err<F>('forbidden', SECOND_FACTOR_REQUIRED)
     }
 
     // 3. Autorizar papel.
@@ -274,9 +344,6 @@ export function createAction<TInput, TOutput, F extends string = string>(
 
       return err<F>('validation', message('validation'), fieldErrors)
     }
-
-    const supabase = await createSupabaseServerClient()
-    if (!supabase) return err<F>('unavailable', message('unavailable'))
 
     const context: ActionContext = {
       supabase,

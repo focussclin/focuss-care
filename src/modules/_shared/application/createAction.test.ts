@@ -47,8 +47,20 @@ vi.mock('@/lib/auth/session', () => ({
   getSessionState: () => sessionState(),
 }))
 
-// Cliente marcado, nao funcional: o handler dos testes nunca consulta nada.
-const supabase = { __fake: true }
+/**
+ * Nivel de garantia da sessao (AAL).
+ *
+ * Por padrao `aal1`/`aal1`: conta sem segundo fator cadastrado, que e o caso da
+ * maioria dos testes deste arquivo. Quem testa o portao sobrescreve.
+ */
+const assuranceLevel = vi.fn()
+
+// Cliente marcado, nao funcional: o handler dos testes nunca consulta nada. O
+// `auth.mfa` existe porque o pipeline le o AAL antes de autorizar o papel.
+const supabase = {
+  __fake: true,
+  auth: { mfa: { getAuthenticatorAssuranceLevel: () => assuranceLevel() } },
+}
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => supabase,
 }))
@@ -92,6 +104,10 @@ function patientAction(
 beforeEach(() => {
   vi.clearAllMocks()
   sessionState.mockResolvedValue(activeSession())
+  assuranceLevel.mockResolvedValue({
+    data: { currentLevel: 'aal1', nextLevel: 'aal1' },
+    error: null,
+  })
 })
 
 describe('efeitos pÃ³s-sucesso', () => {
@@ -347,5 +363,115 @@ describe('estado da clínica', () => {
     const result = await patientAction()({ name: 'Maria' })
 
     expect(result.ok).toBe(true)
+  })
+})
+
+/**
+ * O segundo fator no PIPELINE, e não só na casca.
+ *
+ * `app/(app)/layout.tsx` desvia para `/verificacao` quem tem fator cadastrado e
+ * não o apresentou — mas layout só roda em navegação. Server Action é endpoint
+ * POST próprio, endereçável pelo id que vai no bundle do cliente: quem tivesse a
+ * senha entrava em `aal1`, era barrado na tela e continuava alcançando as 118
+ * actions por chamada direta. O segundo fator ficava anulado contra exatamente a
+ * ameaça que ele existe para deter.
+ */
+describe('segundo fator', () => {
+  it('sessão `aal1` com fator cadastrado não executa a action', async () => {
+    assuranceLevel.mockResolvedValue({
+      data: { currentLevel: 'aal1', nextLevel: 'aal2' },
+      error: null,
+    })
+
+    const handler = vi.fn(async () => ok({ id: PATIENT }))
+    const result = await patientAction({ handler })({ name: 'Maria' })
+
+    expect(result.ok).toBe(false)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('a mensagem diz o que fazer, e não "peça permissão"', async () => {
+    /*
+     * O código do erro é o genérico, mas o texto não pode ser: quem lê "você não
+     * tem permissão" vai procurar um administrador, quando o que falta é o código
+     * que a própria pessoa tem no aparelho.
+     */
+    assuranceLevel.mockResolvedValue({
+      data: { currentLevel: 'aal1', nextLevel: 'aal2' },
+      error: null,
+    })
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('forbidden')
+      expect(result.error.message).toMatch(/segundo fator/i)
+    }
+  })
+
+  it('sessão que já apresentou o fator segue normalmente', async () => {
+    assuranceLevel.mockResolvedValue({
+      data: { currentLevel: 'aal2', nextLevel: 'aal2' },
+      error: null,
+    })
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('conta sem fator cadastrado não é incomodada', async () => {
+    // `aal1`/`aal1`: não há segundo fator a apresentar. Exigir aqui trancaria
+    // todo mundo que ainda não cadastrou.
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('nível indisponível NÃO tranca a clínica', async () => {
+    /*
+     * Provedor sem MFA habilitado, ou leitura que falhou. Exigir um código sem
+     * conseguir dizer qual fator deixaria a operação inteira parada por causa de
+     * uma consulta indisponível — mesma escolha do estado comercial.
+     */
+    assuranceLevel.mockResolvedValue({
+      data: { currentLevel: null, nextLevel: null },
+      error: null,
+    })
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('leitura que REJEITA não derruba a action', async () => {
+    /*
+     * A checagem roda fora do `try` que protege o handler: sem tratamento, uma
+     * indisponibilidade momentânea do Supabase Auth viraria exceção não tratada
+     * nas 118 actions de uma vez, em vez de degradar para "não sei".
+     */
+    assuranceLevel.mockRejectedValue(new Error('mfa indisponível'))
+
+    const result = await patientAction()({ name: 'Maria' })
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('vem ANTES do papel — sessão incompleta não recebe resposta sobre permissão', async () => {
+    assuranceLevel.mockResolvedValue({
+      data: { currentLevel: 'aal1', nextLevel: 'aal2' },
+      error: null,
+    })
+    sessionState.mockResolvedValue({
+      ...activeSession(),
+      role: 'receptionist' as const,
+    })
+
+    const restricted = patientAction({ roles: ['owner'] })
+    const result = await restricted({ name: 'Maria' })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).toMatch(/segundo fator/i)
   })
 })
