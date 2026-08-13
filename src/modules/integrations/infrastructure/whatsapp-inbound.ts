@@ -195,18 +195,33 @@ async function upsertConversation(
 ): Promise<ConversationRef | null> {
   const { data: existing } = await client
     .from('conversations')
-    .select('id, patient_id, contact_name, is_ai_handled')
+    .select('id, patient_id, contact_name, is_ai_handled, unread_count')
     .eq('clinic_id', incoming.clinicId)
     .eq('contact_phone', incoming.fromPhone)
     .maybeSingle()
 
   if (existing) {
+    /*
+     * SOMA, e não `= 1`.
+     *
+     * A tela desenha o contador como número, com "9+" acima de nove. Gravar 1
+     * fixo fazia sete mensagens seguidas do mesmo paciente aparecerem como uma
+     * só — e tornava o "9+" inalcançável, já que o WhatsApp é o único canal que
+     * grava mensagem de entrada. Quem olha a caixa decide o que atender pelo
+     * tamanho da fila; um contador que mente sobre isso é pior que não existir.
+     *
+     * Leitura seguida de escrita, e não `increment` atômico: somar no banco
+     * exigiria RPC, e migration nova está bloqueada. Duas mensagens no mesmo
+     * instante podem contar uma — subestimar em uma unidade é aceitável;
+     * travar em 1 não era. `markConversationRead` zera de qualquer jeito.
+     */
     await client
       .from('conversations')
       .update({
         last_message_at: new Date().toISOString(),
-        unread_count: 1,
+        unread_count: (existing.unread_count ?? 0) + 1,
       })
+      .eq('clinic_id', incoming.clinicId)
       .eq('id', existing.id)
 
     return {
@@ -331,9 +346,16 @@ async function escalate(
   conversationId: string,
   reason: string | null,
 ): Promise<void> {
+  /*
+   * `clinic_id` junto do `id`: quem chama aqui é o webhook, com o cliente
+   * administrativo, e para o service role não há RLS atrás. O id já vem de uma
+   * leitura recortada pela clínica, então isto é defesa em profundidade — a
+   * mesma que todo adapter do produto aplica.
+   */
   await client
     .from('conversations')
     .update({ is_ai_handled: false, status: 'pending' })
+    .eq('clinic_id', clinicId)
     .eq('id', conversationId)
 
   if (!reason) return
