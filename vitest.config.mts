@@ -40,6 +40,23 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    /**
+     * 20s, e não os 5s padrão — por causa dos GUARDS DE VARREDURA.
+     *
+     * `preferred-name`, `reachableRoutes`, `publicApi`, `revalidateTargets` e
+     * `formattingConsistency` leem centenas de arquivos do disco para provar
+     * regras de arquitetura. Sozinho, cada um roda em cerca de um segundo;
+     * dentro da suíte inteira, com os workers disputando I/O, passam dos 5s e
+     * falham por tempo — sem que nada esteja errado no código.
+     *
+     * Um teste que falha por carga da máquina é pior que teste lento: ele ensina
+     * a equipe a reexecutar a suíte em vez de ler o que quebrou, e o dia em que
+     * a falha for real ela vai parecer mais uma dessas.
+     *
+     * O teto continua existindo para pegar travamento de verdade — laço infinito
+     * não termina em 20s nem em 20 minutos.
+     */
+    testTimeout: 20_000,
   },
   resolve: {
     alias: [

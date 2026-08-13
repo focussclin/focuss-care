@@ -26,6 +26,7 @@ import { SelectField } from '@/components/ui/select-field'
 import { TextareaField } from '@/components/ui/textarea-field'
 import { TextField } from '@/components/ui/text-field'
 import { cn } from '@/lib/utils/cn'
+import { formatShortDate } from '@/lib/utils/date'
 
 import { formatLeadValue } from '../application/toLeadDto'
 import { leadMessages, leadStageOptions, type LeadDto, type LeadFormValues } from '../schemas/lead.schema'
@@ -173,7 +174,17 @@ export function LeadsScreen({
       campaign: lead.campaign ?? '',
       interest: lead.interest ?? '',
       stage: lead.stage,
-      potentialValue: lead.potentialValueCents === null ? '' : String(lead.potentialValueCents / 100),
+      /*
+        Centavos -> texto editável com VÍRGULA, como no modal de pagamento.
+
+        `String(cents / 100)` devolvia '12.34' com ponto: `parseCents` aceita as
+        duas formas, então nada quebrava — mas a pessoa via ponto decimal aqui e
+        vírgula no financeiro, no mesmo produto, em pt-BR.
+      */
+      potentialValue:
+        lead.potentialValueCents === null
+          ? ''
+          : (lead.potentialValueCents / 100).toFixed(2).replace('.', ','),
       nextActionAt: lead.nextActionAt?.slice(0, 10) ?? '',
       notes: lead.notes ?? '',
       assignedToId: lead.assignedTo?.id ?? '',
@@ -541,7 +552,12 @@ function LeadCard({
         {lead.phone ? <a className="inline-flex items-center gap-2 hover:text-link" href={`tel:${lead.phone}`}><Phone aria-hidden className="size-3.5" />{lead.phone}</a> : null}
         {lead.email ? <a className="inline-flex min-w-0 items-center gap-2 truncate hover:text-link" href={`mailto:${lead.email}`}><Mail aria-hidden className="size-3.5 shrink-0" />{lead.email}</a> : null}
         <span className="inline-flex items-center gap-2"><ArrowRight aria-hidden className="size-3.5" />{lead.source === 'manual' ? 'Cadastro manual' : lead.source}</span>
-        {lead.nextActionAt ? <span className="inline-flex items-center gap-2"><CalendarClock aria-hidden className="size-3.5" />Próxima ação: {new Date(lead.nextActionAt).toLocaleDateString('pt-BR')}</span> : null}
+        {/*
+          `formatShortDate`, e não `toLocaleDateString`: o produto inteiro
+          escreve data curta (12/08), e este era o único lugar que escrevia o ano
+          junto — dois formatos na mesma tela fazem o olho tropeçar.
+        */}
+        {lead.nextActionAt ? <span className="inline-flex items-center gap-2"><CalendarClock aria-hidden className="size-3.5" />Próxima ação: {formatShortDate(new Date(lead.nextActionAt))}</span> : null}
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border-card pt-3">

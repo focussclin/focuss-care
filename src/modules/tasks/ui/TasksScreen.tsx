@@ -28,6 +28,7 @@ import { StatusBadge, type StatusTone } from '@/components/ui/status-badge'
 import { TextareaField } from '@/components/ui/textarea-field'
 import { TextField } from '@/components/ui/text-field'
 import { cn } from '@/lib/utils/cn'
+import { formatShortDate, formatTime } from '@/lib/utils/date'
 
 import { taskMessages, type TaskDto, type TaskFormValues } from '../schemas/task.schema'
 import type { TaskBucket } from '../domain/Task'
@@ -721,7 +722,16 @@ function TaskRow({ task, busy, onEdit, onToggle, onCancel }: TaskRowProps) {
             ) : null}
             {task.dueLabel ? (
               <span
-                title={task.dueAt ? new Date(task.dueAt).toLocaleString('pt-BR') : undefined}
+                /*
+                  A dica exibe o vencimento exato por trás do rótulo relativo
+                  ("venceu ontem"). No formato do produto: `toLocaleString`
+                  escrevia segundos, que não ajudam ninguém a decidir nada.
+                */
+                title={
+                  task.dueAt
+                    ? `${formatShortDate(new Date(task.dueAt))} às ${formatTime(new Date(task.dueAt))}`
+                    : undefined
+                }
                 className={cn(
                   'inline-flex items-center gap-1',
                   task.dueLabel.startsWith('venceu') && 'font-semibold text-danger',
