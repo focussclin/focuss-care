@@ -77,6 +77,9 @@ import {
 } from '@/modules/records/schemas/record.schema'
 import { PatientPrescriptionsPanel } from '@/modules/records/ui/PatientPrescriptionsPanel'
 import { PatientRecordsPanel } from '@/modules/records/ui/PatientRecordsPanel'
+import { eventKindsFor } from '@/modules/patients/domain/PatientTimeline'
+import { getPatientTimeline } from '@/modules/patients/infrastructure/patient-timeline'
+import { PatientTimelinePanel } from '@/modules/patients/ui/PatientTimelinePanel'
 import { recordVitalsFromPanel } from '@/modules/encounters/actions/recordVitals.action'
 import { toVitalsDto } from '@/modules/encounters/application/toVitalsDto'
 import type { VitalsEntry } from '@/modules/encounters/domain/Vitals'
@@ -328,6 +331,23 @@ export default async function PatientProfilePage({
   const recordSource = canReadRecords
     ? await getMedicalRecordRepository(today)
     : null
+
+  /*
+   * Linha do tempo — o índice que os painéis não dão.
+   *
+   * Os tipos de evento saem do PAPEL, no domínio: sem `record.read` a lista vem
+   * sem evolução, prescrição e sinais vitais, e a tela diz isso em vez de
+   * deixar a ausência passar por "não houve nada".
+   */
+  const timelineKinds = eventKindsFor({
+    canReadRecords,
+    canReadAppointments: isMember && can(session.role, 'appointment.read'),
+    canReadPatients: isMember && can(session.role, 'patient.read'),
+  })
+
+  const timeline = await getPatientTimeline(patient.id, timelineKinds).catch(
+    () => [],
+  )
 
   let records: MedicalRecord[] = []
   let recordsError: string | null = null
@@ -680,6 +700,25 @@ export default async function PatientProfilePage({
               {describeClinicalScopes(clinicalScopes)} nesta ficha fica na trilha
               de auditoria, com quem abriu e quando.
             </p>
+          ) : null}
+
+          {/*
+            A linha do tempo vem ANTES dos painéis: ela responde "o que
+            aconteceu com esta pessoa", que é a pergunta de quem abre a ficha
+            sem saber o que procura. Os painéis respondem o resto.
+          */}
+          {timeline.length > 0 || timelineKinds.length > 0 ? (
+            <PatientTimelinePanel
+              events={timeline.map((event) => ({
+                id: event.id,
+                kind: event.kind,
+                occurredAt: event.occurredAt.toISOString(),
+                title: event.title,
+                detail: event.detail,
+                actor: event.actor,
+              }))}
+              isPartial={!canReadRecords}
+            />
           ) : null}
 
           {/*
