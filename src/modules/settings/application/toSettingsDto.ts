@@ -22,6 +22,9 @@ export function toClinicProfileDto(profile: ClinicProfile): ClinicProfileDto {
     tradeName: profile.tradeName,
     legalName: profile.legalName,
     cnpj: profile.cnpj,
+    phone: profile.phone,
+    email: profile.email,
+    address: profile.address,
     timezone: profile.timezone,
     locale: profile.locale,
   }

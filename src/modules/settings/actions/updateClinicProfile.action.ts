@@ -58,6 +58,9 @@ const runUpdateClinicProfile = createAction<
         tradeName: input.tradeName,
         legalName: input.legalName,
         cnpj: input.cnpj,
+        phone: input.phone,
+        email: input.email,
+        address: input.address,
       })
 
       return ok<ClinicProfileDto>(toClinicProfileDto(profile))

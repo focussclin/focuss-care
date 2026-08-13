@@ -416,7 +416,17 @@ describe('nenhuma action revalida rota que não alimenta', () => {
          */
         '/configuracoes',
       ],
-      settings: ['/', '/configuracoes', '/agenda'],
+      /*
+       * `/whatsapp` entrou em 12/08/2026 com o interruptor do atendimento
+       * automático: `clinic_settings.ai_enabled` é preferência de configuração,
+       * mas quem a exibe — e quem a liga — é a tela do canal, porque é lá que
+       * ela produz efeito. Ligar sem revalidar deixaria o painel dizendo
+       * "Desligado" logo depois de a pessoa ligar.
+       *
+       * `/` e `/agenda` já estavam: nome da clínica na casca e expediente na
+       * grade.
+       */
+      settings: ['/', '/configuracoes', '/agenda', '/whatsapp'],
       /*
        * `tasks` invalida SÓ a própria tela.
        *

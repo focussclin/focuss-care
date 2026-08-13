@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { parseStoredClinicAddress } from '@/lib/clinic/address'
 import {
   businessHoursToJson,
   DEFAULT_BUSINESS_HOURS,
@@ -27,9 +28,10 @@ import { storedAppointmentDefaultsSchema } from '../schemas/settings.schema'
 
 type Client = SupabaseClient<Database>
 
-const CLINIC_SELECT = 'id, slug, trade_name, legal_name, cnpj, timezone, locale'
+const CLINIC_SELECT =
+  'id, slug, trade_name, legal_name, cnpj, timezone, locale, phone, email, address'
 const SETTINGS_SELECT =
-  'business_hours, appointment_defaults, notification_prefs'
+  'business_hours, appointment_defaults, notification_prefs, ai_enabled'
 
 /**
  * Adapter Supabase das configurações — feature **C-01**.
@@ -89,6 +91,9 @@ export class SupabaseClinicSettingsRepository
       notificationPreferences: parseNotificationPreferences(
         settingsResult.data?.notification_prefs,
       ),
+      // Ausência de linha conta como DESLIGADO: uma clínica que nunca abriu as
+      // configurações não pediu para uma máquina falar com seus pacientes.
+      aiEnabled: settingsResult.data?.ai_enabled === true,
     }
   }
 
@@ -102,6 +107,14 @@ export class SupabaseClinicSettingsRepository
         trade_name: input.tradeName,
         legal_name: input.legalName,
         cnpj: input.cnpj,
+        phone: input.phone,
+        email: input.email,
+        /*
+         * O endereço é gravado SEMPRE, mesmo vazio: um objeto com todos os
+         * campos nulos é a forma de apagar o que estava lá. Omitir a chave
+         * manteria o endereço antigo depois de a pessoa limpar o formulário.
+         */
+        address: input.address,
         updated_at: new Date().toISOString(),
       })
       .eq('id', clinicId)
@@ -158,6 +171,20 @@ export class SupabaseClinicSettingsRepository
   }
 
   /**
+   * Liga ou desliga a IA que responde paciente.
+   *
+   * Devolve o valor que ficou GRAVADO, não o que foi pedido: é a diferença entre
+   * a tela dizer "desliguei" e a tela dizer "está desligado". Numa configuração
+   * que decide se uma máquina fala com paciente, essa distinção é a única que
+   * importa quando a escrita falha.
+   */
+  async setAiEnabled(clinicId: string, enabled: boolean): Promise<boolean> {
+    const row = await this.upsertSettings(clinicId, { ai_enabled: enabled })
+
+    return row.ai_enabled === true
+  }
+
+  /**
    * Grava uma preferência de configuração, criando a linha se ela não existir.
    *
    * `clinic_settings.clinic_id` é chave primária, então a linha deveria ter
@@ -182,11 +209,13 @@ export class SupabaseClinicSettingsRepository
       business_hours?: Json
       appointment_defaults?: Json
       notification_prefs?: Json
+      ai_enabled?: boolean
     },
   ): Promise<{
     business_hours: Json
     appointment_defaults: Json
     notification_prefs: Json
+    ai_enabled: boolean
   }> {
     const now = new Date().toISOString()
 
@@ -235,6 +264,10 @@ interface ClinicRow {
   trade_name: string
   legal_name: string | null
   cnpj: string | null
+  phone: string | null
+  email: string | null
+  /** `jsonb` — a forma é fechada por `parseStoredClinicAddress`, não aqui. */
+  address: unknown
   timezone: string
   locale: string
 }
@@ -246,6 +279,11 @@ function toProfile(row: ClinicRow): ClinicProfile {
     tradeName: row.trade_name,
     legalName: row.legal_name,
     cnpj: row.cnpj,
+    phone: row.phone,
+    email: row.email,
+    // Relido pelo mesmo contrato com que foi escrito: conteúdo irreconhecível
+    // vira endereço vazio, e o cadastro da clínica continua abrindo.
+    address: parseStoredClinicAddress(row.address),
     timezone: row.timezone,
     locale: row.locale,
   }

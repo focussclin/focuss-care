@@ -162,6 +162,7 @@ export type MembershipStatus =
 export type MessageDirection =
   | 'inbound'
   | 'outbound'
+  | 'internal'
 
 export type MessageStatus =
   | 'queued'
@@ -1630,6 +1631,9 @@ export type Database = {
           created_at: string
           updated_at: string
           deleted_at: string | null
+          phone: string | null
+          email: string | null
+          address: Json | null
         }
         Insert: {
           id?: string
@@ -1644,6 +1648,9 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          phone?: string | null
+          email?: string | null
+          address?: Json | null
         }
         Update: {
           id?: string
@@ -1658,6 +1665,9 @@ export type Database = {
           created_at?: string
           updated_at?: string
           deleted_at?: string | null
+          phone?: string | null
+          email?: string | null
+          address?: Json | null
         }
         Relationships: []
       }

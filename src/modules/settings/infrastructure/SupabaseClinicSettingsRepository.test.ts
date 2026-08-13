@@ -1,7 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_BUSINESS_HOURS } from '@/lib/clinic/business-hours'
+import { EMPTY_CLINIC_ADDRESS } from '@/lib/clinic/address'
+
 import { SupabaseClinicSettingsRepository } from './SupabaseClinicSettingsRepository'
+
+/**
+ * Contato vazio — o estado de quem ainda não preencheu.
+ *
+ * Estes testes são sobre tenant e clínica arquivada; o contato entra só para
+ * satisfazer o contrato, e vazio é o valor que não desvia a atenção deles.
+ */
+const SEM_CONTATO = {
+  phone: null,
+  email: null,
+  address: EMPTY_CLINIC_ADDRESS,
+}
 
 /**
  * Contrato das configurações (C-01).
@@ -338,7 +352,7 @@ describe('updateProfile', () => {
 
     await new SupabaseClinicSettingsRepository(fake.client).updateProfile(
       CLINIC,
-      { tradeName: 'Clínica Vida', legalName: null, cnpj: null },
+      { tradeName: 'Clínica Vida', legalName: null, cnpj: null, ...SEM_CONTATO },
     )
 
     const calls = fake.ofTable('clinics')
@@ -360,6 +374,7 @@ describe('updateProfile', () => {
         tradeName: 'Clínica Vida',
         legalName: null,
         cnpj: '11222333000181',
+        ...SEM_CONTATO,
       }),
     ).rejects.toMatchObject({ reason: 'duplicate' })
 
@@ -375,6 +390,7 @@ describe('updateProfile', () => {
         tradeName: 'Clínica Vida',
         legalName: null,
         cnpj: null,
+        ...SEM_CONTATO,
       }),
     ).rejects.toMatchObject({ reason: 'forbidden' })
 

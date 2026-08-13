@@ -1,3 +1,4 @@
+import type { ClinicAddress } from '@/lib/clinic/address'
 import type {
   BusinessDay,
   BusinessHours,
@@ -57,6 +58,16 @@ export interface ClinicProfile {
   tradeName: string
   legalName: string | null
   cnpj: string | null
+  /**
+   * Contato PÚBLICO da clínica — o que o paciente usa para chegar até ela.
+   *
+   * Não confundir com dado de acesso: `email` aqui é o da recepção, não o login
+   * de ninguém. É o que sai em documento, no convite e na resposta do
+   * assistente quando alguém pergunta onde fica.
+   */
+  phone: string | null
+  email: string | null
+  address: ClinicAddress
   /** Somente leitura: nada no produto o consome ainda. */
   timezone: string
   /** Somente leitura: só existe pt-BR. */
@@ -68,6 +79,9 @@ export interface ClinicProfileInput {
   tradeName: string
   legalName: string | null
   cnpj: string | null
+  phone: string | null
+  email: string | null
+  address: ClinicAddress
 }
 
 export interface ClinicSettings {
@@ -76,4 +90,13 @@ export interface ClinicSettings {
   businessHoursSource: BusinessHoursSource
   appointmentDefaults: AppointmentDefaults
   notificationPreferences: NotificationPreferences
+  /**
+   * A IA está autorizada a responder paciente em nome da clínica?
+   *
+   * Mora aqui, junto das outras preferências, porque é isso que ela é — mas com
+   * uma diferença que o resto do módulo não tem: enquanto as demais ajustam como
+   * a clínica trabalha, esta decide se uma MÁQUINA fala com paciente. Ver
+   * `setAiEnabled` na porta.
+   */
+  aiEnabled: boolean
 }

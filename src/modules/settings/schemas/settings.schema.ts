@@ -1,6 +1,12 @@
 import { z } from 'zod'
 
 import {
+  clinicAddressSchema,
+  EMPTY_CLINIC_ADDRESS,
+  type ClinicAddress,
+} from '@/lib/clinic/address'
+
+import {
   businessDaySchema,
   weekdayLabels,
   type Weekday,
@@ -14,6 +20,11 @@ export const settingsMessages = {
   tradeNameInvalid: 'Use letras e números no nome da clínica.',
   legalNameTooLong: 'A razão social pode ter no máximo 160 caracteres.',
   legalNameInvalid: 'Use letras e números na razão social.',
+  /*
+   * O e-mail público sai em documento e no convite: um endereço com erro de
+   * digitação faz a resposta do paciente cair no vazio, e ninguém descobre.
+   */
+  invalidEmail: 'Informe um e-mail válido para contato.',
   /**
    * Recusa de CNPJ inválido.
    *
@@ -154,10 +165,48 @@ const cnpjSchema = z
   )
   .transform((digits) => (digits === '' ? null : digits))
 
+/**
+ * Contato público — tudo opcional.
+ *
+ * Uma clínica cadastra o endereço quando quiser; exigi-lo travaria o cadastro de
+ * quem ainda está montando o consultório. O que não pode é o produto AFIRMAR um
+ * endereço que não tem — e disso cuida quem lê, não quem grava.
+ */
+/*
+ * `nullish` — a chave pode faltar, e faltar significa "não informado".
+ *
+ * Contato foi acrescentado depois; exigir a chave faria toda chamada anterior
+ * ao formulário quebrar por um campo que a clínica nem precisa preencher. O que
+ * chega vazio, ausente ou nulo termina como `null`, que é o mesmo estado.
+ */
+const clinicPhoneSchema = z
+  .string()
+  .trim()
+  .max(32, settingsMessages.invalidFields)
+  .nullish()
+  .transform((value) => (value && value.length > 0 ? value : null))
+
+const clinicEmailSchema = z
+  .string()
+  .trim()
+  .max(160)
+  .nullish()
+  .transform((value) => (value && value.length > 0 ? value : null))
+  .refine(
+    (value) => value === null || z.email().safeParse(value).success,
+    settingsMessages.invalidEmail,
+  )
+
 export const updateClinicProfileSchema = z.object({
   tradeName: tradeNameSchema,
   legalName: legalNameSchema,
   cnpj: cnpjSchema,
+  phone: clinicPhoneSchema,
+  email: clinicEmailSchema,
+  // Ausente = endereço vazio, pelo mesmo motivo de `phone` e `email`.
+  address: clinicAddressSchema.nullish().transform(
+    (value) => value ?? EMPTY_CLINIC_ADDRESS,
+  ),
 })
 
 export type UpdateClinicProfileInput = z.infer<typeof updateClinicProfileSchema>
@@ -243,6 +292,10 @@ export interface ClinicProfileDto {
   legalName: string | null
   /** 14 dígitos sem pontuação, ou null. A tela formata para exibir. */
   cnpj: string | null
+  /** Contato PÚBLICO: o que o paciente usa, não credencial de ninguém. */
+  phone: string | null
+  email: string | null
+  address: ClinicAddress
   timezone: string
   locale: string
 }

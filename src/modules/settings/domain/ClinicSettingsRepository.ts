@@ -69,4 +69,19 @@ export interface ClinicSettingsRepository {
     clinicId: string,
     preferences: NotificationPreferences,
   ): Promise<NotificationPreferences>
+
+  /**
+   * Autoriza — ou revoga — a IA a responder paciente em nome da clínica.
+   *
+   * # Por que isto merece um método, e não um campo num formulário grande
+   *
+   * É a única configuração do produto que decide se uma **máquina fala com
+   * paciente**. Todo o resto ajusta como a clínica trabalha; esta muda quem
+   * responde quando alguém escreve no WhatsApp.
+   *
+   * Enquanto não existia superfície, o único jeito de desligar era apagar a
+   * credencial da OpenAI — ou seja, quem quisesse parar a IA por uma tarde teria
+   * de reconfigurar a integração para voltar.
+   */
+  setAiEnabled(clinicId: string, enabled: boolean): Promise<boolean>
 }

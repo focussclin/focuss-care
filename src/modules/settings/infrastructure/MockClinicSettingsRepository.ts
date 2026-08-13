@@ -1,3 +1,5 @@
+import { EMPTY_CLINIC_ADDRESS } from '@/lib/clinic/address'
+
 import type {
   AppointmentDefaults,
   BusinessHours,
@@ -28,6 +30,9 @@ export class MockClinicSettingsRepository implements ClinicSettingsRepository {
         tradeName: 'Clínica de demonstração',
         legalName: null,
         cnpj: null,
+        phone: null,
+        email: null,
+        address: EMPTY_CLINIC_ADDRESS,
         timezone: 'America/Sao_Paulo',
         locale: 'pt-BR',
       },
@@ -35,6 +40,9 @@ export class MockClinicSettingsRepository implements ClinicSettingsRepository {
       businessHoursSource: 'default',
       appointmentDefaults: DEFAULT_APPOINTMENT_DEFAULTS,
       notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
+      // Demonstração nunca mostra a IA ligada: não há credencial, não há
+      // paciente e não há para onde a mensagem ir.
+      aiEnabled: false,
     }
   }
 
@@ -59,6 +67,17 @@ export class MockClinicSettingsRepository implements ClinicSettingsRepository {
 
   async updateNotificationPreferences(): Promise<NotificationPreferences> {
     return this.refuseWrite('updateNotificationPreferences')
+  }
+
+  /**
+   * Recusa como as demais — e aqui a recusa vale mais que nas outras.
+   *
+   * Devolver `true` faria a tela de demonstração exibir a IA como ligada,
+   * respondendo pacientes que não existem, com uma credencial que não está
+   * configurada. É a fantasia mais cara que este repositório poderia sustentar.
+   */
+  async setAiEnabled(): Promise<boolean> {
+    return this.refuseWrite('setAiEnabled')
   }
 
   private refuseWrite(operation: string): never {

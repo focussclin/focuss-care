@@ -13,7 +13,11 @@ import { isMessageTemplateError } from '@/modules/integrations/domain/MessageTem
 import { getMessageTemplateSource } from '@/modules/integrations/infrastructure/message-template-repository'
 import { getIntegrationRepository } from '@/modules/integrations/infrastructure/repository'
 import { messageTemplateMessages } from '@/modules/integrations/schemas/messageTemplate.schema'
+import { getIntegrationCredentialRepository } from '@/modules/integrations/infrastructure/credentials-repository'
 import type { WhatsappConnectionDto } from '@/modules/integrations/schemas/whatsappConnection.schema'
+import { AiAssistantPanel } from '@/modules/integrations/ui/AiAssistantPanel'
+import { setAiEnabledFromScreen } from '@/modules/settings/actions/setAiEnabled.action'
+import { getClinicSettingsRepository } from '@/modules/settings/infrastructure/repository'
 import { MessageTemplatesPanel } from '@/modules/integrations/ui/MessageTemplatesPanel'
 import { WhatsappConnectionPanel } from '@/modules/integrations/ui/WhatsappConnectionPanel'
 import { WhatsappScreen } from '@/modules/integrations/ui/WhatsappScreen'
@@ -33,6 +37,31 @@ export default async function WhatsappPage() {
   ])
 
   const overview = await source.repository.overview(source.clinicId)
+
+  /*
+   * Estar AUTORIZADA e estar CONFIGURADA são coisas diferentes.
+   *
+   * `aiEnabled` é a decisão da clínica; a credencial da OpenAI é a capacidade.
+   * Sem chave, o botão de ligar fica indisponível com a explicação — em vez de
+   * ligar um assistente que falharia na primeira mensagem que chegasse.
+   *
+   * As duas leituras são best-effort: nenhuma delas pode derrubar a tela do
+   * canal, que é o que a pessoa veio ver.
+   */
+  const [aiEnabled, hasOpenAiCredential] = await Promise.all([
+    getClinicSettingsRepository()
+      .then((settings) => settings.repository.load(settings.clinicId))
+      .then((settings) => settings.aiEnabled)
+      .catch(() => false),
+    getIntegrationCredentialRepository()
+      .then((credentials) => credentials.repository.overview(credentials.clinicId))
+      .then((credentialOverview) =>
+        credentialOverview.statuses.some(
+          (status) => status.provider === 'openai' && status.configured,
+        ),
+      )
+      .catch(() => false),
+  ])
 
   /*
    * Ler os modelos não exige permissão além do vínculo com a clínica: é o texto
@@ -84,11 +113,20 @@ export default async function WhatsappPage() {
       status={overview.whatsapp}
       connectionSlot={
         can(role, 'clinic.settings') ? (
-          <WhatsappConnectionPanel
-            initial={channelConnection}
-            canManage
-            isLive={source.isLive}
-          />
+          <>
+            <WhatsappConnectionPanel
+              initial={channelConnection}
+              canManage
+              isLive={source.isLive}
+            />
+            <AiAssistantPanel
+              enabled={aiEnabled}
+              hasCredential={hasOpenAiCredential}
+              onToggle={setAiEnabledFromScreen}
+              canManage
+              isLive={source.isLive}
+            />
+          </>
         ) : null
       }
       templatesSlot={
