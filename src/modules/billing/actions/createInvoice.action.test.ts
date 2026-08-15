@@ -217,22 +217,85 @@ describe('a conferência acontece depois da autorização', () => {
     expect(appointmentBelongsTo).not.toHaveBeenCalled()
   })
 
-  it('RECEPCIONISTA não emite cobrança — e isso é decisão registrada', async () => {
+  it('RECEPCIONISTA emite cobrança — é ela quem recebe o paciente', async () => {
     /*
-     * `receptionist` não tem `invoice.write`. A matriz de permissões declara o
-     * porquê: "marcar consulta não exige saber quanto ela custa nem o que o
-     * paciente deve".
-     *
-     * Este teste NÃO endossa a regra: ele fixa o estado atual, porque o fluxo de
-     * pagamento antes da consulta pede que a recepção opere o caixa — e mudar a
-     * matriz é decisão de produto, não efeito colateral de uma etapa. Enquanto
-     * não mudar, a tela de "aguardando pagamento" é de `admin`/`finance`.
+     * Mudou em 14/08/2026 junto com o fluxo: quem faz o check-in é quem cobra.
+     * Ver a justificativa em `permissions.ts`.
      */
     sessionState.mockResolvedValue(session('receptionist'))
 
     const result = await createInvoiceAction(input())
 
+    expect(result.ok).toBe(true)
+    expect(createInvoice).toHaveBeenCalled()
+  })
+})
+
+/**
+ * Desconto é permissão à parte.
+ *
+ * A checagem não pode estar no `roles` da action: `roles` decide quem pode
+ * EXECUTAR, e abater valor é condição sobre a ENTRADA. Pôr `invoice.discount`
+ * ali tiraria da recepção o direito de emitir qualquer cobrança.
+ */
+describe('desconto', () => {
+  it('recepção emite pelo valor cheio', async () => {
+    sessionState.mockResolvedValue(session('receptionist'))
+
+    const result = await createInvoiceAction(input({ discount: '0' }))
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('recepção NÃO abate no rodapé', async () => {
+    sessionState.mockResolvedValue(session('receptionist'))
+
+    const result = await createInvoiceAction(input({ discount: '50,00' }))
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('forbidden')
+      expect(result.error.message).toBe(billingMessages.discountForbidden)
+    }
+    expect(createInvoice).not.toHaveBeenCalled()
+  })
+
+  it('nem pelo item — o dinheiro abatido é o mesmo', async () => {
+    /*
+     * A regra que só olhasse o rodapé seria contornada pelo formulário:
+     * descontar R$ 150 num item de R$ 250 abate o mesmo que descontar R$ 150
+     * embaixo.
+     */
+    sessionState.mockResolvedValue(session('receptionist'))
+
+    const result = await createInvoiceAction(
+      input({
+        discount: '0',
+        items: [
+          {
+            description: 'Consulta',
+            quantity: '1',
+            unitPrice: '250,00',
+            discount: '150,00',
+          },
+        ],
+      }),
+    )
+
     expect(result.ok).toBe(false)
     expect(createInvoice).not.toHaveBeenCalled()
+  })
+
+  it('quem tem a permissão abate', async () => {
+    sessionState.mockResolvedValue(session('admin'))
+
+    const result = await createInvoiceAction(input({ discount: '50,00' }))
+
+    expect(result.ok).toBe(true)
+    expect(createInvoice).toHaveBeenCalledWith(
+      CLINIC,
+      expect.objectContaining({ discountCents: 5000 }),
+      USER,
+    )
   })
 })

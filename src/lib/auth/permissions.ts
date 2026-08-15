@@ -64,6 +64,14 @@ export type Permission =
   // Financeiro
   | 'invoice.read'
   | 'invoice.write'
+  /**
+   * Abater valor da cobrança.
+   *
+   * Separada de `invoice.write` de propósito: emitir uma cobrança de R$ 250 e
+   * emitir a mesma por R$ 100 são atos diferentes. O primeiro é operação; o
+   * segundo é decisão comercial, e quem a toma responde por ela.
+   */
+  | 'invoice.discount'
   | 'payment.write'
   | 'cash.manage'
   | 'payable.write'
@@ -98,10 +106,32 @@ const FRONT_DESK = [
 const FINANCIAL = [
   'invoice.read',
   'invoice.write',
+  'invoice.discount',
   'payment.write',
   'cash.manage',
   'payable.write',
   'insurance.manage',
+] as const satisfies readonly Permission[]
+
+/**
+ * O BALCÃO — o recorte financeiro de quem recebe o paciente.
+ *
+ * Existe porque o pagamento passou a acontecer antes da consulta: quem faz o
+ * check-in é quem cobra, e mandar o paciente procurar outra pessoa entre chegar
+ * e ser atendido é a fila a mais que o fluxo veio eliminar.
+ *
+ * É deliberadamente MENOR que `FINANCIAL`. Ficam de fora:
+ *
+ *  - **`cash.manage`** — abrir e fechar caixa é ato de conferência, com
+ *    responsabilidade sobre a diferença do turno. Receber no balcão, não.
+ *  - **`payable.write`** — contas a pagar não é atendimento.
+ *  - **`insurance.manage`** — contrato de operadora não é atendimento.
+ *  - **`invoice.discount`** — ver abaixo.
+ */
+const FRONT_DESK_MONEY = [
+  'invoice.read',
+  'invoice.write',
+  'payment.write',
 ] as const satisfies readonly Permission[]
 
 /**
@@ -118,8 +148,24 @@ const FINANCIAL = [
  *    administrativa sobre o vínculo, não sobre o cuidado.
  *  - **`finance` lê paciente.** Não é concessão: sem nome e documento não se
  *    emite fatura. O que ele não alcança é agenda, atendimento e prontuário.
- *  - **`receptionist` não vê valor nenhum.** Marcar consulta não exige saber
- *    quanto ela custa nem o que o paciente deve.
+ *  - **`receptionist` opera o BALCÃO, e só ele.** Ver `FRONT_DESK_MONEY`.
+ *
+ * # A regra da recepcionista mudou, e o porquê fica registrado
+ *
+ * Até 14/08/2026 a regra era "**`receptionist` não vê valor nenhum** — marcar
+ * consulta não exige saber quanto ela custa nem o que o paciente deve". Ela era
+ * boa enquanto o dinheiro vinha depois: a recepção marcava, o financeiro
+ * cobrava, e as duas coisas não se cruzavam.
+ *
+ * O fluxo de pagamento antes da consulta cruza. Quem faz o check-in é quem
+ * cobra, e manter a regra antiga obrigaria o paciente a procurar outra pessoa
+ * entre chegar e ser atendido — a fila a mais que o fluxo veio eliminar.
+ *
+ * O que a mudança preserva é o princípio, não a letra: a recepção passou a ver o
+ * que **este** paciente deve porque precisa recebê-lo, e continua sem alcançar
+ * caixa, contas a pagar, convênio e desconto. O papel novo que separaria "quem
+ * marca" de "quem cobra" seria melhor, e exige `alter type membership_role` —
+ * migration, hoje bloqueada (ver `PAGAMENTO_ANTES_DA_CONSULTA.md` §9.1).
  */
 const MATRIX: Record<MembershipRole, readonly Permission[]> = {
   owner: [
@@ -153,7 +199,7 @@ const MATRIX: Record<MembershipRole, readonly Permission[]> = {
     'team.read',
   ],
 
-  receptionist: [...FRONT_DESK, 'team.read'],
+  receptionist: [...FRONT_DESK, ...FRONT_DESK_MONEY, 'team.read'],
 
   finance: ['patient.read', ...FINANCIAL, 'report.read'],
 }

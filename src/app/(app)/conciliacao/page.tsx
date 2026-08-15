@@ -30,7 +30,9 @@ export default async function ReconciliationPage() {
 
   const source = await getReconciliationRepository()
   const role = await getActiveClinicRole()
-  if (source.isLive && !can(role, 'invoice.read')) forbidden()
+  // `cash.manage` desde 14/08/2026, pelo mesmo motivo de `/financeiro`: extrato
+  // bancário da clínica não é balcão de recepção. Ver `permissions.ts`.
+  if (source.isLive && !can(role, 'cash.manage')) forbidden()
 
   let accounts = [] as Awaited<ReturnType<typeof source.repository.listAccounts>>
   let transactions = [] as Awaited<ReturnType<typeof source.repository.listTransactions>>

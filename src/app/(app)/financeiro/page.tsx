@@ -28,11 +28,16 @@ export default async function FinanceiroPage() {
    * Autorização ANTES da leitura.
    *
    * Quanto cada paciente deve é dado sensível de outra natureza que o clínico,
-   * e igualmente pessoal. `invoice.read` é de `owner`, `admin` e `finance` na
-   * matriz de I-05 — a recepção marca consulta sem saber quanto ela custa.
+   * e igualmente pessoal.
+   *
+   * `cash.manage`, e não `invoice.read`, desde 14/08/2026: a recepção ganhou
+   * `invoice.read` para receber no balcão o paciente que ela mesma atendeu, e
+   * esta tela é outra coisa — a fatura de TODOS os pacientes, o caixa, as
+   * contas a pagar. O portão novo mantém o público de antes (`owner`, `admin`,
+   * `finance`) sem desfazer o balcão. Ver `permissions.ts`.
    */
   const role = await getActiveClinicRole()
-  if (!can(role, 'invoice.read')) forbidden()
+  if (!can(role, 'cash.manage')) forbidden()
 
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), 1)

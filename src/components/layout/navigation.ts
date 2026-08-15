@@ -147,8 +147,20 @@ export const navItems: readonly NavItem[] = [
    * separados marcados "em breve" diria que a clínica ainda não pode receber
    * nem fechar o caixa — sobre um recurso que está funcionando uma tela ao lado.
    */
-  { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'invoice.read' },
-  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'invoice.read' },
+  /*
+   * `cash.manage`, e nao `invoice.read`, desde 14/08/2026.
+   *
+   * A recepcao passou a ter `invoice.read` para receber no balcao (ver
+   * `permissions.ts`), e o portao antigo teria aberto junto o MODULO financeiro
+   * inteiro — faturas de todo mundo, caixa, contas a pagar, conciliacao. O
+   * recorte novo mantem exatamente o publico de antes: `owner`, `admin` e
+   * `finance`.
+   *
+   * O balcao da recepcao nao mora aqui; e a tela de cobranca do paciente que
+   * chegou.
+   */
+  { label: 'Financeiro', href: '/financeiro', icon: WalletCards, section: 'finance', permission: 'cash.manage' },
+  { label: 'Conciliação bancária', href: '/conciliacao', icon: Landmark, section: 'finance', permission: 'cash.manage' },
   { label: 'Convênios', href: '/convenios', icon: ShieldCheck, section: 'finance', permission: 'insurance.manage' },
   /*
    * Sem `permission`: o catalogo e a lista da propria clinica, e quem agenda

@@ -1,6 +1,6 @@
 'use server'
 
-import { rolesWith } from '@/lib/auth/permissions'
+import { can, rolesWith } from '@/lib/auth/permissions'
 import { createBillingNotification } from '@/lib/notifications/operational'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { err, ok, type ActionResult } from '@/modules/_shared/domain/Result'
@@ -68,6 +68,27 @@ const runCreateInvoice = createAction<CreateInvoiceInput, InvoiceDto, Field>({
        * agendamento de outro paciente também passaria pela FK, e a cobrança
        * apareceria na fila de quem não a deve.
        */
+      /*
+       * Desconto é permissão à parte — e a checagem é aqui, não no `roles` da
+       * action.
+       *
+       * `roles` decide quem PODE EXECUTAR a action inteira; abater valor é uma
+       * condição sobre a ENTRADA. Pôr `invoice.discount` no `roles` tiraria da
+       * recepção o direito de emitir qualquer cobrança, que é justamente o que
+       * ela precisa fazer.
+       *
+       * Conta o desconto do total E o dos itens: descontar R$ 150 num item de
+       * R$ 250 abate o mesmo dinheiro que descontar R$ 150 no rodapé, e uma
+       * regra que só olhasse o rodapé seria contornada pelo formulário.
+       */
+      const discountedCents =
+        input.discountCents +
+        input.items.reduce((total, item) => total + item.discountCents, 0)
+
+      if (discountedCents > 0 && !can(context.role, 'invoice.discount')) {
+        return err<Field>('forbidden', billingMessages.discountForbidden)
+      }
+
       if (
         input.appointmentId !== null &&
         !(await repository.appointmentBelongsTo(

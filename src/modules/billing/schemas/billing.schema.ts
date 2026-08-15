@@ -38,6 +38,14 @@ export const billingMessages = {
    */
   appointmentMismatch:
     'Este agendamento não pertence a este paciente. Confira o horário selecionado.',
+  /**
+   * Desconto sem permissão.
+   *
+   * Diz o que fazer — emitir sem o desconto, ou chamar quem pode — porque a
+   * pessoa está com o paciente na frente e precisa resolver agora.
+   */
+  discountForbidden:
+    'Você não pode aplicar desconto. Emita a cobrança pelo valor cheio ou chame um responsável.',
   forbidden: 'Você não tem permissão para movimentar o financeiro.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a operação agora. Tente novamente.',

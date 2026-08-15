@@ -45,11 +45,43 @@ describe('matriz papel x acao', () => {
   })
 
   describe('financeiro', () => {
-    it('recepcao nao ve valor', () => {
-      // Marcar consulta nao exige saber quanto ela custa nem o que o paciente deve.
-      expect(can('receptionist', 'invoice.read')).toBe(false)
-      expect(can('receptionist', 'payment.write')).toBe(false)
+    it('recepcao opera o BALCAO', () => {
+      /*
+       * Mudou em 14/08/2026, com o pagamento antes da consulta.
+       *
+       * A regra anterior era "recepcao nao ve valor", e valia enquanto o
+       * dinheiro vinha depois: a recepcao marcava, o financeiro cobrava, e as
+       * duas coisas nao se cruzavam. Agora quem faz o check-in e quem cobra —
+       * manter a regra obrigaria o paciente a procurar outra pessoa entre
+       * chegar e ser atendido.
+       */
+      expect(can('receptionist', 'invoice.read')).toBe(true)
+      expect(can('receptionist', 'invoice.write')).toBe(true)
+      expect(can('receptionist', 'payment.write')).toBe(true)
+    })
+
+    it('mas o balcao NAO e o modulo financeiro inteiro', () => {
+      /*
+       * O recorte e o que preserva o principio da regra antiga. Abrir e fechar
+       * caixa e ato de conferencia, com responsabilidade sobre a diferenca do
+       * turno; contas a pagar e contrato de operadora nao sao atendimento.
+       */
       expect(can('receptionist', 'cash.manage')).toBe(false)
+      expect(can('receptionist', 'payable.write')).toBe(false)
+      expect(can('receptionist', 'insurance.manage')).toBe(false)
+    })
+
+    it('recepcao NAO abate valor', () => {
+      /*
+       * Emitir uma cobranca de R$ 250 e emitir a mesma por R$ 100 sao atos
+       * diferentes: o primeiro e operacao, o segundo e decisao comercial.
+       * `invoice.discount` existe para separar os dois sem tirar da recepcao o
+       * direito de cobrar.
+       */
+      expect(can('receptionist', 'invoice.discount')).toBe(false)
+      expect(can('owner', 'invoice.discount')).toBe(true)
+      expect(can('admin', 'invoice.discount')).toBe(true)
+      expect(can('finance', 'invoice.discount')).toBe(true)
     })
 
     it('profissional nao movimenta caixa', () => {
