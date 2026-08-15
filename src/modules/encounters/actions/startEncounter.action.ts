@@ -1,6 +1,7 @@
 'use server'
 
 import { can, rolesWith } from '@/lib/auth/permissions'
+import { observePaymentGate } from '@/lib/clinic/payment-gate'
 import { createEncounterNotification } from '@/lib/notifications/operational'
 import { syncAppointmentProgress } from '@/lib/scheduling/appointment-progress'
 import { createAction } from '@/modules/_shared/application/createAction'
@@ -69,6 +70,20 @@ const runStartEncounter = createAction<
       appointmentId: output.appointmentId,
       progress: 'in_progress',
       userId: context.userId,
+    })
+
+    /*
+     * Portão de pagamento em MODO OBSERVAÇÃO — etapa 3. Ver `callPatient`.
+     *
+     * `start` é observado além de `call` porque nem todo atendimento passa por
+     * "chamar": `IN_PROGRESS_FROM` aceita começar direto. Medir só a chamada
+     * subestimaria quantas entradas a regra pegaria.
+     */
+    await observePaymentGate({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      appointmentId: output.appointmentId,
+      step: 'start',
     })
   },
 

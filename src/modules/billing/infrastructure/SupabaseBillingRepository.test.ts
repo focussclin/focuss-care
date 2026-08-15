@@ -692,6 +692,48 @@ describe('appointmentBelongsTo', () => {
     ).resolves.toBe(false)
   })
 
+  it('as cobranças do agendamento saem recortadas pela clínica', async () => {
+    const fake = createFakeClient({})
+
+    await new SupabaseBillingRepository(fake.client).listChargesForAppointment(
+      CLINIC,
+      APPOINTMENT,
+    )
+
+    const chamadas = fake.ofTable('invoices')
+
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['appointment_id', APPOINTMENT] }),
+    )
+  })
+
+  it('não filtra por status no banco — quem julga é `outstandingCents`', async () => {
+    /*
+     * `canceled` sai lá, junto com a regra de `draft` e de convênio. Repetir
+     * metade do julgamento aqui é como uma das duas metades envelhece sozinha —
+     * e a metade esquecida seria a que decide se alguém entra na consulta.
+     */
+    const fake = createFakeClient({})
+
+    await new SupabaseBillingRepository(fake.client).listChargesForAppointment(
+      CLINIC,
+      APPOINTMENT,
+    )
+
+    const chamadas = fake.ofTable('invoices')
+
+    expect(
+      chamadas.filter(
+        (call) =>
+          (call.method === 'eq' || call.method === 'neq') &&
+          call.args[0] === 'status',
+      ),
+    ).toEqual([])
+  })
+
   it('pede só o `id` — não traz dado de agendamento para conferir vínculo', async () => {
     const fake = createFakeClient({ appointment: { id: APPOINTMENT } })
 

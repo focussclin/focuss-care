@@ -2,6 +2,7 @@
 
 import { rolesWith } from '@/lib/auth/permissions'
 import { createEncounterNotification } from '@/lib/notifications/operational'
+import { observePaymentGate } from '@/lib/clinic/payment-gate'
 import { createAction } from '@/modules/_shared/application/createAction'
 import { ok, type ActionResult } from '@/modules/_shared/domain/Result'
 
@@ -50,6 +51,23 @@ const runCallPatient = createAction<CallPatientInput, QueueEntryDto>({
       kind: 'called',
       patientName: output.patientName,
       eventAt: output.calledAt ?? output.arrivedAt,
+    })
+
+    /*
+     * Portão de pagamento em MODO OBSERVAÇÃO — etapa 3.
+     *
+     * Registra quem seria barrado, sem barrar. Fica em `afterSuccess`, depois da
+     * resposta, porque nesta etapa ele não decide nada: medir não pode custar
+     * latência a quem chama paciente.
+     *
+     * Na etapa 6 ele sai daqui e vai para ANTES da transição, no handler — só
+     * lá a recusa pode impedir a fila de andar.
+     */
+    await observePaymentGate({
+      client: context.supabase,
+      clinicId: context.clinicId,
+      appointmentId: output.appointmentId,
+      step: 'call',
     })
   },
 

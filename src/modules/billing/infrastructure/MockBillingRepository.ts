@@ -63,6 +63,18 @@ export class MockBillingRepository implements BillingRepository {
     return false
   }
 
+  /**
+   * Sem cobrança na demonstração — e isso LIBERA, não trava.
+   *
+   * O portão de pagamento pergunta "quanto falta pagar"; lista vazia responde
+   * "nada". Uma demonstração em que ninguém pode ser chamado para a consulta
+   * mostraria a interface travada, que é o oposto do que ela existe para
+   * mostrar.
+   */
+  async listChargesForAppointment(): Promise<readonly never[]> {
+    return []
+  }
+
   async createPayable(): Promise<never> {
     return this.refuseWrite('createPayable')
   }

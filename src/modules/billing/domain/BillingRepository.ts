@@ -1,4 +1,5 @@
 import type {
+  AppointmentCharge,
   CashEntry,
   CashSession,
   FinanceSummary,
@@ -105,6 +106,24 @@ export interface BillingRepository {
     appointmentId: string,
     patientId: string,
   ): Promise<boolean>
+
+  /**
+   * As cobranças de UM agendamento, no recorte que decide liberação.
+   *
+   * Existe separada de `listInvoices` porque a pergunta é outra: aquela monta a
+   * tela do financeiro e traz itens, pagamentos e nome do paciente; esta
+   * responde "quanto falta pagar deste atendimento" e não deve carregar nada
+   * além disso — é consultada a cada chamada de paciente.
+   *
+   * Devolve as linhas **sem julgar**: quem decide o que conta como dívida é
+   * `outstandingCents`, em `lib/clinic/visit-stage.ts`, e essa regra precisa
+   * viver num lugar só. Em especial, `draft` é dívida aqui (ver o cabeçalho
+   * desta porta sobre cobrar × emitir).
+   */
+  listChargesForAppointment(
+    clinicId: string,
+    appointmentId: string,
+  ): Promise<readonly AppointmentCharge[]>
 
   /**
    * Cancela a cobrança, sem apagar.

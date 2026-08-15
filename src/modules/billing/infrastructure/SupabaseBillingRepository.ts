@@ -12,6 +12,7 @@ import type {
 } from '@/lib/supabase/database.types'
 
 import type {
+  AppointmentCharge,
   CashEntry,
   CashSession,
   FinanceSummary,
@@ -506,6 +507,39 @@ export class SupabaseBillingRepository implements BillingRepository {
 
     if (error) throw readFailure('appointmentBelongsTo', error)
     return data !== null
+  }
+
+  /**
+   * Só as cinco colunas que decidem liberação.
+   *
+   * Nem itens, nem pagamentos, nem nome do paciente: isto roda a cada chamada de
+   * paciente na fila, e `INVOICE_SELECT` traria três relacionamentos aninhados
+   * para responder uma subtração.
+   *
+   * Não filtra por status. `canceled` sai em `outstandingCents`, junto com a
+   * regra de `draft` e de convênio — separar o julgamento em dois lugares é como
+   * uma das duas metades envelhece sozinha.
+   */
+  async listChargesForAppointment(
+    clinicId: string,
+    appointmentId: string,
+  ): Promise<readonly AppointmentCharge[]> {
+    const { data, error } = await this.client
+      .from('invoices')
+      .select('id, status, total_cents, paid_cents, payer_type')
+      .eq('clinic_id', clinicId)
+      .eq('appointment_id', appointmentId)
+      .limit(ROW_CAP)
+
+    if (error) throw readFailure('listChargesForAppointment', error)
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      status: row.status,
+      totalCents: row.total_cents,
+      paidCents: row.paid_cents,
+      payerType: row.payer_type,
+    }))
   }
 
   async registerPayment(

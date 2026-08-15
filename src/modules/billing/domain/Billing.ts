@@ -2,6 +2,7 @@ import type {
   CashEntryKind,
   CashSessionStatus,
   InvoiceStatus,
+  PayerType,
   PaymentMethod,
 } from '@/lib/supabase/database.types'
 
@@ -73,6 +74,24 @@ export interface Invoice {
    * emitir comprovante nenhum.
    */
   payments: readonly Payment[]
+}
+
+/**
+ * Uma cobrança vista pelo portão de pagamento.
+ *
+ * O mínimo para responder "quanto falta pagar deste atendimento": nada de itens,
+ * pagamentos ou nome — é lido a cada chamada de paciente.
+ *
+ * Estruturalmente compatível com `VisitCharge` de `lib/clinic/visit-stage.ts`,
+ * que é quem decide o que conta como dívida. A compatibilidade é de propósito e
+ * a dependência não existe: o domínio do financeiro não conhece `lib/`.
+ */
+export interface AppointmentCharge {
+  id: string
+  status: InvoiceStatus
+  totalCents: number
+  paidCents: number
+  payerType: PayerType
 }
 
 export interface NewInvoiceData {
