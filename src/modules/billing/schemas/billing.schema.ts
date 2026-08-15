@@ -30,6 +30,14 @@ export const billingMessages = {
   payableUnavailable:
     'As contas a pagar ainda não estão disponíveis nesta conexão financeira.',
   notFound: 'Este registro não está mais disponível nesta clínica.',
+  /**
+   * O agendamento informado não é desta clínica, ou é de outro paciente.
+   *
+   * Não diz qual das duas: quem manda um id que não é seu não deve descobrir
+   * daqui se ele existe em outra clínica.
+   */
+  appointmentMismatch:
+    'Este agendamento não pertence a este paciente. Confira o horário selecionado.',
   forbidden: 'Você não tem permissão para movimentar o financeiro.',
   unavailable: 'Não foi possível falar com o servidor agora. Tente novamente.',
   unexpected: 'Não foi possível concluir a operação agora. Tente novamente.',
@@ -115,6 +123,22 @@ const invoiceItemSchema = z.object({
 export const createInvoiceSchema = z
   .object({
     patientId: z.uuid(billingMessages.patientRequired),
+    /**
+     * O agendamento que originou a cobrança.
+     *
+     * Opcional, e continua sendo o caso comum não ter: cobrança avulsa, produto
+     * de balcão, encaixe. Quem manda o campo é a recepção cobrando um horário
+     * marcado — e é esse vínculo que permite perguntar depois se ESTE
+     * atendimento está pago.
+     *
+     * Aceita ausente e vazio: o formulário manda `''` quando o campo existe e
+     * ninguém escolheu, e um `''` chegando como uuid inválido viraria erro de
+     * validação numa cobrança que está correta.
+     */
+    appointmentId: z
+      .union([z.uuid(billingMessages.unexpected), z.literal('')])
+      .optional()
+      .transform((value) => (value === '' || value === undefined ? null : value)),
     items: z.array(invoiceItemSchema).min(1, billingMessages.itemsRequired),
     discount: moneyField(),
     dueDate: z.string().optional(),
@@ -151,6 +175,7 @@ export const createInvoiceSchema = z
 
     return {
       patientId: value.patientId,
+      appointmentId: value.appointmentId,
       discountCents: value.discount,
       dueDate,
       notes: value.notes,
@@ -290,6 +315,8 @@ export interface InvoiceItemDto {
 export interface InvoiceDto {
   id: string
   patientName: string
+  /** O agendamento que originou a cobrança. Nulo em cobrança avulsa. */
+  appointmentId: string | null
   number: number | null
   status: string
   totalCents: number

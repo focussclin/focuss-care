@@ -51,6 +51,18 @@ export class MockBillingRepository implements BillingRepository {
     return this.refuseWrite('createInvoice')
   }
 
+  /**
+   * Leitura, e por isso NÃO recusa — mas responde `false`.
+   *
+   * O modo de demonstração não tem agendamento nenhum para conferir, e afirmar
+   * `true` faria a action seguir para uma escrita que este repositório recusa
+   * logo depois, com a mensagem errada. `false` devolve "esse agendamento não é
+   * desta clínica", que é literalmente verdade aqui.
+   */
+  async appointmentBelongsTo(): Promise<boolean> {
+    return false
+  }
+
   async createPayable(): Promise<never> {
     return this.refuseWrite('createPayable')
   }

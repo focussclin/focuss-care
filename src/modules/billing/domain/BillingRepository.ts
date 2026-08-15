@@ -85,6 +85,28 @@ export interface BillingRepository {
   ): Promise<Invoice>
 
   /**
+   * O agendamento é desta clínica E deste paciente?
+   *
+   * `invoices.appointment_id` referencia `appointments(id)` por **coluna
+   * única**. A FK prova que a linha existe em algum lugar do banco, não que
+   * pertence a este tenant — e a RLS protege a LINHA de `invoices`, não o
+   * conteúdo do campo. Sem esta guarda, um id de outra clínica seria aceito e
+   * a cobrança ficaria pendurada no atendimento de outra pessoa.
+   *
+   * As duas condições juntas, e a segunda não é redundante: dentro da mesma
+   * clínica, o agendamento de OUTRO paciente também passaria pela FK, e a
+   * cobrança apareceria na fila de quem não a deve.
+   *
+   * É o mesmo desenho de `patientBelongsTo`/`encounterBelongsTo` em
+   * `encounters` — ver §7 de `docs/03-banco-de-dados.md`.
+   */
+  appointmentBelongsTo(
+    clinicId: string,
+    appointmentId: string,
+    patientId: string,
+  ): Promise<boolean>
+
+  /**
    * Cancela a cobrança, sem apagar.
    *
    * Recusa cancelar o que já tem pagamento registrado: dinheiro que entrou não

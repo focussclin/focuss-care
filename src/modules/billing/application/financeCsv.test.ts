@@ -10,6 +10,7 @@ describe('buildFinanceCsv', () => {
         {
           id: 'invoice-1',
           patientName: 'Ana; Silva',
+          appointmentId: null,
           number: 42,
           status: 'partially_paid',
           totalCents: 15000,

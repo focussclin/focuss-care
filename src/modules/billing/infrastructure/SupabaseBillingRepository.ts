@@ -46,6 +46,7 @@ type Client = SupabaseClient<Database>
 const INVOICE_SELECT = `
   id,
   patient_id,
+  appointment_id,
   number,
   status,
   subtotal_cents,
@@ -90,6 +91,7 @@ const OPEN_STATUSES: readonly InvoiceStatus[] = [
 interface InvoiceRow {
   id: string
   patient_id: string
+  appointment_id: string | null
   number: number | null
   status: InvoiceStatus
   subtotal_cents: number
@@ -385,6 +387,11 @@ export class SupabaseBillingRepository implements BillingRepository {
          * porta). Marcar `issued` aqui alegaria uma emissão que não aconteceu.
          */
         status: 'draft',
+        /*
+         * O vínculo com a agenda. A guarda de tenant que o autoriza vive na
+         * action — aqui ele já chega conferido.
+         */
+        appointment_id: data.appointmentId,
         subtotal_cents: subtotalCents,
         discount_cents: data.discountCents,
         total_cents: totalCents,
@@ -474,6 +481,31 @@ export class SupabaseBillingRepository implements BillingRepository {
     if (!data) throw notFound(invoiceId)
 
     return this.requireInvoice(clinicId, invoiceId)
+  }
+
+  /**
+   * Consulta de VERIFICAÇÃO: só o `id`, e sempre com a clínica no filtro.
+   *
+   * Não traz dado de agendamento para a memória do servidor só para conferir um
+   * vínculo. As três condições juntas — clínica, agendamento e paciente — porque
+   * `invoices.appointment_id` é FK de coluna única: ela prova que a linha existe
+   * no banco, não que pertence a este tenant nem a esta pessoa. Ver a porta.
+   */
+  async appointmentBelongsTo(
+    clinicId: string,
+    appointmentId: string,
+    patientId: string,
+  ): Promise<boolean> {
+    const { data, error } = await this.client
+      .from('appointments')
+      .select('id')
+      .eq('clinic_id', clinicId)
+      .eq('id', appointmentId)
+      .eq('patient_id', patientId)
+      .maybeSingle()
+
+    if (error) throw readFailure('appointmentBelongsTo', error)
+    return data !== null
   }
 
   async registerPayment(
@@ -938,6 +970,7 @@ function toInvoice(row: InvoiceRow): Invoice {
     id: row.id,
     patientId: row.patient_id,
     patientName: preferredNameOfRow(row.patients, 'Paciente'),
+    appointmentId: row.appointment_id,
     number: row.number,
     status: row.status,
     subtotalCents: row.subtotal_cents,

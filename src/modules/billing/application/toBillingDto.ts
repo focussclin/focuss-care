@@ -27,6 +27,7 @@ export function toInvoiceDto(invoice: Invoice): InvoiceDto {
   return {
     id: invoice.id,
     patientName: invoice.patientName,
+    appointmentId: invoice.appointmentId,
     number: invoice.number,
     status: invoice.status,
     totalCents: invoice.totalCents,

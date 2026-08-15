@@ -50,6 +50,8 @@ export interface Invoice {
   id: string
   patientId: string
   patientName: string
+  /** O agendamento que originou a cobrança. Nulo em cobrança avulsa. */
+  appointmentId: string | null
   /** Nulo enquanto a cobrança não virou documento fiscal. */
   number: number | null
   status: InvoiceStatus
@@ -75,6 +77,15 @@ export interface Invoice {
 
 export interface NewInvoiceData {
   patientId: string
+  /**
+   * O agendamento que originou a cobrança, ou `null`.
+   *
+   * `null` é o caso comum e continua valendo: cobrança avulsa, produto vendido
+   * no balcão, encaixe sem hora marcada. O vínculo existe para a etapa em que a
+   * fila do profissional pergunta se ESTE atendimento está pago — sem ele, a
+   * pergunta não tem como ser feita (ver `PAGAMENTO_ANTES_DA_CONSULTA.md`).
+   */
+  appointmentId: string | null
   /** Desconto aplicado ao total, além dos descontos por item. */
   discountCents: number
   dueDate: Date | null

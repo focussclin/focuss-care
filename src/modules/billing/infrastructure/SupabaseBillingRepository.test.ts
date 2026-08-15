@@ -18,6 +18,8 @@ const CLINIC = '7e3b0000-0000-4000-8000-00000000b48e'
 const USER = 'c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f'
 const INVOICE = '9019956f-bdd8-4d61-868d-09b02332dad0'
 const SESSION = '5f2b1a3c-4d5e-4f60-8a71-9b2c3d4e5f60'
+const APPOINTMENT = '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f'
+const PATIENT = '11111111-1111-4111-8111-111111111111'
 
 interface RecordedCall {
   query: number
@@ -55,6 +57,13 @@ function createFakeClient(results: {
   openSession?: unknown
   cashEntries?: { kind: string; amount_cents: number }[]
   closedSession?: unknown
+  /**
+   * A linha devolvida pela consulta de verificação do agendamento.
+   *
+   * `undefined` é o padrão e vale "não existe nesta clínica" — que é o desfecho
+   * que a guarda precisa distinguir do caso em que existe.
+   */
+  appointment?: { id: string } | null
 }) {
   const calls: RecordedCall[] = []
   let queryIndex = -1
@@ -180,6 +189,8 @@ function createFakeClient(results: {
       }
 
       if (table === 'profiles') return { full_name: 'Ana Ribeiro' }
+
+      if (table === 'appointments') return results.appointment ?? null
 
       return null
     }
@@ -446,6 +457,7 @@ describe('createInvoice', () => {
       CLINIC,
       {
         patientId: '11111111-1111-4111-8111-111111111111',
+        appointmentId: null,
         discountCents: 5000,
         dueDate: null,
         notes: null,
@@ -481,6 +493,7 @@ describe('createInvoice', () => {
       CLINIC,
       {
         patientId: '11111111-1111-4111-8111-111111111111',
+        appointmentId: null,
         discountCents: 0,
         dueDate: null,
         notes: null,
@@ -517,6 +530,7 @@ describe('createInvoice', () => {
       CLINIC,
       {
         patientId: '11111111-1111-4111-8111-111111111111',
+        appointmentId: null,
         discountCents: 0,
         dueDate: null,
         notes: null,
@@ -541,6 +555,155 @@ describe('createInvoice', () => {
 
     // Desconto maior que o item nao vira cobranca negativa.
     expect(insert.subtotal_cents).toBe(0)
+  })
+
+  /**
+   * O vínculo com a agenda — etapa 2 de `PAGAMENTO_ANTES_DA_CONSULTA.md`.
+   *
+   * A coluna `invoices.appointment_id` existe desde o schema original e nunca
+   * foi escrita. Sem ela, não há como perguntar se ESTE atendimento está pago,
+   * e a regra de pagamento antes da consulta não tem em que se apoiar.
+   */
+  it('grava o agendamento que originou a cobrança', async () => {
+    const fake = createFakeClient({})
+
+    await new SupabaseBillingRepository(fake.client).createInvoice(
+      CLINIC,
+      {
+        patientId: '11111111-1111-4111-8111-111111111111',
+        appointmentId: APPOINTMENT,
+        discountCents: 0,
+        dueDate: null,
+        notes: null,
+        items: [
+          {
+            description: 'Consulta',
+            quantity: 1,
+            unitPriceCents: 25000,
+            discountCents: 0,
+          },
+        ],
+      },
+      USER,
+    )
+
+    const insert = fake
+      .ofTable('invoices')
+      .find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(insert.appointment_id).toBe(APPOINTMENT)
+  })
+
+  it('cobrança avulsa continua nascendo sem agendamento', async () => {
+    // Produto de balcão, encaixe, acerto posterior: é o caso comum, e ele não
+    // pode passar a exigir um horário marcado que não existe.
+    const fake = createFakeClient({})
+
+    await new SupabaseBillingRepository(fake.client).createInvoice(
+      CLINIC,
+      {
+        patientId: '11111111-1111-4111-8111-111111111111',
+        appointmentId: null,
+        discountCents: 0,
+        dueDate: null,
+        notes: null,
+        items: [
+          {
+            description: 'Curativo',
+            quantity: 1,
+            unitPriceCents: 5000,
+            discountCents: 0,
+          },
+        ],
+      },
+      USER,
+    )
+
+    const insert = fake
+      .ofTable('invoices')
+      .find((call) => call.method === 'insert')?.args[0] as Record<
+      string,
+      unknown
+    >
+
+    expect(insert.appointment_id).toBeNull()
+  })
+})
+
+/**
+ * A guarda de tenant do agendamento.
+ *
+ * `invoices.appointment_id` é FK de coluna única: ela prova que a linha existe
+ * em algum lugar do banco, não que pertence a esta clínica nem a este paciente.
+ * A RLS protege a linha de `invoices`, não o conteúdo deste campo.
+ */
+describe('appointmentBelongsTo', () => {
+  it('exige clínica E paciente na mesma consulta', async () => {
+    /*
+     * A segunda condição não é redundante: dentro da mesma clínica, o
+     * agendamento de OUTRO paciente também passaria pela FK, e a cobrança
+     * apareceria na fila de quem não a deve.
+     */
+    const fake = createFakeClient({ appointment: { id: APPOINTMENT } })
+
+    await new SupabaseBillingRepository(fake.client).appointmentBelongsTo(
+      CLINIC,
+      APPOINTMENT,
+      PATIENT,
+    )
+
+    const chamadas = fake.ofTable('appointments')
+
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['clinic_id', CLINIC] }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['id', APPOINTMENT] }),
+    )
+    expect(chamadas).toContainEqual(
+      expect.objectContaining({ method: 'eq', args: ['patient_id', PATIENT] }),
+    )
+  })
+
+  it('agendamento encontrado devolve verdadeiro', async () => {
+    const fake = createFakeClient({ appointment: { id: APPOINTMENT } })
+
+    await expect(
+      new SupabaseBillingRepository(fake.client).appointmentBelongsTo(
+        CLINIC,
+        APPOINTMENT,
+        PATIENT,
+      ),
+    ).resolves.toBe(true)
+  })
+
+  it('agendamento de outra clínica devolve falso, e não erro', async () => {
+    const fake = createFakeClient({ appointment: null })
+
+    await expect(
+      new SupabaseBillingRepository(fake.client).appointmentBelongsTo(
+        CLINIC,
+        APPOINTMENT,
+        PATIENT,
+      ),
+    ).resolves.toBe(false)
+  })
+
+  it('pede só o `id` — não traz dado de agendamento para conferir vínculo', async () => {
+    const fake = createFakeClient({ appointment: { id: APPOINTMENT } })
+
+    await new SupabaseBillingRepository(fake.client).appointmentBelongsTo(
+      CLINIC,
+      APPOINTMENT,
+      PATIENT,
+    )
+
+    expect(fake.ofTable('appointments')).toContainEqual(
+      expect.objectContaining({ method: 'select', args: ['id'] }),
+    )
   })
 })
 

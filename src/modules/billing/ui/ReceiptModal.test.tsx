@@ -23,6 +23,7 @@ const payment: InvoicePaymentDto = {
 const invoice: InvoiceDto = {
   id: 'abcdef12-3456-7890',
   patientName: 'Maria Silva',
+  appointmentId: null,
   number: null,
   status: 'paid',
   totalCents: 25_000,
