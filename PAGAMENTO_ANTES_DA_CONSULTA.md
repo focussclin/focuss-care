@@ -286,6 +286,37 @@ maior parte do valor do pedido, e é por onde começar.
 
 ---
 
+## 9.1 Achado da etapa 2 — a recepcionista não pode cobrar
+
+Descoberto ao implementar, não na análise: **`receptionist` não tem
+`invoice.write` nem `payment.write`.** Só `owner`, `admin` e `finance` têm.
+
+E não é esquecimento. `permissions.ts` declara a decisão:
+
+> **`receptionist` não vê valor nenhum.** Marcar consulta não exige saber quanto
+> ela custa nem o que o paciente deve.
+
+Isso colide de frente com o pedido, que diz "a recepcionista abre o agendamento
+e clica" e põe receber pagamento, aplicar desconto e dividir pagamento nas mãos
+de quem está no balcão.
+
+**Não mudei a matriz.** Mexer em papel é decisão de produto com consequência de
+LGPD, não efeito colateral de uma etapa de implementação. Fixei o estado atual
+com teste, para que a mudança — se vier — seja deliberada e visível.
+
+As três saídas possíveis, em ordem de preferência minha:
+
+| Saída | O que implica |
+| --- | --- |
+| **Papel novo `reception_cashier`** | A recepção que opera caixa é um papel; a que só marca consulta é outro. Não amplia quem já existe |
+| Dar `invoice.write` + `payment.write` a `receptionist` | Uma linha. Mas toda recepcionista passa a ver o que todo paciente deve |
+| Manter como está | A tela de "aguardando pagamento" é de `admin`/`finance`. Em clínica pequena, é a mesma pessoa |
+
+Enquanto não decidir, a **etapa 4 fica travada** — construir a tela do caixa sem
+saber quem a abre gastaria trabalho no lugar errado.
+
+---
+
 ## 10. O que preciso decidir com você antes da etapa 6
 
 1. **Quem pode ser liberado sem pagar?** Convênio, retorno, cortesia, urgência.
